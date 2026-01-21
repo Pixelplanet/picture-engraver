@@ -1,19 +1,19 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>picture-engraver</Name>
-  <Repository>your_dockerhub_username/picture-engraver</Repository>
-  <Registry>https://hub.docker.com/r/your_dockerhub_username/picture-engraver</Registry>
+  <Repository>Pixelplanet/picture-engraver</Repository>
+  <Registry>https://hub.docker.com/r/Pixelplanet/picture-engraver</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/your_github_username/picture-engraver/issues</Support>
-  <Project>https://github.com/your_github_username/picture-engraver</Project>
+  <Support>https://github.com/Pixelplanet/picture-engraver/issues</Support>
+  <Project>https://github.com/Pixelplanet/picture-engraver</Project>
   <Overview>Picture Engraver - Convert images to XCS laser engraving files for stainless steel color engraving.</Overview>
   <Category>Tools:Utilities</Category>
   <WebUI>http://[IP]:[PORT:3002]/</WebUI>
   <TemplateURL/>
-  <Icon>https://github.com/your_github_username/picture-engraver/raw/main/public/icon.png</Icon>
+  <Icon>https://github.com/Pixelplanet/picture-engraver/raw/main/public/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>

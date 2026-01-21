@@ -218,35 +218,39 @@
 
           <!-- Standard Grid Tab -->
           <div class="modal-tab-content active" id="tabStandard">
-            <div class="standard-grid-info">
-              <h3>Optimized Business Card Grid</h3>
-              <p>The perfect starting point for stainless steel color engraving.</p>
+            <div class="standard-grid-layout">
+              <div class="standard-grid-details">
+                <h3>Optimized Business Card Grid</h3>
+                <p>The perfect starting point for stainless steel color engraving.</p>
 
-              <div
-                style="background-color: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin: 15px 0; border: 1px solid #ffeeba;">
-                <p style="margin: 0; display: flex; align-items: center; gap: 8px;">
-                  <strong style="font-size: 1.2em;">⚠️ Important:</strong>
-                  Manually adjust the laser focus <strong>UP by 4mm</strong> to achieve the best color results.
-                </p>
+                <div
+                  style="background-color: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin: 15px 0; border: 1px solid #ffeeba;">
+                  <p style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <strong style="font-size: 1.2em;">⚠️ Important:</strong>
+                    Manually adjust the laser focus <strong>UP by 4mm</strong> to achieve the best color results.
+                  </p>
+                </div>
+
+                <ul class="feature-list">
+                  <li><strong>Format:</strong> 85mm × 55mm (Business Card)</li>
+                  <li><strong>Density:</strong> 122 Test Points (14 × 9 Grid)</li>
+                  <li><strong>Frequency:</strong> 40kHz - 90kHz (Optimized range)</li>
+                  <li><strong>LPI:</strong> 800 - 300 (High to Low)</li>
+                  <li><strong>Smart QR:</strong> Located at bottom-right, scanned for auto-settings.</li>
+                </ul>
               </div>
 
-              <ul class="feature-list">
-                <li><strong>Format:</strong> 85mm × 55mm (Business Card)</li>
-                <li><strong>Density:</strong> 122 Test Points (14 × 9 Grid)</li>
-                <li><strong>Frequency:</strong> 40kHz - 90kHz (Optimized range)</li>
-                <li><strong>LPI:</strong> 800 - 300 (High to Low)</li>
-                <li><strong>Smart QR:</strong> Located at bottom-right, scanned for auto-settings.</li>
-              </ul>
+              <div class="standard-grid-preview-panel">
+                <div class="standard-preview-static" style="display: flex; justify-content: center; margin: 0;">
+                  <canvas id="standardPreviewCanvas"></canvas>
+                </div>
 
-              <div class="standard-preview-static" style="display: flex; justify-content: center; margin: 20px 0;">
-                <canvas id="standardPreviewCanvas"></canvas>
-              </div>
-
-              <div class="action-row" style="text-align: right;">
-                <a href="/default_test_grid.xcs" download="default_test_grid.xcs" class="btn btn-primary btn-lg"
-                  id="btnGenerateStandard">
-                  <span>💾</span> Download Standard XCS
-                </a>
+                <div class="action-row" style="text-align: right; margin-top: auto;">
+                  <a href="/default_test_grid.xcs" download="default_test_grid.xcs" class="btn btn-primary btn-lg"
+                    id="btnGenerateStandard" style="width: 100%;">
+                    <span>💾</span> Download Standard XCS
+                  </a>
+                </div>
               </div>
             </div>
           </div>
