@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>picture-engraver</Name>
+  <Repository>your_dockerhub_username/picture-engraver</Repository>
+  <Registry>https://hub.docker.com/r/your_dockerhub_username/picture-engraver</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/your_github_username/picture-engraver/issues</Support>
+  <Project>https://github.com/your_github_username/picture-engraver</Project>
+  <Overview>Picture Engraver - Convert images to XCS laser engraving files for stainless steel color engraving.</Overview>
+  <Category>Tools:Utilities</Category>
+  <WebUI>http://[IP]:[PORT:3002]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://github.com/your_github_username/picture-engraver/raw/main/public/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>1706640000</DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Description>Picture Engraver web application.</Description>
+  <Networking>
+    <Mode>bridge</Mode>
+    <Publish>
+      <Port>
+        <HostPort>3002</HostPort>
+        <ContainerPort>80</ContainerPort>
+        <Protocol>tcp</Protocol>
+      </Port>
+    </Publish>
+  </Networking>
+  <Data/>
+  <Environment/>
+  <Config Name="Web Port" Target="80" Default="3002" Mode="tcp" Description="Port for the web interface" Type="Port" Display="always" Required="true" Mask="false">3002</Config>
+</Container>

@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Convert images to XCS laser engraving files for stainless steel color engraving">
+  <title>Picture Engraver | XCS Generator</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <span class="logo">🎨</span>
+        <h1 class="title">Picture Engraver</h1>
+      </div>
+      <div class="header-right">
+        <button class="btn btn-icon" id="btnTestGrid" title="Test Grid Generator">
+          <span>📊</span>
+          <span class="btn-label">Test Grid</span>
+        </button>
+        <button class="btn btn-icon" id="btnSettings" title="Settings">
+          <span>⚙️</span>
+          <span class="btn-label">Settings</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+      <!-- Left Column: Upload & Controls -->
+      <section class="panel upload-panel">
+        <h2 class="panel-title">Image Upload</h2>
+
+        <!-- Drop Zone -->
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-zone-content">
+            <span class="drop-zone-icon">📁</span>
+            <p class="drop-zone-text">Drop image here</p>
+            <p class="drop-zone-subtext">or click to browse</p>
+            <p class="drop-zone-formats">PNG, JPG, WebP</p>
+          </div>
+          <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden>
+        </div>
+
+        <!-- Image Preview (hidden until image loaded) -->
+        <div class="image-preview-container" id="originalPreviewContainer" style="display: none;">
+          <h3 class="preview-label">Original</h3>
+          <div class="image-preview">
+            <canvas id="originalCanvas"></canvas>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btnClearImage">✕ Clear Image</button>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls" id="controlsSection" style="display: none;">
+          <div class="control-group">
+            <label class="control-label">Output Size</label>
+            <select class="select" id="sizeSelect">
+              <option value="200x200">200 × 200 mm (Default)</option>
+              <option value="85x55">85 × 55 mm (Business Card)</option>
+              <option value="custom">Custom...</option>
+            </select>
+          </div>
+
+          <div class="control-group custom-size-group" id="customSizeGroup" style="display: none;">
+            <div class="input-row">
+              <div class="input-group">
+                <label>Width (mm)</label>
+                <input type="number" class="input" id="customWidth" value="200" min="10" max="200">
+              </div>
+              <span class="input-separator">×</span>
+              <div class="input-group">
+                <label>Height (mm)</label>
+                <input type="number" class="input" id="customHeight" value="200" min="10" max="200">
+              </div>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label class="control-label">
+              Number of Colors: <span class="value-display" id="colorCountDisplay">4</span>
+            </label>
+            <input type="range" class="slider" id="colorSlider" min="2" max="12" value="4">
+          </div>
+
+          <button class="btn btn-primary" id="btnProcess">
+            <span>🔄</span> Process Image
+          </button>
+        </div>
+      </section>
+
+      <!-- Center Column: Layers -->
+      <section class="panel layers-panel" id="layersPanel" style="display: none;">
+        <h2 class="panel-title">Color Layers</h2>
+
+        <div class="layers-list" id="layersList">
+          <!-- Layers will be populated dynamically -->
+        </div>
+
+        <div class="layers-actions">
+          <button class="btn btn-secondary" id="btnAutoAssign">
+            <span>🎯</span> Auto-Assign Colors
+          </button>
+        </div>
+      </section>
+
+      <!-- Right Column: Preview & Export -->
+      <section class="panel preview-panel" id="previewPanel" style="display: none;">
+        <h2 class="panel-title">Preview</h2>
+
+        <div class="preview-tabs">
+          <button class="tab active" data-tab="quantized">Quantized</button>
+          <button class="tab" data-tab="vectors">Vectors</button>
+        </div>
+
+        <div class="preview-content">
+          <div class="image-preview" id="previewQuantized">
+            <canvas id="quantizedCanvas"></canvas>
+          </div>
+          <div class="image-preview" id="previewVectors" style="display: none;">
+            <div id="vectorSvgContainer"></div>
+          </div>
+        </div>
+
+        <div class="export-actions">
+          <button class="btn btn-primary btn-lg" id="btnGenerate">
+            <span>💾</span> Generate XCS
+          </button>
+          <button class="btn btn-success btn-lg" id="btnDownload" disabled>
+            <span>⬇️</span> Download
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Settings Modal -->
+    <div class="modal" id="settingsModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Settings</h2>
+          <button class="btn btn-icon modal-close" id="closeSettingsModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="setting-group">
+            <h3>Default Engraving Settings</h3>
+            <div class="setting-row">
+              <label>Power (%)</label>
+              <input type="number" class="input" id="settingPower" value="70" min="1" max="100">
+            </div>
+            <div class="setting-row">
+              <label>Speed (mm/s)</label>
+              <input type="number" class="input" id="settingSpeed" value="425" min="1" max="1000">
+            </div>
+            <div class="setting-row">
+              <label>Passes</label>
+              <input type="number" class="input" id="settingPasses" value="1" min="1" max="10">
+            </div>
+            <div class="setting-row">
+              <label>Cross Hatch</label>
+              <input type="checkbox" class="checkbox" id="settingCrossHatch" checked>
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>Frequency Range (kHz)</h3>
+            <div class="setting-row">
+              <label>Min</label>
+              <input type="number" class="input" id="settingFreqMin" value="40" min="20" max="100">
+            </div>
+            <div class="setting-row">
+              <label>Max</label>
+              <input type="number" class="input" id="settingFreqMax" value="80" min="20" max="100">
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>LPI Range (Lines Per Inch)</h3>
+            <div class="setting-row">
+              <label>Min</label>
+              <input type="number" class="input" id="settingLpiMin" value="300" min="100" max="1000">
+            </div>
+            <div class="setting-row">
+              <label>Max</label>
+              <input type="number" class="input" id="settingLpiMax" value="800" min="100" max="1000">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="btnResetSettings">Reset to Defaults</button>
+          <button class="btn btn-primary" id="btnSaveSettings">Save Settings</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Test Grid Modal -->
+    <div class="modal" id="testGridModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content modal-xl">
+        <div class="modal-header">
+          <h2>Test Grid Calibration</h2>
+          <button class="btn btn-icon modal-close" id="closeTestGridModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- Tabs -->
+          <div class="modal-tabs">
+            <button class="modal-tab active" data-modal-tab="standard">🏆 Standard Grid</button>
+            <button class="modal-tab" data-modal-tab="custom">⚙️ Custom Grid</button>
+            <button class="modal-tab" data-modal-tab="analyzer">📷 Analyze Grid</button>
+          </div>
+
+          <!-- Standard Grid Tab -->
+          <div class="modal-tab-content active" id="tabStandard">
+            <div class="standard-grid-info">
+              <h3>Optimized Business Card Grid</h3>
+              <p>The perfect starting point for stainless steel color engraving.</p>
+
+              <div
+                style="background-color: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin: 15px 0; border: 1px solid #ffeeba;">
+                <p style="margin: 0; display: flex; align-items: center; gap: 8px;">
+                  <strong style="font-size: 1.2em;">⚠️ Important:</strong>
+                  Manually adjust the laser focus <strong>UP by 4mm</strong> to achieve the best color results.
+                </p>
+              </div>
+
+              <ul class="feature-list">
+                <li><strong>Format:</strong> 85mm × 55mm (Business Card)</li>
+                <li><strong>Density:</strong> 122 Test Points (14 × 9 Grid)</li>
+                <li><strong>Frequency:</strong> 40kHz - 90kHz (Optimized range)</li>
+                <li><strong>LPI:</strong> 800 - 300 (High to Low)</li>
+                <li><strong>Smart QR:</strong> Located at bottom-right, scanned for auto-settings.</li>
+              </ul>
+
+              <div class="standard-preview-static" style="display: flex; justify-content: center; margin: 20px 0;">
+                <canvas id="standardPreviewCanvas"></canvas>
+              </div>
+
+              <div class="action-row" style="text-align: right;">
+                <a href="/default_test_grid.xcs" download="default_test_grid.xcs" class="btn btn-primary btn-lg"
+                  id="btnGenerateStandard">
+                  <span>💾</span> Download Standard XCS
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Grid Tab -->
+          <div class="modal-tab-content" id="tabCustom">
+            <p class="modal-description">
+              Create a custom calibration grid with your specific limits and dimensions.
+            </p>
+
+            <div class="custom-grid-layout">
+              <div class="grid-settings-columns">
+                <!-- Frequency Settings -->
+                <div class="setting-group">
+                  <h3>Frequency (kHz)</h3>
+                  <div class="setting-row">
+                    <label>Min</label>
+                    <input type="number" class="input" id="gridFreqMin" value="40" min="40" max="150">
+                  </div>
+                  <div class="setting-row">
+                    <label>Max</label>
+                    <input type="number" class="input" id="gridFreqMax" value="90" min="40" max="150">
+                  </div>
+                  <p class="setting-hint">Laser range: 40-150 kHz</p>
+                </div>
+
+                <!-- LPI Settings -->
+                <div class="setting-group">
+                  <h3>Lines Per Inch</h3>
+                  <div class="setting-row">
+                    <label>Min</label>
+                    <input type="number" class="input" id="gridLpiMin" value="300" min="100" max="800">
+                  </div>
+                  <div class="setting-row">
+                    <label>Max</label>
+                    <input type="number" class="input" id="gridLpiMax" value="800" min="100" max="4000">
+                  </div>
+                  <div class="setting-row">
+                    <label>Enable High LPI (up to 4000)</label>
+                    <input type="checkbox" class="checkbox" id="gridHighLpiMode">
+                  </div>
+                </div>
+
+                <!-- Grid Layout -->
+                <div class="setting-group">
+                  <h3>Grid Layout</h3>
+                  <div class="setting-row">
+                    <label>Cell Size (mm)</label>
+                    <input type="number" class="input" id="gridCellSize" value="5" min="3" max="15">
+                  </div>
+                  <div class="setting-row">
+                    <label>Cell Gap (mm)</label>
+                    <input type="number" class="input" id="gridCellGap" value="1" min="0" max="5" step="0.5">
+                  </div>
+                </div>
+
+                <!-- Engraving Settings -->
+                <div class="setting-group">
+                  <h3>Engraving</h3>
+                  <div class="setting-row">
+                    <label>Power (%)</label>
+                    <input type="number" class="input" id="gridPower" value="70" min="1" max="100">
+                  </div>
+                  <div class="setting-row">
+                    <label>Speed (mm/s)</label>
+                    <input type="number" class="input" id="gridSpeed" value="425" min="1" max="1000">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right Column: Preview & Actions -->
+              <div class="custom-grid-preview-panel">
+                <!-- Grid Info -->
+                <div class="grid-info" id="gridInfo">
+                  <p><strong>Size:</strong> <span id="gridInfoSize">14 × 9</span> cells</p>
+                  <p><strong>Points:</strong> <span id="gridInfoCells">122</span></p>
+                </div>
+
+                <!-- Preview -->
+                <div class="grid-preview" id="gridPreviewContainer">
+                  <canvas id="gridPreviewCanvas"></canvas>
+                </div>
+
+                <!-- Custom Actions -->
+                <div class="modal-footer-custom"
+                  style="display: flex; justify-content: flex-end; gap: 10px; margin-top: auto;">
+                  <button class="btn btn-secondary" id="btnPreviewGrid">Update Preview</button>
+                  <button class="btn btn-primary" id="btnGenerateGrid">
+                    <span>💾</span> Download Custom XCS
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Analyzer Tab -->
+          <div class="modal-tab-content" id="tabAnalyzer">
+            <p class="modal-description">
+              Upload a photo of your engraved test grid. The app will read the QR code
+              to identify settings and map colors to laser parameters.
+            </p>
+
+            <!-- Upload Zone -->
+            <div class="drop-zone analyzer-drop-zone" id="analyzerDropZone">
+              <div class="drop-zone-content">
+                <span class="drop-zone-icon">📷</span>
+                <p class="drop-zone-text">Drop test grid photo here</p>
+                <p class="drop-zone-subtext">or click to browse</p>
+              </div>
+              <input type="file" id="analyzerFileInput" accept="image/*" hidden>
+            </div>
+
+            <!-- Analysis Preview -->
+            <div class="analysis-preview" id="analysisPreview" style="display: none;">
+              <div class="analysis-image">
+                <canvas id="analyzerCanvas"></canvas>
+              </div>
+              <div class="analysis-info">
+                <h3>Detected Settings</h3>
+                <div id="analysisSettings">
+                  <p class="text-muted">Upload a grid photo to analyze...</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Color Map -->
+            <div class="color-map" id="colorMapSection" style="display: none;">
+              <h3>Color-to-Settings Map</h3>
+              <p class="modal-description">
+                Click on a cell in the grid to see its color and laser settings.
+              </p>
+              <div class="color-map-grid" id="colorMapGrid">
+                <!-- Will be populated dynamically -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+
+</html>

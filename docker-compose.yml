@@ -1,0 +1,9 @@
+version: '3.8'
+services:
+  picture-engraver:
+    build: .
+    image: your_dockerhub_username/picture-engraver:latest
+    container_name: picture-engraver
+    ports:
+      - "3002:80"
+    restart: unless-stopped
