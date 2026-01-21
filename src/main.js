@@ -25,6 +25,19 @@ const state = {
 };
 
 // ===================================
+// Analyzer State
+// ===================================
+const analyzerState = {
+    corners: [],
+    freqValues: [],
+    lpiValues: [],
+    numCols: 0,
+    numRows: 0,
+    isActive: false,
+    selectedCell: null
+};
+
+// ===================================
 // DOM Elements
 // ===================================
 const elements = {
@@ -111,6 +124,7 @@ function init() {
     setupPreview();
     setupExport();
     setupTestGrid();
+    setupAnalyzer();
 
     console.log('Picture Engraver initialized');
 }
@@ -587,7 +601,8 @@ function setupTestGrid() {
     // Generator Tab Controls (Custom)
     const generatorInputs = [
         'gridFreqMin', 'gridFreqMax', 'gridLpiMin', 'gridLpiMax',
-        'gridHighLpiMode', 'gridCellSize', 'gridCellGap', 'gridPower', 'gridSpeed'
+        'gridHighLpiMode', 'gridCellSize', 'gridCellGap', 'gridPower', 'gridSpeed',
+        'gridPasses', 'gridCrossHatch'
     ];
 
     // Add event listeners for live preview update
@@ -663,8 +678,127 @@ function setupTestGrid() {
         dropZone.classList.remove('drag-over');
         if (e.dataTransfer.files.length > 0) handleAnalyzerFile(e.dataTransfer.files[0]);
     });
+    // Fallback button
+    document.getElementById('btnUseDefaultGrid').addEventListener('click', useDefaultGridSettings);
+
     // Initialize preview
     updateStandardPreview();
+}
+
+function setupAnalyzer() {
+    const canvas = document.getElementById('analyzerCanvas');
+    canvas.addEventListener('click', handleAnalyzerCanvasClick);
+}
+
+function handleAnalyzerCanvasClick(e) {
+    if (analyzerState.corners.length >= 4) {
+        analyzerState.corners = []; // Reset if already 4
+    }
+
+    const rect = e.target.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * e.target.width;
+    const y = ((e.clientY - rect.top) / rect.height) * e.target.height;
+
+    analyzerState.corners.push({ x, y });
+    drawAnalyzerUI();
+
+    if (analyzerState.corners.length === 4) {
+        showToast('Grid aligned! Extracting colors...', 'success');
+        updateExtractedColors();
+    }
+}
+
+function drawAnalyzerUI() {
+    const canvas = document.getElementById('analyzerCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // We can't easily clear just the UI without redrawing the image
+    // In a real app we'd use a layered canvas, but let's just redraw for now
+    // Actually, we'll redraw the image and then the points
+    const img = analyzerState.originalImg;
+    if (!img) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Draw corners
+    ctx.fillStyle = '#ff3b30';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+
+    analyzerState.corners.forEach((p, i) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px Inter';
+        ctx.fillText(['TL', 'TR', 'BR', 'BL'][i], p.x + 8, p.y + 4);
+        ctx.fillStyle = '#ff3b30';
+    });
+
+    // Draw grid if 4 corners
+    if (analyzerState.corners.length === 4) {
+        drawProjectedGrid(ctx, analyzerState.corners, analyzerState.numCols, analyzerState.numRows);
+    }
+}
+
+function drawProjectedGrid(ctx, corners, cols, rows) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 1;
+
+    for (let r = 0; r <= rows; r++) {
+        const t = r / rows;
+        const pLeft = interpolate(corners[0], corners[3], t);
+        const pRight = interpolate(corners[1], corners[2], t);
+        ctx.beginPath();
+        ctx.moveTo(pLeft.x, pLeft.y);
+        ctx.lineTo(pRight.x, pRight.y);
+        ctx.stroke();
+    }
+
+    for (let c = 0; c <= cols; c++) {
+        const t = c / cols;
+        const pTop = interpolate(corners[0], corners[1], t);
+        const pBottom = interpolate(corners[3], corners[2], t);
+        ctx.beginPath();
+        ctx.moveTo(pTop.x, pTop.y);
+        ctx.lineTo(pBottom.x, pBottom.y);
+        ctx.stroke();
+    }
+}
+
+function interpolate(p1, p2, t) {
+    return {
+        x: p1.x + (p2.x - p1.x) * t,
+        y: p1.y + (p2.y - p1.y) * t
+    };
+}
+
+function updateExtractedColors() {
+    const canvas = document.getElementById('analyzerCanvas');
+    const ctx = canvas.getContext('2d');
+    const colors = [];
+
+    const { corners, numCols, numRows } = analyzerState;
+
+    for (let row = 0; row < numRows; row++) {
+        for (let col = 0; col < numCols; col++) {
+            // Sample center of cell
+            const tx = (col + 0.5) / numCols;
+            const ty = (row + 0.5) / numRows;
+
+            const pTop = interpolate(corners[0], corners[1], tx);
+            const pBottom = interpolate(corners[3], corners[2], tx);
+            const p = interpolate(pTop, pBottom, ty);
+
+            const pixel = ctx.getImageData(Math.round(p.x), Math.round(p.y), 1, 1).data;
+            colors.push(`rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`);
+        }
+    }
+
+    generateColorMapWithData(analyzerState.freqValues, analyzerState.lpiValues, colors);
 }
 
 function getCustomGridSettings() {
@@ -677,7 +811,9 @@ function getCustomGridSettings() {
         cellSize: parseInt(document.getElementById('gridCellSize').value),
         cellGap: parseFloat(document.getElementById('gridCellGap').value),
         power: parseInt(document.getElementById('gridPower').value),
-        speed: parseInt(document.getElementById('gridSpeed').value)
+        speed: parseInt(document.getElementById('gridSpeed').value),
+        passes: parseInt(document.getElementById('gridPasses').value),
+        crossHatch: document.getElementById('gridCrossHatch').checked
     };
 }
 
@@ -870,11 +1006,13 @@ async function analyzeGridImage(img) {
     canvas.width = w;
     canvas.height = h;
     ctx.drawImage(img, 0, 0, w, h);
+    analyzerState.originalImg = img;
 
     // Show preview area
     document.getElementById('analyzerDropZone').style.display = 'none';
     document.getElementById('analysisPreview').style.display = 'flex';
     document.getElementById('colorMapSection').style.display = 'block';
+    document.getElementById('alignmentHint').style.display = 'block';
 
     // Analyze QR Code
     const imageData = ctx.getImageData(0, 0, w, h);
@@ -885,54 +1023,89 @@ async function analyzeGridImage(img) {
 
     if (result.found && !result.error) {
         const s = result.data;
-        const date = new Date(s.ts).toLocaleDateString();
+
+        analyzerState.numCols = s.lpi[2];
+        analyzerState.numRows = s.freq[2];
+        analyzerState.freqValues = result.freqValues;
+        analyzerState.lpiValues = result.lpiValues;
 
         settingsDiv.innerHTML = `
             <div class="detected-value"><span>Frequency Range</span> <span>${s.freq[0]} - ${s.freq[1]} kHz</span></div>
             <div class="detected-value"><span>LPI Range</span> <span>${s.lpi[0]} - ${s.lpi[1]} LPI</span></div>
             <div class="detected-value"><span>Grid Size</span> <span>${s.lpi[2]} × ${s.freq[2]}</span></div>
             <div class="detected-value"><span>Power / Speed</span> <span>${s.pwr}% / ${s.spd} mm/s</span></div>
-            <div class="detected-value"><span>Created</span> <span>${date}</span></div>
         `;
 
-        showToast('QR Code detected! Settings loaded.', 'success');
-        generateColorMap(result.freqValues, result.lpiValues);
+        showToast('QR Code detected! Now click the 4 corners of the card to align the grid.', 'success');
+        document.getElementById('analyzerFallback').style.display = 'none';
     } else {
         settingsDiv.innerHTML = `
             <div class="text-center text-muted">
                 <p>⚠️ No QR code detected.</p>
-                <p>Ensure the image is clear and contains the full grid.</p>
+                <p>Use the default fallback below or try another photo.</p>
             </div>
         `;
+        document.getElementById('analyzerFallback').style.display = 'block';
         showToast('Could not detect QR code settings.', 'warning');
     }
 }
 
-function generateColorMap(freqValues, lpiValues) {
+function useDefaultGridSettings() {
+    // Standard grid parameters
+    const s = SettingsStorage.getDefaults();
+    const numCols = 14;
+    const numRows = 9;
+
+    const generator = new TestGridGenerator(s);
+    const lpiValues = generator.linspace(s.lpiMax, s.lpiMin, numCols);
+    const freqValues = generator.linspace(s.freqMin, s.freqMax, numRows);
+
+    analyzerState.numCols = numCols;
+    analyzerState.numRows = numRows;
+    analyzerState.freqValues = freqValues;
+    analyzerState.lpiValues = lpiValues;
+
+    const settingsDiv = document.getElementById('analysisSettings');
+    settingsDiv.innerHTML = `
+        <div class="detected-value"><span>Frequency (Default)</span> <span>${s.freqMin}-${s.freqMax}kHz</span></div>
+        <div class="detected-value"><span>LPI (Default)</span> <span>${s.lpiMax}-${s.lpiMin}</span></div>
+        <div class="detected-value"><span>Grid Size</span> <span>${numCols}×${numRows}</span></div>
+    `;
+
+    showToast('Applied default settings. Click the 4 corners of the card now.', 'success');
+    document.getElementById('analyzerFallback').style.display = 'none';
+}
+
+function generateColorMapWithData(freqValues, lpiValues, extractedColors) {
     const grid = document.getElementById('colorMapGrid');
     grid.innerHTML = '';
 
-    // We recreate the visual grid map so user can click
-    // Note: This relies on the image colors which we don't extract yet
-    // For now we just show the structure
+    grid.style.gridTemplateColumns = `repeat(${analyzerState.numCols}, 1fr)`;
 
+    let colorIdx = 0;
     freqValues.forEach(freq => {
         lpiValues.forEach(lpi => {
             const cell = document.createElement('div');
             cell.className = 'color-cell';
-            cell.style.backgroundColor = '#ddd'; // Placeholder
+            const color = extractedColors ? extractedColors[colorIdx] : '#ddd';
+            cell.style.backgroundColor = color;
             cell.title = `${freq}kHz / ${lpi} LPI`;
 
             cell.addEventListener('click', () => {
                 document.querySelectorAll('.color-cell').forEach(c => c.classList.remove('selected'));
                 cell.classList.add('selected');
-                showToast(`Settings: ${freq}kHz @ ${lpi} LPI`, 'info');
 
-                // TODO: In future, this would pick the color from the image 
-                // and assign it to the current layer
+                const box = document.getElementById('activeSelectionBox');
+                const text = document.getElementById('activeSelectionText');
+                box.style.display = 'block';
+                text.textContent = `${freq}kHz / ${lpi} LPI`;
+                box.style.borderColor = color;
+
+                showToast(`Mapped: ${freq}kHz @ ${lpi} LPI`, 'info');
             });
 
             grid.appendChild(cell);
+            colorIdx++;
         });
     });
 }

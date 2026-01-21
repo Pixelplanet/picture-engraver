@@ -34,14 +34,15 @@ const DEFAULT_SETTINGS = {
     // Engraving settings
     power: 70,
     speed: 425,
-    passes: 1
+    passes: 2,
+    crossHatch: true
 };
 
 const QR_SETTINGS = {
-    power: 90,
-    speed: 50,
-    frequency: 40,
-    lpi: 600,
+    power: 45,       // Lower power for better QR readability
+    speed: 80,       // Faster speed for cleaner lines
+    frequency: 45,
+    lpi: 500,
     // QR will replace a 2x2 block of cells
     cellsWide: 2,
     cellsHigh: 2
@@ -91,7 +92,10 @@ function hslToRgb(h, s, l) {
 
 // ===== QR Code =====
 async function generateQRCodePath(data, size, offsetX, offsetY) {
-    const qr = await QRCode.create(data, { errorCorrectionLevel: 'M' });
+    const qr = QRCode.create(data, {
+        errorCorrectionLevel: 'Q',
+        version: 1, // Try to force small version for larger blocks
+    });
     const modules = qr.modules;
     const moduleCount = modules.size;
     const moduleSize = size / moduleCount;
@@ -143,7 +147,21 @@ function createDisplaySettings(frequency, lpi, power, speed, passes) {
             VECTOR_ENGRAVING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { speed, power, repeat: passes, frequency: 40 } } },
             FILL_VECTOR_ENGRAVING: {
                 materialType: 'customize', planType: 'dot_cloud',
-                parameter: { customize: { bitmapEngraveMode: 'normal', speed, density: lpi, dpi: lpi, power, repeat: passes, bitmapScanMode: 'crossMode', frequency, crossAngle: true, scanAngle: 0, angleType: 2 } }
+                parameter: {
+                    customize: {
+                        bitmapEngraveMode: 'normal',
+                        speed,
+                        density: lpi,
+                        dpi: lpi,
+                        power,
+                        repeat: passes,
+                        bitmapScanMode: settings.crossHatch ? 'crossMode' : 'lineMode',
+                        frequency,
+                        crossAngle: settings.crossHatch,
+                        scanAngle: 0,
+                        angleType: 2
+                    }
+                }
             },
             INTAGLIO: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { speed: 80, density: 300, power: 1, repeat: 1, frequency: 40 } } },
             INNER_THREE_D: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { subdivide: 0.1, speed: 80, power: 1, repeat: 1, frequency: 40 } } }
@@ -193,11 +211,10 @@ async function generateOptimizedGrid(settings = DEFAULT_SETTINGS) {
     // Create QR data
     const qrData = JSON.stringify({
         v: 1,
-        lpi: [settings.lpiMin, settings.lpiMax, numCols],
-        freq: [settings.freqMin, settings.freqMax, numRows],
-        pwr: settings.power,
-        spd: settings.speed,
-        ts: now
+        l: [settings.lpiMin, settings.lpiMax, numCols],
+        f: [settings.freqMin, settings.freqMax, numRows],
+        p: settings.power,
+        s: settings.speed
     });
 
     const displays = [];

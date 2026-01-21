@@ -24,15 +24,15 @@ export class TestGridGenerator {
             // Engraving settings
             power: 70,
             speed: 425,
-            passes: 1,
+            passes: 2,
             crossHatch: true,
 
             // QR code settings
-            qrPower: 90,
-            qrSpeed: 50,
-            qrSize: 10,
-            qrFrequency: 40,
-            qrLpi: 600,
+            qrPower: 45,
+            qrSpeed: 80,
+            qrSize: 12,
+            qrFrequency: 45,
+            qrLpi: 500,
 
             // Layout
             cellSize: 5,
@@ -119,7 +119,21 @@ export class TestGridGenerator {
                 VECTOR_ENGRAVING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { speed, power, repeat: passes, frequency: 40 } } },
                 FILL_VECTOR_ENGRAVING: {
                     materialType: 'customize', planType: 'dot_cloud',
-                    parameter: { customize: { bitmapEngraveMode: 'normal', speed, density: lpi, dpi: lpi, power, repeat: passes, bitmapScanMode: 'crossMode', frequency, crossAngle: true, scanAngle: 0, angleType: 2 } }
+                    parameter: {
+                        customize: {
+                            bitmapEngraveMode: 'normal',
+                            speed,
+                            density: lpi,
+                            dpi: lpi,
+                            power,
+                            repeat: passes,
+                            bitmapScanMode: this.settings.crossHatch ? 'crossMode' : 'lineMode',
+                            frequency,
+                            crossAngle: this.settings.crossHatch,
+                            scanAngle: 0,
+                            angleType: 2
+                        }
+                    }
                 },
                 INTAGLIO: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { speed: 80, density: 300, power: 1, repeat: 1, frequency: 40 } } },
                 INNER_THREE_D: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { subdivide: 0.1, speed: 80, power: 1, repeat: 1, frequency: 40 } } }
@@ -131,13 +145,13 @@ export class TestGridGenerator {
     // Encode settings for QR code
     encodeSettings(numCols, numRows) {
         const s = this.settings;
+        // Use very short keys to reduce QR code density
         return JSON.stringify({
             v: 1,
-            lpi: [s.lpiMax, s.lpiMin, numCols],
-            freq: [s.freqMin, s.freqMax, numRows],
-            pwr: s.power,
-            spd: s.speed,
-            ts: Date.now()
+            l: [s.lpiMax, s.lpiMin, numCols],
+            f: [s.freqMin, s.freqMax, numRows],
+            p: s.power,
+            s: s.speed
         });
     }
 
@@ -147,9 +161,19 @@ export class TestGridGenerator {
 
         if (code) {
             try {
-                const settings = JSON.parse(code.data);
-                const lpiValues = this.linspace(settings.lpi[0], settings.lpi[1], settings.lpi[2]); // Low to High
-                const freqValues = this.linspace(settings.freq[0], settings.freq[1], settings.freq[2]); // Low to High
+                const raw = JSON.parse(code.data);
+                // Support both old and new (shorter) keys
+                const settings = {
+                    v: raw.v,
+                    lpi: raw.l || raw.lpi,
+                    freq: raw.f || raw.freq,
+                    pwr: raw.p || raw.pwr,
+                    spd: raw.s || raw.spd,
+                    ts: raw.ts || Date.now()
+                };
+
+                const lpiValues = this.linspace(settings.lpi[0], settings.lpi[1], settings.lpi[2]);
+                const freqValues = this.linspace(settings.freq[0], settings.freq[1], settings.freq[2]);
 
                 return {
                     found: true,
@@ -169,7 +193,11 @@ export class TestGridGenerator {
     // Generate QR Code Path
     generateQRPath(text, x, y, size) {
         try {
-            const qr = createQR(text, { errorCorrectionLevel: 'M' });
+            // Use low version and high error correction for better readability
+            const qr = createQR(text, {
+                errorCorrectionLevel: 'Q', // Medium-High error correction
+                version: 1 // Try to force small version for larger blocks
+            });
             const modules = qr.modules;
             const count = modules.size;
             const cellSize = size / count;

@@ -236,6 +236,7 @@
                   <li><strong>Density:</strong> 122 Test Points (14 × 9 Grid)</li>
                   <li><strong>Frequency:</strong> 40kHz - 90kHz (Optimized range)</li>
                   <li><strong>LPI:</strong> 800 - 300 (High to Low)</li>
+                  <li><strong>Passes:</strong> 2 (Crosshatch enabled)</li>
                   <li><strong>Smart QR:</strong> Located at bottom-right, scanned for auto-settings.</li>
                 </ul>
               </div>
@@ -318,6 +319,14 @@
                     <label>Speed (mm/s)</label>
                     <input type="number" class="input" id="gridSpeed" value="425" min="1" max="1000">
                   </div>
+                  <div class="setting-row">
+                    <label>Passes</label>
+                    <input type="number" class="input" id="gridPasses" value="2" min="1" max="10">
+                  </div>
+                  <div class="setting-row">
+                    <label>Cross Hatch</label>
+                    <input type="checkbox" class="checkbox" id="gridCrossHatch" checked>
+                  </div>
                 </div>
               </div>
 
@@ -373,15 +382,44 @@
                 <div id="analysisSettings">
                   <p class="text-muted">Upload a grid photo to analyze...</p>
                 </div>
+                <div id="analyzerFallback"
+                  style="display: none; margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                  <p class="text-muted" style="font-size: 0.9em; margin-bottom: 10px;">
+                    Can't read the QR code? If this is the standard testgrid (85x55mm), you can load its default
+                    settings manually:
+                  </p>
+                  <button class="btn btn-secondary btn-sm" id="btnUseDefaultGrid" style="width: 100%;">
+                    🎯 Use Default Testgrid Settings
+                  </button>
+                </div>
               </div>
             </div>
 
             <!-- Color Map -->
             <div class="color-map" id="colorMapSection" style="display: none;">
-              <h3>Color-to-Settings Map</h3>
-              <p class="modal-description">
-                Click on a cell in the grid to see its color and laser settings.
-              </p>
+              <div class="color-map-header"
+                style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                <div>
+                  <h3 style="margin: 0;">Step 2: Map Colors</h3>
+                  <p class="modal-description" style="margin: 5px 0 0 0;">
+                    Click a cell below to capture its color and see settings.
+                  </p>
+                </div>
+                <div id="activeSelectionBox" class="selection-detail-box"
+                  style="background: var(--bg-panel); border: 1px solid var(--border-color); padding: 8px 15px; border-radius: 8px; min-width: 200px; display: none;">
+                  <div
+                    style="font-size: 0.8em; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
+                    Selected Settings</div>
+                  <div id="activeSelectionText"
+                    style="font-weight: 600; font-size: 1.1em; color: var(--primary-color);">40kHz / 800 LPI</div>
+                </div>
+              </div>
+
+              <div id="alignmentHint"
+                style="background: #e7f3ff; color: #004085; padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 0.9em; display: none;">
+                💡 <strong>Tip:</strong> If the colors look wrong, try to click the 4 corners of the card in the image
+                above to re-align the grid.
+              </div>
               <div class="color-map-grid" id="colorMapGrid">
                 <!-- Will be populated dynamically -->
               </div>
