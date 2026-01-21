@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>picture-engraver</Name>
-  <Repository>Pixelplanet/picture-engraver</Repository>
-  <Registry>https://hub.docker.com/r/Pixelplanet/picture-engraver</Registry>
+  <Repository>pixelplanet/picture-engraver</Repository>
+  <Registry>https://hub.docker.com/r/pixelplanet/picture-engraver</Registry>
   <Network>bridge</Network>
   <MyIP/>
   <Shell>sh</Shell>

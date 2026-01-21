@@ -7,3 +7,4 @@ dist
 *.local
 testfile/*.xcs
 testfile/*.png
+tasks/*

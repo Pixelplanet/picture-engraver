@@ -2,7 +2,7 @@ version: '3.8'
 services:
   picture-engraver:
     build: .
-    image: Pixelplanet/picture-engraver:latest
+    image: pixelplanet/picture-engraver:latest
     container_name: picture-engraver
     ports:
       - "3002:80"
