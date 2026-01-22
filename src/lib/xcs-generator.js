@@ -200,7 +200,7 @@ export class XCSGenerator {
                 visible: false,  // Disable stroke for filled engraving
                 color: colorInt,
                 alpha: 1,
-                width: 0.1,
+                width: 0,
                 cap: 'butt',
                 join: 'miter',
                 miterLimit: 4,
