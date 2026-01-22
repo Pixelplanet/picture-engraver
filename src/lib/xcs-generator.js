@@ -201,7 +201,7 @@ export class XCSGenerator {
                 visible: false,  // Disable stroke for filled engraving
                 color: colorInt,
                 alpha: 1,
-                width: 0,
+                width: 0.1,
                 cap: 'butt',
                 join: 'miter',
                 miterLimit: 4,
@@ -211,7 +211,7 @@ export class XCSGenerator {
             height: height,
             points: [],
             dPath: `M0 0 L${width} 0 L${width} ${height} L0 ${height} Z`,
-            fillRule: 'evenodd',
+            fillRule: 'nonzero',
             graphicX: x,
             graphicY: y,
             isCompoundPath: false,
