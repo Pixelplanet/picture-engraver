@@ -197,7 +197,7 @@ export class XCSGenerator {
             },
             stroke: {
                 paintType: 'color',
-                visible: true,
+                visible: false,  // Disable stroke for filled engraving
                 color: colorInt,
                 alpha: 1,
                 width: 0.1,
