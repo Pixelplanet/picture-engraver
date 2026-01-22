@@ -9,7 +9,7 @@ export class Vectorizer {
         this.options = {
             // Tracing options
             turnPolicy: 'minority',
-            turdSize: 2,
+            turdSize: 4,  // Increased from 2 for cleaner output
             optCurve: true,
             optTolerance: 0.2,
             threshold: 128,
@@ -88,8 +88,28 @@ export class Vectorizer {
                     const isEdge = this.isEdgePixel(bitmap, x, y, width, height);
                     if (isEdge) {
                         const contour = this.traceContour(bitmap, x, y, width, height, visited);
-                        if (contour.length >= 4) { // Minimum valid contour
-                            contours.push(contour);
+
+                        if (contour.length >= 4) {
+                            // Calculate bounding box for turd filtering
+                            let minX = Infinity, maxX = -Infinity;
+                            let minY = Infinity, maxY = -Infinity;
+
+                            for (const p of contour) {
+                                if (p.x < minX) minX = p.x;
+                                if (p.x > maxX) maxX = p.x;
+                                if (p.y < minY) minY = p.y;
+                                if (p.y > maxY) maxY = p.y;
+                            }
+
+                            const w = maxX - minX;
+                            const h = maxY - minY;
+
+                            // Filter out tiny features (noise/turds)
+                            // Increase threshold for cleaner, more consolidated shapes
+                            const threshold = this.options.turdSize || 2;
+                            if (w >= threshold && h >= threshold) {
+                                contours.push(contour);
+                            }
                         }
                     }
                 }
