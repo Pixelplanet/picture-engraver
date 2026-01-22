@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Picture Engraver - Reset Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .danger {
+            background: #dc3545;
+        }
+
+        .danger:hover {
+            background: #c82333;
+        }
+
+        .success {
+            background: #28a745;
+        }
+
+        .success:hover {
+            background: #218838;
+        }
+
+        .info {
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 20px 0;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+        }
+
+        .status.good {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.bad {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>🔧 Picture Engraver Reset Tool</h1>
+
+        <div class="info">
+            <strong>Use this tool if:</strong>
+            <ul>
+                <li>The app won't load or shows errors</li>
+                <li>You deleted a test grid and now it's broken</li>
+                <li>You want to clear all saved calibrations</li>
+            </ul>
+        </div>
+
+        <h3>Current Status</h3>
+        <div id="status"></div>
+
+        <h3>Actions</h3>
+        <button onclick="checkStatus()" class="success">🔍 Check Status</button>
+        <button onclick="resetCalibrations()" class="danger">🗑️ Clear Calibrations</button>
+        <button onclick="resetAll()" class="danger">⚠️ Reset Everything</button>
+        <button onclick="goToApp()" class>↗️ Open App</button>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function checkStatus() {
+            const result = document.getElementById('status');
+            let html = '<div class="status good">';
+
+            try {
+                const saved = JSON.parse(localStorage.getItem('savedCalibrations') || '[]');
+                html += `<strong>✓ Saved Calibrations:</strong> ${saved.length} found<br>`;
+
+                const allKeys = Object.keys(localStorage);
+                html += `<strong>✓ Total localStorage Keys:</strong> ${allKeys.length}<br>`;
+                html += `<strong>Keys:</strong> ${allKeys.join(', ') || 'None'}<br>`;
+
+                html += '<br><strong>Status: OK</strong> - No issues detected';
+                html += '</div>';
+            } catch (e) {
+                html = '<div class="status bad">';
+                html += `<strong>✗ Error Detected:</strong> ${e.message}<br>`;
+                html += '<strong>Status: CORRUPTED</strong> - Click "Reset Everything" to fix';
+                html += '</div>';
+            }
+
+            result.innerHTML = html;
+        }
+
+        function resetCalibrations() {
+            if (!confirm('This will delete all saved test grid calibrations. Continue?')) return;
+
+            try {
+                localStorage.setItem('savedCalibrations', '[]');
+                document.getElementById('result').innerHTML =
+                    '<div class="status good"><strong>✓ Success!</strong> Calibrations cleared.</div>';
+                checkStatus();
+            } catch (e) {
+                document.getElementById('result').innerHTML =
+                    '<div class="status bad"><strong>✗ Error:</strong> ' + e.message + '</div>';
+            }
+        }
+
+        function resetAll() {
+            if (!confirm('This will delete ALL localStorage data for Picture Engraver. Continue?')) return;
+
+            try {
+                localStorage.clear();
+                document.getElementById('result').innerHTML =
+                    '<div class="status good"><strong>✓ Success!</strong> All data cleared. You can now reload the app.</div>';
+                checkStatus();
+            } catch (e) {
+                document.getElementById('result').innerHTML =
+                    '<div class="status bad"><strong>✗ Error:</strong> ' + e.message + '</div>';
+            }
+        }
+
+        function goToApp() {
+            window.location.href = '/';
+        }
+
+        // Auto-check on load
+        window.onload = checkStatus;
+    </script>
+</body>
+
+</html>

@@ -196,7 +196,7 @@ export class TestGridGenerator {
             // Use low version and high error correction for better readability
             const qr = createQR(text, {
                 errorCorrectionLevel: 'Q', // Medium-High error correction
-                version: 1 // Try to force small version for larger blocks
+                version: 5 // Allow larger versions for more data
             });
             const modules = qr.modules;
             const count = modules.size;
@@ -242,12 +242,17 @@ export class TestGridGenerator {
         // Frequency: Low to High (top to bottom)
         const freqValues = this.linspace(s.freqMin, s.freqMax, numRows);
 
-        // QR Code Position (Bottom Right, 2x2 cells)
-        const qrCells = 2;
+        // Center the grid in 200x200mm workspace
+        const workspaceSize = 200;
+        const offsetX = (workspaceSize - s.cardWidth) / 2;
+        const offsetY = (workspaceSize - s.cardHeight) / 2;
+
+        // QR Code Position (Bottom Right, 3x3 cells for better readability with version 5)
+        const qrCells = 3;
         const qrStartCol = numCols - qrCells;
         const qrStartRow = numRows - qrCells;
-        const qrX = s.margin + qrStartCol * totalCellSize;
-        const qrY = s.margin + qrStartRow * totalCellSize;
+        const qrX = offsetX + s.margin + qrStartCol * totalCellSize;
+        const qrY = offsetY + s.margin + qrStartRow * totalCellSize;
         const qrSize = (qrCells * totalCellSize) - s.cellGap;
 
         const displays = [];
@@ -266,8 +271,8 @@ export class TestGridGenerator {
 
                 const displayId = this.generateUUID();
 
-                const x = s.margin + col * totalCellSize;
-                const y = s.margin + row * totalCellSize;
+                const x = offsetX + s.margin + col * totalCellSize;
+                const y = offsetY + s.margin + row * totalCellSize;
 
                 const frequency = Math.round(freqValues[row]);
                 const lpi = Math.round(lpiValues[col]);

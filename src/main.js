@@ -858,7 +858,7 @@ function unused_updateGridPreview() {
     const cellSize = settings.cellSize;
     const gap = settings.cellGap;
 
-    const qrCells = 2; // Fixed in generator
+    const qrCells = 3; // Must match generator (3x3 for version 5 QR codes)
     const qrStartCol = gridInfo.numCols - qrCells;
     const qrStartRow = gridInfo.numRows - qrCells;
 
