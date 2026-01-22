@@ -9,7 +9,7 @@ export class Vectorizer {
         this.options = {
             // Tracing options
             turnPolicy: 'minority',
-            turdSize: 4,  // Increased from 2 for cleaner output
+            turdSize: 2,  // Reverted to 2 for high detail
             optCurve: true,
             optTolerance: 0.2,
             threshold: 128,
