@@ -61,22 +61,23 @@ export class XCSGenerator {
             const colorHex = this.colorToHex(layer.color.r, layer.color.g, layer.color.b);
             const colorInt = this.colorToInt(layer.color.r, layer.color.g, layer.color.b);
 
-            // If layer has vector paths, create one display per path
+            // Combine all paths for this layer into a single display
             if (layer.paths && layer.paths.length > 0) {
-                layer.paths.forEach((pathData, pathIndex) => {
-                    if (!pathData || pathData.length === 0) return;
+                // Join all paths with a space
+                const combinedPath = layer.paths.filter(p => p && p.length > 0).join(' ');
 
+                if (combinedPath.length > 0) {
                     const displayId = this.generateUUID();
                     const display = this.createPathDisplayWithPath(
                         displayId,
-                        `${layer.name} - Path ${pathIndex + 1}`,
+                        layer.name,
                         colorHex,
                         colorInt,
                         offsetX, offsetY,  // Use calculated offsets for centering
                         contentWidth,      // Use actual content dimensions
                         contentHeight,
-                        layerIndex * 100 + pathIndex + 1,
-                        pathData
+                        layerIndex + 1,
+                        combinedPath
                     );
 
                     displays.push(display);
@@ -84,7 +85,7 @@ export class XCSGenerator {
                         id: displayId,
                         settings: this.createDisplaySettings(layer)
                     });
-                });
+                }
             } else {
                 // Fallback: create a simple rectangle
                 const displayId = this.generateUUID();
