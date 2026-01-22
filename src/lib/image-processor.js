@@ -40,7 +40,10 @@ export class ImageProcessor {
         canvas.height = drawHeight;
 
         // Draw image (no background fill needed as canvas is exactly sized)
+        // Apply slight blur to reduce noise and improve vectorization solids
+        ctx.filter = 'blur(1.5px)';
         ctx.drawImage(image, 0, 0, drawWidth, drawHeight);
+        ctx.filter = 'none'; // Reset filter
 
         // Return image data
         return ctx.getImageData(0, 0, drawWidth, drawHeight);
