@@ -41,6 +41,16 @@ export class XCSGenerator {
         const canvasId = this.generateUUID();
         const now = Date.now();
 
+        // Calculate centering offsets for 200x200mm workspace
+        const contentWidth = imageData.width / this.pxPerMm;
+        const contentHeight = imageData.height / this.pxPerMm;
+
+        const workspaceWidth = size.width || 200;
+        const workspaceHeight = size.height || 200;
+
+        const offsetX = (workspaceWidth - contentWidth) / 2;
+        const offsetY = (workspaceHeight - contentHeight) / 2;
+
         // Generate displays (path elements) for each layer
         const displays = [];
         const displaySettings = [];
@@ -62,9 +72,9 @@ export class XCSGenerator {
                         `${layer.name} - Path ${pathIndex + 1}`,
                         colorHex,
                         colorInt,
-                        0, 0,
-                        size.width,
-                        size.height,
+                        offsetX, offsetY,  // Use calculated offsets for centering
+                        contentWidth,      // Use actual content dimensions
+                        contentHeight,
                         layerIndex * 100 + pathIndex + 1,
                         pathData
                     );
