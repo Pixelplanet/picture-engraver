@@ -309,6 +309,7 @@ async function processImage() {
             visible: true,
             frequency: calculateFrequency(index, numColors),
             lpi: calculateLPI(index, numColors),
+            outline: false,
             paths: []
         }));
 
@@ -434,19 +435,32 @@ function displayLayers() {
         <div class="layer-name">${layer.name}</div>
         <div class="layer-settings">${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)} LPI</div>
       </div>
-      <div class="layer-actions">
+      <div class="layer-actions" style="display: flex; align-items: center;">
+        <label class="layer-outline-control" style="margin-right: 10px; display: flex; align-items: center; font-size: 0.8em; color: var(--text-secondary);">
+            <input type="checkbox" class="outline-checkbox" ${layer.outline ? 'checked' : ''} data-layer-id="${layer.id}">
+            <span style="margin-left: 4px;">Outline</span>
+        </label>
         <button class="btn btn-icon btn-sm" title="Edit" data-action="edit" data-layer-id="${layer.id}">✏️</button>
       </div>
     `;
         container.appendChild(layerEl);
     });
 
-    // Add event listeners
+    // Add event listeners for Visibility
     container.querySelectorAll('.layer-checkbox').forEach(checkbox => {
         checkbox.addEventListener('change', (e) => {
             const layerId = e.target.dataset.layerId;
             const layer = state.layers.find(l => l.id === layerId);
             if (layer) layer.visible = e.target.checked;
+        });
+    });
+
+    // Add event listeners for Outline
+    container.querySelectorAll('.outline-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const layerId = e.target.dataset.layerId;
+            const layer = state.layers.find(l => l.id === layerId);
+            if (layer) layer.outline = e.target.checked;
         });
     });
 }

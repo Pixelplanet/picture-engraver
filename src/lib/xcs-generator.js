@@ -85,6 +85,38 @@ export class XCSGenerator {
                         id: displayId,
                         settings: this.createDisplaySettings(layer)
                     });
+
+                    // Generate Outline if requested
+                    if (layer.outline) {
+                        const outlineId = this.generateUUID();
+                        // Use Black (#000000) for distinct outline processing
+                        const outlineColorHex = '#000000';
+                        const outlineColorInt = 0;
+
+                        const outlineDisplay = this.createPathDisplayWithPath(
+                            outlineId,
+                            `${layer.name} Outline`,
+                            outlineColorHex,
+                            outlineColorInt,
+                            offsetX, offsetY,
+                            contentWidth,
+                            contentHeight,
+                            layerIndex + 1,
+                            combinedPath
+                        );
+
+                        // Configure for Outline (Stroke) Mode
+                        outlineDisplay.isFill = false;
+                        outlineDisplay.fill.visible = false;
+                        outlineDisplay.stroke.visible = true;
+                        outlineDisplay.stroke.width = 0.1;
+
+                        displays.push(outlineDisplay);
+                        displaySettings.push({
+                            id: outlineId,
+                            settings: this.createOutlineSettings(layer)
+                        });
+                    }
                 }
             } else {
                 // Fallback: create a simple rectangle
@@ -211,10 +243,10 @@ export class XCSGenerator {
             height: height,
             points: [],
             dPath: `M0 0 L${width} 0 L${width} ${height} L0 ${height} Z`,
-            fillRule: 'nonzero',
+            fillRule: 'evenodd', // Robustly handle holes regardless of winding
             graphicX: x,
             graphicY: y,
-            isCompoundPath: false,
+            isCompoundPath: false, // Standard SVG path handling
             isFill: true,
             lineColor: colorInt,
             fillColor: colorHex
@@ -236,6 +268,23 @@ export class XCSGenerator {
                 VECTOR_CUTTING: this.createCuttingParams(),
                 VECTOR_ENGRAVING: this.createEngravingParams(),
                 FILL_VECTOR_ENGRAVING: this.createFillEngravingParams(freq, lpi),
+                INTAGLIO: this.createIntaglioParams(),
+                INNER_THREE_D: this.createInner3DParams()
+            },
+            processIgnore: false
+        };
+    }
+
+    createOutlineSettings(layer) {
+        // Outline uses VECTOR_ENGRAVING (Score) mode
+        return {
+            isFill: false,
+            type: 'PATH',
+            processingType: 'VECTOR_ENGRAVING',
+            data: {
+                VECTOR_CUTTING: this.createCuttingParams(),
+                VECTOR_ENGRAVING: this.createEngravingParams(),
+                FILL_VECTOR_ENGRAVING: this.createFillEngravingParams(Math.round(layer.frequency), Math.round(layer.lpi)),
                 INTAGLIO: this.createIntaglioParams(),
                 INNER_THREE_D: this.createInner3DParams()
             },
