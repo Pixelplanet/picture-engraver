@@ -243,7 +243,7 @@ export class XCSGenerator {
             height: height,
             points: [],
             dPath: `M0 0 L${width} 0 L${width} ${height} L0 ${height} Z`,
-            fillRule: 'evenodd', // Robustly handle holes regardless of winding
+            fillRule: 'nonzero',
             graphicX: x,
             graphicY: y,
             isCompoundPath: false, // Standard SVG path handling
