@@ -105,7 +105,13 @@ const elements = {
     btnGenerateGrid: document.getElementById('btnGenerateGrid'),
 
     // Toast
-    toastContainer: document.getElementById('toastContainer')
+    toastContainer: document.getElementById('toastContainer'),
+
+    // Status Bar
+    statusBar: document.getElementById('statusBar'),
+    statusText: document.getElementById('statusText'),
+    progressContainer: document.getElementById('progressContainer'),
+    progressFill: document.getElementById('progressFill')
 };
 
 // ===================================
@@ -127,6 +133,18 @@ function init() {
     setupAnalyzer();
 
     console.log('Picture Engraver initialized');
+}
+
+function updateStatus(msg, progress = -1) {
+    if (!elements.statusBar) return;
+    elements.statusBar.style.display = 'flex';
+    elements.statusText.textContent = msg;
+    if (progress >= 0) {
+        elements.progressContainer.style.display = 'block';
+        elements.progressFill.style.width = `${progress}%`;
+    } else {
+        elements.progressContainer.style.display = 'none';
+    }
 }
 
 // ===================================
@@ -277,58 +295,91 @@ async function processImage() {
         return;
     }
 
-    showToast('Processing image...', 'success');
+    // UI Loading
+    const btnHtml = elements.btnProcess.innerHTML;
+    elements.btnProcess.innerHTML = '<span>⏳</span> Processing...';
+    elements.btnProcess.disabled = true;
+    updateStatus('Preparing image...', 5);
 
-    try {
-        // Get settings
-        const numColors = parseInt(elements.colorSlider.value);
-        const size = getOutputSize();
-        state.outputSize = size;
+    setTimeout(() => {
+        try {
+            // Get settings
+            const numColors = parseInt(elements.colorSlider.value);
+            const size = getOutputSize();
+            state.outputSize = size;
+            updateStatus('Resizing image...', 15);
 
-        // Process image
-        const processor = new ImageProcessor();
-        const resized = processor.resize(state.originalImage, size.width, size.height);
+            // Process image
+            const processor = new ImageProcessor();
+            const resized = processor.resize(state.originalImage, size.width, size.height);
 
-        // Update output size to match actual resized dimensions (remove padding)
-        state.outputSize = {
-            width: resized.width / 10, // Convert px back to mm (assuming 10px/mm)
-            height: resized.height / 10
-        };
+            // Update output size to match actual resized dimensions (remove padding)
+            state.outputSize = {
+                width: resized.width / 10, // Convert px back to mm (assuming 10px/mm)
+                height: resized.height / 10
+            };
 
-        // Quantize colors
-        const quantizer = new ColorQuantizer();
-        const { quantizedImage, palette } = quantizer.quantize(resized, numColors);
+            updateStatus('Quantizing colors...', 30);
 
-        state.processedImage = quantizedImage;
-        state.palette = palette;
+            setTimeout(() => {
+                try {
+                    // Quantize colors
+                    const quantizer = new ColorQuantizer();
+                    const { quantizedImage, palette } = quantizer.quantize(resized, numColors);
 
-        state.layers = palette.map((color, index) => ({
-            id: `layer-${index}`,
-            name: `Layer ${index + 1}`,
-            color: color,
-            visible: true,
-            frequency: calculateFrequency(index, numColors),
-            lpi: calculateLPI(index, numColors),
-            outline: false,
-            paths: []
-        }));
+                    state.processedImage = quantizedImage;
+                    state.palette = palette;
 
-        // Display results
-        displayQuantizedImage(quantizedImage);
-        displayLayers();
+                    state.layers = palette.map((color, index) => ({
+                        id: `layer-${index}`,
+                        name: `Layer ${index + 1}`,
+                        color: color,
+                        visible: true,
+                        frequency: calculateFrequency(index, numColors),
+                        lpi: calculateLPI(index, numColors),
+                        outline: false,
+                        paths: []
+                    }));
 
-        // Show panels
-        elements.layersPanel.style.display = 'flex';
-        elements.previewPanel.style.display = 'flex';
+                    // Display results
+                    displayQuantizedImage(quantizedImage);
+                    displayLayers();
 
-        showToast('Quantization complete. Vectorizing...', 'success');
+                    // Show panels
+                    elements.layersPanel.style.display = 'flex';
+                    elements.previewPanel.style.display = 'flex';
 
-        // Vectorize layers
-        setTimeout(() => vectorizeLayers(), 100);
-    } catch (error) {
-        console.error('Processing error:', error);
-        showToast('Error processing image: ' + error.message, 'error');
-    }
+                    updateStatus('Vectorizing layers (may take a moment)...', 60);
+
+                    // Vectorize layers
+                    setTimeout(async () => {
+                        try {
+                            await vectorizeLayers();
+
+                            elements.btnProcess.innerHTML = btnHtml;
+                            elements.btnProcess.disabled = false;
+                            updateStatus('Complete', 100);
+                            setTimeout(() => { if (elements.statusBar) elements.statusBar.style.display = 'none'; }, 3000);
+                        } catch (error) {
+                            console.error('Vectorization error:', error);
+                            showToast('Vectorization failed: ' + error.message, 'error');
+                            elements.btnProcess.innerHTML = btnHtml;
+                            elements.btnProcess.disabled = false;
+                            updateStatus('Error', 0);
+                        }
+                    }, 50);
+
+                } catch (error) { throw error; }
+            }, 50);
+
+        } catch (error) {
+            console.error('Processing error:', error);
+            showToast('Error processing image: ' + error.message, 'error');
+            elements.btnProcess.innerHTML = btnHtml;
+            elements.btnProcess.disabled = false;
+            updateStatus('Error', 0);
+        }
+    }, 50);
 }
 
 function getOutputSize() {

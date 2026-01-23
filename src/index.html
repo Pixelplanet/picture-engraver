@@ -431,6 +431,16 @@
 
     <!-- Toast Notifications -->
     <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Status Bar -->
+    <div id="statusBar" class="status-bar"
+      style="position: fixed; bottom: 0; left: 0; right: 0; background: #2d2d2d; color: #fff; padding: 8px 15px; font-size: 0.9em; display: none; z-index: 1000; border-top: 1px solid #444; align-items: center; justify-content: space-between;">
+      <span id="statusText">Ready</span>
+      <div id="progressContainer"
+        style="width: 200px; height: 6px; background: #444; border-radius: 3px; overflow: hidden; display: none;">
+        <div id="progressFill" style="width: 0%; height: 100%; background: #4a90e2; transition: width 0.3s;"></div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="./main.js"></script>
