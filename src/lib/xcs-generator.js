@@ -146,6 +146,7 @@ export class XCSGenerator {
             canvas: [{
                 id: canvasId,
                 title: 'Generated Image',
+                displaySettings: displaySettings,
                 layerData: this.generateLayerData(layers),
                 groupData: {},
                 displays: displays
