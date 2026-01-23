@@ -168,7 +168,6 @@ export class XCSGenerator {
     createPathDisplayWithPath(id, name, colorHex, colorInt, x, y, width, height, zOrder, dPath) {
         const display = this.createPathDisplay(id, name, colorHex, colorInt, x, y, width, height, zOrder);
         display.dPath = dPath;
-        display.isCompoundPath = true; // Vector output is almost always a compound path
         return display;
     }
 
@@ -231,7 +230,7 @@ export class XCSGenerator {
             },
             stroke: {
                 paintType: 'color',
-                visible: false,  // Disable stroke for filled engraving
+                visible: true,  // Enabled to match original working logic
                 color: colorInt,
                 alpha: 1,
                 width: 0.1,
