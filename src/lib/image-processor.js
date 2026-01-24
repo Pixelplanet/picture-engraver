@@ -8,7 +8,11 @@ export class ImageProcessor {
      * Resize an image to the specified dimensions (in mm, converted to pixels)
      * Using 10 pixels per mm for reasonable resolution
      */
-    resize(image, widthMm, heightMm, pxPerMm = 10) {
+    /**
+     * Resize an image to the specified dimensions (in mm, converted to pixels)
+     * Using 10 pixels per mm for reasonable resolution
+     */
+    resize(image, widthMm, heightMm, pxPerMm = 10, smoothing = 0) {
         const widthPx = widthMm * pxPerMm;
         const heightPx = heightMm * pxPerMm;
 
@@ -40,9 +44,13 @@ export class ImageProcessor {
         canvas.height = drawHeight;
 
         // Draw image (no background fill needed as canvas is exactly sized)
-        // Removed blur to restore detail
-        ctx.filter = 'none';
+        if (smoothing > 0) {
+            ctx.filter = `blur(${smoothing}px)`;
+        } else {
+            ctx.filter = 'none';
+        }
         ctx.drawImage(image, 0, 0, drawWidth, drawHeight);
+        ctx.filter = 'none';
 
         // Return image data
         return ctx.getImageData(0, 0, drawWidth, drawHeight);
