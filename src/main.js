@@ -56,8 +56,6 @@ const elements = {
     customHeight: document.getElementById('customHeight'),
     colorSlider: document.getElementById('colorSlider'),
     colorCountDisplay: document.getElementById('colorCountDisplay'),
-    smoothingSlider: document.getElementById('smoothingSlider'),
-    smoothingDisplay: document.getElementById('smoothingDisplay'),
     btnProcess: document.getElementById('btnProcess'),
 
     // Layers
@@ -284,11 +282,6 @@ function setupControls() {
         colorCountDisplay.textContent = e.target.value;
     });
 
-    // Smoothing slider
-    smoothingSlider.addEventListener('input', (e) => {
-        smoothingDisplay.textContent = e.target.value;
-    });
-
     // Process button
     btnProcess.addEventListener('click', processImage);
 }
@@ -312,14 +305,13 @@ async function processImage() {
         try {
             // Get settings
             const numColors = parseInt(elements.colorSlider.value);
-            const smoothing = parseFloat(elements.smoothingSlider.value || 0);
             const size = getOutputSize();
             state.outputSize = size;
             updateStatus('Resizing image...', 15);
 
             // Process image
             const processor = new ImageProcessor();
-            const resized = processor.resize(state.originalImage, size.width, size.height, 10, smoothing);
+            const resized = processor.resize(state.originalImage, size.width, size.height);
 
             // Update output size to match actual resized dimensions (remove padding)
             state.outputSize = {
