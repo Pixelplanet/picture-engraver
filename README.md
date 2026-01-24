@@ -27,10 +27,16 @@ The key to perfect color engraving is calibration. Picture Engraver streamlines 
 
 ## 🐳 Docker Deployment
 
-Run the application locally using Docker:
+The Docker image supports **both AMD64 (x86) and ARM64** architectures, making it compatible with:
+- Standard cloud instances
+- Oracle Cloud ARM instances (Ampere A1)
+- Raspberry Pi 4/5
+- Apple Silicon Macs
+
+Run the application using Docker:
 
 ```bash
-docker run -d -p 3002:80 pixelplanet5/picture-engraver:latest
+docker run -d --name picture-engraver --restart always -p 3002:80 pixelplanet5/picture-engraver:latest
 ```
 
 Or using Docker Compose:
@@ -38,6 +44,8 @@ Or using Docker Compose:
 ```bash
 docker-compose up -d
 ```
+
+> 📖 **For developers:** See [docs/DOCKER_BUILD.md](docs/DOCKER_BUILD.md) for multi-arch build instructions.
 
 ## 🏗️ Development
 

@@ -34,7 +34,8 @@ const analyzerState = {
     numCols: 0,
     numRows: 0,
     isActive: false,
-    selectedCell: null
+    selectedCell: null,
+    extractedColors: [] // RGB colors from the test grid photo
 };
 
 // ===================================
@@ -513,11 +514,90 @@ function displayLayers() {
             if (layer) layer.outline = e.target.checked;
         });
     });
+
+    updateCalibrationStatus();
+}
+
+function updateCalibrationStatus() {
+    const statusEl = document.getElementById('calibrationStatus');
+    if (!statusEl) return;
+
+    if (SettingsStorage.hasColorMap()) {
+        const map = SettingsStorage.loadColorMap();
+        const date = map.savedAt ? new Date(map.savedAt).toLocaleDateString() : 'Active';
+        statusEl.innerHTML = `✅ Calibrated using ${map.entries.length} colors (${date})`;
+        statusEl.style.color = 'var(--accent-success)';
+    } else {
+        statusEl.innerHTML = `⚠️ No calibration data found. Use <strong>Test Grid > Analyze</strong> to calibrate.`;
+        statusEl.style.color = 'var(--accent-warning)';
+    }
 }
 
 function autoAssignColors() {
-    // TODO: Implement closest color matching
-    showToast('Auto-assign colors feature coming soon!', 'warning');
+    // Load the saved color map
+    const colorMap = SettingsStorage.loadColorMap();
+
+    if (!colorMap || !colorMap.entries || colorMap.entries.length === 0) {
+        showToast('No color map found! Please calibrate colors in the Test Grid > Analyze Grid tab first.', 'error');
+        return;
+    }
+
+    if (state.layers.length === 0) {
+        showToast('No layers to assign colors to. Process an image first.', 'error');
+        return;
+    }
+
+    console.log(`Auto-assigning colors using ${colorMap.entries.length} calibrated colors`);
+
+    // For each layer, find the closest matching color from the calibration data
+    state.layers.forEach(layer => {
+        const bestMatch = findClosestCalibrationColor(layer.color, colorMap.entries);
+
+        if (bestMatch) {
+            layer.frequency = bestMatch.frequency;
+            layer.lpi = bestMatch.lpi;
+            // Use the actual calibrated color as requested
+            layer.color = { ...bestMatch.color };
+            console.log(`Layer ${layer.name}: Assigned calibrated color RGB(${layer.color.r},${layer.color.g},${layer.color.b})`);
+        }
+    });
+
+    // Refresh the layers display and preview
+    displayLayers();
+    if (state.vectorizedLayers.length > 0) {
+        displayVectorPreview();
+    }
+
+    showToast(`Colors auto-assigned using calibrated color map!`, 'success');
+}
+
+/**
+ * Find the closest matching color from the calibration entries
+ * Uses Euclidean distance in RGB color space
+ * @param {Object} targetColor - The color to match {r, g, b}
+ * @param {Array} entries - Calibration entries with {color, frequency, lpi}
+ * @returns {Object|null} The best matching entry or null
+ */
+function findClosestCalibrationColor(targetColor, entries) {
+    let bestMatch = null;
+    let bestDistance = Infinity;
+
+    for (const entry of entries) {
+        const entryColor = entry.color;
+
+        // Calculate Euclidean distance in RGB space
+        const dr = targetColor.r - entryColor.r;
+        const dg = targetColor.g - entryColor.g;
+        const db = targetColor.b - entryColor.b;
+        const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestMatch = entry;
+        }
+    }
+
+    return bestMatch;
 }
 
 // ===================================
@@ -736,6 +816,12 @@ function setupTestGrid() {
     // Fallback button
     document.getElementById('btnUseDefaultGrid').addEventListener('click', useDefaultGridSettings);
 
+    // Save Color Map button
+    const btnSaveColorMap = document.getElementById('btnSaveColorMap');
+    if (btnSaveColorMap) {
+        btnSaveColorMap.addEventListener('click', saveColorMap);
+    }
+
     // Initialize preview
     updateStandardPreview();
 }
@@ -835,6 +921,7 @@ function updateExtractedColors() {
     const canvas = document.getElementById('analyzerCanvas');
     const ctx = canvas.getContext('2d');
     const colors = [];
+    const rgbColors = []; // Store as {r, g, b} objects
 
     const { corners, numCols, numRows } = analyzerState;
 
@@ -850,10 +937,20 @@ function updateExtractedColors() {
 
             const pixel = ctx.getImageData(Math.round(p.x), Math.round(p.y), 1, 1).data;
             colors.push(`rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`);
+            rgbColors.push({ r: pixel[0], g: pixel[1], b: pixel[2] });
         }
     }
 
+    // Store in analyzer state for saving
+    analyzerState.extractedColors = rgbColors;
+
     generateColorMapWithData(analyzerState.freqValues, analyzerState.lpiValues, colors);
+
+    // Show the save button section
+    const saveSection = document.getElementById('saveColorMapSection');
+    if (saveSection) {
+        saveSection.style.display = 'block';
+    }
 }
 
 function getCustomGridSettings() {
@@ -1165,6 +1262,59 @@ function generateColorMapWithData(freqValues, lpiValues, extractedColors) {
     });
 }
 
+/**
+ * Save the color map from the analyzer to localStorage
+ * The color map contains RGB values mapped to their frequency/LPI settings
+ */
+function saveColorMap() {
+    const { extractedColors, freqValues, lpiValues, numCols, numRows } = analyzerState;
+
+    if (!extractedColors || extractedColors.length === 0) {
+        showToast('No colors to save. Please align the grid first.', 'error');
+        return;
+    }
+
+    // Build the color map data structure
+    // Each entry maps a color to its freq/lpi settings
+    const colorEntries = [];
+    let colorIdx = 0;
+
+    for (let row = 0; row < numRows; row++) {
+        const freq = freqValues[row];
+        for (let col = 0; col < numCols; col++) {
+            const lpi = lpiValues[col];
+            const color = extractedColors[colorIdx];
+
+            colorEntries.push({
+                color: color, // {r, g, b}
+                frequency: freq,
+                lpi: lpi
+            });
+            colorIdx++;
+        }
+    }
+
+    const colorMapData = {
+        entries: colorEntries,
+        numCols,
+        numRows,
+        freqRange: [freqValues[0], freqValues[freqValues.length - 1]],
+        lpiRange: [lpiValues[0], lpiValues[lpiValues.length - 1]],
+        savedAt: new Date().toISOString()
+    };
+
+    if (SettingsStorage.saveColorMap(colorMapData)) {
+        showToast('Color map saved successfully!', 'success');
+
+        // Show the success message
+        const statusDiv = document.getElementById('savedColorMapStatus');
+        if (statusDiv) {
+            statusDiv.style.display = 'block';
+        }
+    } else {
+        showToast('Failed to save color map.', 'error');
+    }
+}
 
 
 // ===================================

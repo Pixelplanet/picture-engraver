@@ -94,7 +94,7 @@
             <span>🔄</span> Process Image
           </button>
           <div style="margin-top: 15px; font-size: 0.75em; color: #888; text-align: center;">
-            v1.18.0 (Rectangle Vectorizer)
+            v1.19.0 (Auto-Assign Colors)
           </div>
         </div>
       </section>
@@ -111,6 +111,10 @@
           <button class="btn btn-secondary" id="btnAutoAssign">
             <span>🎯</span> Auto-Assign Colors
           </button>
+          <div id="calibrationStatus" class="calibration-status"
+            style="margin-top: 10px; font-size: 0.85em; color: var(--text-tertiary); text-align: center;">
+            <!-- Will be populated dynamically -->
+          </div>
         </div>
       </section>
 
@@ -422,6 +426,23 @@
               </div>
               <div class="color-map-grid" id="colorMapGrid">
                 <!-- Will be populated dynamically -->
+              </div>
+
+              <!-- Save Color Map Button -->
+              <div id="saveColorMapSection" class="color-map-actions"
+                style="display: none; margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border-primary);">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                  <button class="btn btn-success btn-lg" id="btnSaveColorMap" style="flex: 1;">
+                    <span>💾</span> Save Color Map
+                  </button>
+                </div>
+                <p style="font-size: 0.85em; color: var(--text-secondary); margin-top: 10px; text-align: center;">
+                  Saving will store these calibrated colors for use with the Auto-Assign feature.
+                </p>
+                <div id="savedColorMapStatus"
+                  style="display: none; margin-top: 10px; padding: 10px; background: rgba(63, 185, 80, 0.1); border: 1px solid var(--accent-success); border-radius: 6px; text-align: center;">
+                  ✅ <strong>Color map saved!</strong> You can now use Auto-Assign Colors when processing images.
+                </div>
               </div>
             </div>
           </div>
