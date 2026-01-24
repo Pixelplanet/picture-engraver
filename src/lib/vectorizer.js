@@ -205,11 +205,18 @@ export class Vectorizer {
 
         if (simplified.length < 2) return '';
 
-        // Build path string
-        let path = `M${simplified[0].x} ${simplified[0].y}`;
+        // Find bounding box to make coordinates relative
+        let minX = Infinity, minY = Infinity;
+        for (const p of simplified) {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+        }
+
+        // Build path string with coordinates relative to bounding box origin
+        let path = `M${(simplified[0].x - minX).toFixed(3)} ${(simplified[0].y - minY).toFixed(3)}`;
 
         for (let i = 1; i < simplified.length; i++) {
-            path += ` L${simplified[i].x} ${simplified[i].y}`;
+            path += ` L${(simplified[i].x - minX).toFixed(3)} ${(simplified[i].y - minY).toFixed(3)}`;
         }
 
         path += ' Z';
