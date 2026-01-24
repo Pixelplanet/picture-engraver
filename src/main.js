@@ -10,6 +10,7 @@ import { ColorQuantizer } from './lib/color-quantizer.js';
 import { Vectorizer } from './lib/vectorizer.js';
 import { XCSGenerator } from './lib/xcs-generator.js';
 import { showToast } from './lib/toast.js';
+import { Logger } from './lib/logger.js';
 
 // ===================================
 // Application State
@@ -132,7 +133,7 @@ function init() {
     setupTestGrid();
     setupAnalyzer();
 
-    console.log('Picture Engraver initialized');
+    Logger.info('Picture Engraver initialized', { appVersion: '1.20.0' });
 }
 
 function updateStatus(msg, progress = -1) {
@@ -307,6 +308,13 @@ async function processImage() {
             const numColors = parseInt(elements.colorSlider.value);
             const size = getOutputSize();
             state.outputSize = size;
+
+            Logger.info('Starting image processing', {
+                numColors,
+                width: size.width,
+                height: size.height
+            });
+
             updateStatus('Resizing image...', 15);
 
             // Process image
@@ -373,6 +381,7 @@ async function processImage() {
             }, 50);
 
         } catch (error) {
+            Logger.error('Processing error', { error: error.message });
             console.error('Processing error:', error);
             showToast('Error processing image: ' + error.message, 'error');
             elements.btnProcess.innerHTML = btnHtml;
@@ -547,6 +556,7 @@ function autoAssignColors() {
         return;
     }
 
+    Logger.info(`Auto-assigning colors using ${colorMap.entries.length} calibrated colors`);
     console.log(`Auto-assigning colors using ${colorMap.entries.length} calibrated colors`);
 
     // For each layer, find the closest matching color from the calibration data
@@ -568,6 +578,7 @@ function autoAssignColors() {
         displayVectorPreview();
     }
 
+    Logger.info('Auto-assign colors completed', { layersUpdated: state.layers.length });
     showToast(`Colors auto-assigned using calibrated color map!`, 'success');
 }
 
