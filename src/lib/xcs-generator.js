@@ -231,7 +231,7 @@ export class XCSGenerator {
             },
             stroke: {
                 paintType: 'color',
-                visible: false,  // Disabled to match 'Fixed' confirmed state
+                visible: true,  // Enabled to match initial 'perfect' state (ensures visibility)
                 color: colorInt,
                 alpha: 1,
                 width: 0.1,
