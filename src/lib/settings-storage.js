@@ -16,9 +16,9 @@ const DEFAULT_SETTINGS = {
     freqMin: 40,
     freqMax: 80,
 
-    // LPI range (Lines Per Inch)
-    lpiMin: 300,
-    lpiMax: 800,
+    // LPI range (Lines Per Inch) - lowered to prevent wireframe rendering
+    lpiMin: 200,
+    lpiMax: 300,
 
     // Size defaults (mm)
     defaultWidth: 200,
