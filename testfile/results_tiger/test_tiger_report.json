@@ -1,0 +1,175 @@
+{
+  "input": "testfile/test_tiger.png",
+  "config": {
+    "colors": 8,
+    "width": 100,
+    "pxPerMm": 10
+  },
+  "stages": {
+    "resize": {
+      "duration": 232,
+      "inputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "outputSize": {
+        "widthMm": 100,
+        "heightMm": 100,
+        "widthPx": 1000,
+        "heightPx": 1000
+      }
+    },
+    "quantize": {
+      "duration": 923,
+      "colorCount": 8
+    },
+    "vectorize": {
+      "duration": 171,
+      "totalRectangles": 197986
+    },
+    "xcsGenerate": {
+      "duration": 24,
+      "fileSize": 12134652,
+      "fileSizeMB": "11.57"
+    }
+  },
+  "palette": [
+    {
+      "rgb": [
+        74,
+        56,
+        39
+      ],
+      "hex": "#4a3827"
+    },
+    {
+      "rgb": [
+        135,
+        100,
+        65
+      ],
+      "hex": "#876441"
+    },
+    {
+      "rgb": [
+        148,
+        116,
+        81
+      ],
+      "hex": "#947451"
+    },
+    {
+      "rgb": [
+        198,
+        140,
+        73
+      ],
+      "hex": "#c68c49"
+    },
+    {
+      "rgb": [
+        141,
+        122,
+        103
+      ],
+      "hex": "#8d7a67"
+    },
+    {
+      "rgb": [
+        199,
+        157,
+        107
+      ],
+      "hex": "#c79d6b"
+    },
+    {
+      "rgb": [
+        186,
+        165,
+        141
+      ],
+      "hex": "#baa58d"
+    },
+    {
+      "rgb": [
+        234,
+        211,
+        179
+      ],
+      "hex": "#ead3b3"
+    }
+  ],
+  "layers": [
+    {
+      "name": "Layer 1",
+      "color": "#4a3827",
+      "frequency": 40,
+      "lpi": 800,
+      "pathCount": 28073
+    },
+    {
+      "name": "Layer 2",
+      "color": "#876441",
+      "frequency": 46,
+      "lpi": 729,
+      "pathCount": 52239
+    },
+    {
+      "name": "Layer 3",
+      "color": "#947451",
+      "frequency": 51,
+      "lpi": 657,
+      "pathCount": 29213
+    },
+    {
+      "name": "Layer 4",
+      "color": "#c68c49",
+      "frequency": 57,
+      "lpi": 586,
+      "pathCount": 17136
+    },
+    {
+      "name": "Layer 5",
+      "color": "#8d7a67",
+      "frequency": 63,
+      "lpi": 514,
+      "pathCount": 26258
+    },
+    {
+      "name": "Layer 6",
+      "color": "#c79d6b",
+      "frequency": 69,
+      "lpi": 443,
+      "pathCount": 17858
+    },
+    {
+      "name": "Layer 7",
+      "color": "#baa58d",
+      "frequency": 74,
+      "lpi": 371,
+      "pathCount": 17264
+    },
+    {
+      "name": "Layer 8",
+      "color": "#ead3b3",
+      "frequency": 80,
+      "lpi": 300,
+      "pathCount": 9945
+    }
+  ],
+  "validation": {
+    "errors": [],
+    "warnings": [],
+    "valid": true
+  },
+  "outputFiles": {
+    "resized": "testfile\\results_tiger\\test_tiger_1_resized.png",
+    "quantized": "testfile\\results_tiger\\test_tiger_2_quantized.png",
+    "vectors": "testfile\\results_tiger\\test_tiger_3_vectors.svg",
+    "xcs": "testfile\\results_tiger\\test_tiger_4_output.xcs"
+  },
+  "summary": {
+    "totalDuration": 1350,
+    "valid": true
+  }
+}

@@ -1,600 +1,322 @@
 /**
- * XCS Generator Module
- * Generates XCS files for xTool laser engravers
+ * XCS File Generator
+ * Generates .xcs files for xTool Creative Space
  */
 
 export class XCSGenerator {
     constructor(settings) {
-        this.settings = settings;
-        this.pxPerMm = 10; // Pixels per mm for conversion
+        this.settings = settings || {};
+        this.pxPerMm = 10; // 10 pixels per mm (constant)
     }
 
     /**
-     * Generate a UUID v4
+     * Generate UUID v4
      */
     generateUUID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
     }
 
     /**
-     * Convert RGB to hex color integer
-     */
-    colorToInt(r, g, b) {
-        return (r << 16) + (g << 8) + b;
-    }
-
-    /**
-     * Convert RGB to hex string
-     */
-    colorToHex(r, g, b) {
-        return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
-    }
-
-    /**
-     * Generate XCS file from processed image and layers
+     * Generate XCS file content from vectorized layers
+     * @param {ImageData} imageData - Original or processed image data
+     * @param {Array} layers - Vectorized layers
+     * @param {Object} size - Output size { width, height } in mm
+     * @returns {string} - JSON string of the .xcs file
      */
     generate(imageData, layers, size) {
         const canvasId = this.generateUUID();
-        const now = Date.now();
+        const timestamp = Date.now();
 
-        // Calculate centering offsets for 200x200mm workspace
-        const contentWidth = imageData.width / this.pxPerMm;
-        const contentHeight = imageData.height / this.pxPerMm;
-
-        const workspaceWidth = size.width || 200;
-        const workspaceHeight = size.height || 200;
-
-        const offsetX = (workspaceWidth - contentWidth) / 2;
-        const offsetY = (workspaceHeight - contentHeight) / 2;
-
-        // Generate displays (path elements) for each layer
+        // Displays collection
         const displays = [];
-        const displaySettings = [];
 
         layers.forEach((layer, layerIndex) => {
             if (!layer.visible) return;
 
-            const colorHex = this.colorToHex(layer.color.r, layer.color.g, layer.color.b);
-            const colorInt = this.colorToInt(layer.color.r, layer.color.g, layer.color.b);
-
-            // Combine all paths for this layer into a single display
+            // Filter valid paths and join them
             if (layer.paths && layer.paths.length > 0) {
-                // Join all paths with a space
                 const combinedPath = layer.paths.filter(p => p && p.length > 0).join(' ');
 
                 if (combinedPath.length > 0) {
-                    const displayId = this.generateUUID();
+                    // Create path display with auto-tightening
                     const display = this.createPathDisplayWithPath(
-                        displayId,
-                        layer.name,
-                        colorHex,
-                        colorInt,
-                        offsetX, offsetY,  // Use calculated offsets for centering
-                        contentWidth,      // Use actual content dimensions
-                        contentHeight,
-                        layerIndex + 1,
-                        combinedPath
+                        this.generateUUID(),
+                        layerIndex,
+                        layer.name || `Layer ${layerIndex + 1}`,
+                        combinedPath,
+                        layer.color
                     );
 
-                    displays.push(display);
-                    displaySettings.push({
-                        id: displayId,
-                        settings: this.createDisplaySettings(layer)
-                    });
-
-                    // Generate Outline if requested
-                    if (layer.outline) {
-                        const outlineId = this.generateUUID();
-                        // Use Black (#000000) for distinct outline processing
-                        const outlineColorHex = '#000000';
-                        const outlineColorInt = 0;
-
-                        const outlineDisplay = this.createPathDisplayWithPath(
-                            outlineId,
-                            `${layer.name} Outline`,
-                            outlineColorHex,
-                            outlineColorInt,
-                            offsetX, offsetY,
-                            contentWidth,
-                            contentHeight,
-                            layerIndex + 1,
-                            combinedPath
-                        );
-
-                        // Configure for Outline (Stroke) Mode
-                        outlineDisplay.isFill = false;
-                        outlineDisplay.fill.visible = false;
-                        outlineDisplay.stroke.visible = true;
-                        outlineDisplay.stroke.width = 0.1;
-
-                        displays.push(outlineDisplay);
-                        displaySettings.push({
-                            id: outlineId,
-                            settings: this.createOutlineSettings(layer)
-                        });
+                    if (display) {
+                        displays.push(display);
                     }
                 }
-            } else {
-                // Fallback: create a simple rectangle
-                const displayId = this.generateUUID();
-                const display = this.createPathDisplay(
-                    displayId,
-                    `Layer ${layerIndex + 1}`,
-                    colorHex,
-                    colorInt,
-                    0, 0,
-                    size.width,
-                    size.height,
-                    layerIndex + 1
-                );
-
-                displays.push(display);
-                displaySettings.push({
-                    id: displayId,
-                    settings: this.createDisplaySettings(layer)
-                });
             }
         });
 
-        // Build complete XCS structure
-        const xcs = {
-            canvasId: canvasId,
-            canvas: [{
-                id: canvasId,
-                title: 'Generated Image',
-                layerData: this.generateLayerData(layers),
-                groupData: {},
-                displays: displays
+        // Top-level Structure matching Documentation
+        const fileContent = {
+            "canvasId": canvasId,
+            "canvas": [{
+                "id": canvasId,
+                "title": "Engraved Image",
+                "layerData": this.generateLayerData(layers),
+                "groupData": {},
+                "displays": displays
             }],
-            extId: 'GS009-CLASS-4',
-            extName: 'F2 Ultra UV',
-            version: '1.3.6',
-            created: now,
-            modify: now,
-            device: this.generateDeviceData(canvasId, displaySettings)
+            "extId": "GS009-CLASS-4", // F2 Ultra ID
+            "extName": "F2 Ultra UV",
+            "version": "1.3.6",
+            "created": timestamp,
+            "modify": timestamp,
+            "device": this.generateDeviceData(canvasId, displays)
         };
 
-        return JSON.stringify(xcs);
+        // Return minified JSON as per spec
+        return JSON.stringify(fileContent);
     }
 
-    /**
-     * Create a PATH display object with custom path data
-     */
-    createPathDisplayWithPath(id, name, colorHex, colorInt, x, y, width, height, zOrder, dPath) {
-        const display = this.createPathDisplay(id, name, colorHex, colorInt, x, y, width, height, zOrder);
-        display.dPath = dPath;
-        display.isCompoundPath = true; // Essential for complex filled paths
-        return display;
-    }
-
-    /**
-     * Generate layer data from layers
-     */
     generateLayerData(layers) {
-        const layerData = {};
-
+        const data = {};
         layers.forEach((layer, index) => {
-            const colorHex = this.colorToHex(layer.color.r, layer.color.g, layer.color.b);
-            layerData[colorHex] = {
-                name: layer.name,
-                order: index + 1,
-                visible: true
+            const colorHex = this.rgbToHex(layer.color);
+            data[colorHex] = {
+                "name": layer.name || `Layer ${index + 1}`,
+                "order": index + 1,
+                "visible": true
             };
         });
-
-        return layerData;
+        return data;
     }
 
-    /**
-     * Create a PATH display object
-     */
-    createPathDisplay(id, name, colorHex, colorInt, x, y, width, height, zOrder) {
-        return {
-            id: id,
-            name: name,
-            type: 'PATH',
-            x: x,
-            y: y,
-            angle: 0,
-            scale: { x: 1, y: 1 },
-            skew: { x: 0, y: 0 },
-            pivot: { x: 0, y: 0 },
-            localSkew: { x: 0, y: 0 },
-            offsetX: x,
-            offsetY: y,
-            lockRatio: false,
-            isClosePath: true,
-            zOrder: zOrder,
-            sourceId: '',
-            groupTag: '',
-            layerTag: colorHex,
-            layerColor: colorHex,
-            visible: true,
-            originColor: colorHex,
-            enableTransform: true,
-            visibleState: true,
-            lockState: false,
-            resourceOrigin: '',
-            customData: {},
-            rootComponentId: '',
-            minCanvasVersion: '0.0.0',
-            fill: {
-                paintType: 'color',
-                visible: true,
-                color: colorInt,
-                alpha: 1
-            },
-            stroke: {
-                paintType: 'color',
-                visible: true,  // Enabled to match initial 'perfect' state (ensures visibility)
-                color: colorInt,
-                alpha: 1,
-                width: 0.1,
-                cap: 'butt',
-                join: 'miter',
-                miterLimit: 4,
-                alignment: 0.5
-            },
-            width: width,
-            height: height,
-            points: [],
-            dPath: `M0 0 L${width} 0 L${width} ${height} L0 ${height} Z`,
-            fillRule: 'nonzero',
-            graphicX: x,
-            graphicY: y,
-            isCompoundPath: false, // Standard SVG path handling
-            isFill: true,
-            lineColor: colorInt,
-            fillColor: colorHex
-        };
-    }
-
-    /**
-     * Create display settings for a layer
-     */
-    createDisplaySettings(layer) {
-        const freq = Math.round(layer.frequency);
-        const lpi = Math.round(layer.lpi);
-
-        return {
-            isFill: true,
-            type: 'PATH',
-            processingType: 'FILL_VECTOR_ENGRAVING',
-            data: {
-                VECTOR_CUTTING: this.createCuttingParams(),
-                VECTOR_ENGRAVING: this.createEngravingParams(),
-                FILL_VECTOR_ENGRAVING: this.createFillEngravingParams(freq, lpi),
-                INTAGLIO: this.createIntaglioParams(),
-                INNER_THREE_D: this.createInner3DParams()
-            },
-            processIgnore: false
-        };
-    }
-
-    createOutlineSettings(layer) {
-        // Outline uses VECTOR_ENGRAVING (Score) mode
-        return {
-            isFill: false,
-            type: 'PATH',
-            processingType: 'VECTOR_ENGRAVING',
-            data: {
-                VECTOR_CUTTING: this.createCuttingParams(),
-                VECTOR_ENGRAVING: this.createEngravingParams(),
-                FILL_VECTOR_ENGRAVING: this.createFillEngravingParams(Math.round(layer.frequency), Math.round(layer.lpi)),
-                INTAGLIO: this.createIntaglioParams(),
-                INNER_THREE_D: this.createInner3DParams()
-            },
-            processIgnore: false
-        };
-    }
-
-    createCuttingParams() {
-        return {
-            materialType: 'customize',
-            planType: 'dot_cloud',
-            parameter: {
-                customize: {
-                    power: this.settings.power,
-                    speed: this.settings.speed,
-                    repeat: this.settings.passes,
-                    cuttingDrop: false,
-                    sinkingMethod: 'one',
-                    firstCuttingDropValue: 0.01,
-                    cuttingDropValue: 0.01,
-                    descentIntervalDescent: 1,
-                    descentPerStep: 0.01,
-                    enableKerf: false,
-                    kerfDistance: 0,
-                    enableBreakPoint: false,
-                    breakPointSize: 0.5,
-                    breakPointCount: 2,
-                    breakPointMode: 'count',
-                    breakPointDistance: 100,
-                    breakPointPower: 0,
-                    frequency: 40,
-                    wobbleEnable: false,
-                    wobbleDiameter: 0.05,
-                    wobbleSpacing: 0.015
-                }
-            }
-        };
-    }
-
-    createEngravingParams() {
-        return {
-            materialType: 'customize',
-            planType: 'dot_cloud',
-            parameter: {
-                customize: {
-                    speed: this.settings.speed,
-                    power: this.settings.power,
-                    repeat: this.settings.passes,
-                    frequency: 40,
-                    enableKerf: false,
-                    kerfDistance: 0
-                }
-            }
-        };
-    }
-
-    createFillEngravingParams(frequency, lpi) {
-        // Convert LPI to DPI (they're equivalent for this purpose)
-        const dpi = lpi;
-
-        return {
-            materialType: 'customize',
-            planType: 'dot_cloud',
-            parameter: {
-                customize: {
-                    bitmapEngraveMode: 'normal',
-                    speed: this.settings.speed,
-                    density: lpi,
-                    dotDuration: 150,
-                    dpi: dpi,
-                    power: this.settings.power,
-                    repeat: this.settings.passes,
-                    bitmapScanMode: this.settings.crossHatch ? 'crossMode' : 'zMode',
-                    frequency: frequency,
-                    scanAngle: 0,
-                    angleType: 2,
-                    crossAngle: this.settings.crossHatch,
-                    enableDelayPerLine: false,
-                    delayPerLine: 0.3,
-                    outlineTrace: false,
-                    needGapNumDensity: true,
-                    enableKerf: false,
-                    kerfDistance: 0
-                }
-            }
-        };
-    }
-
-    createIntaglioParams() {
-        return {
-            materialType: 'customize',
-            planType: 'dot_cloud',
-            parameter: {
-                customize: {
-                    bitmapEngraveMode: 'normal',
-                    speed: 80,
-                    density: 300,
-                    power: 1,
-                    repeat: 1,
-                    bitmapScanMode: 'zMode',
-                    sliceNumber: 100,
-                    processAngle: 15,
-                    zAxisMove: false,
-                    zLayers: 1,
-                    zDecline: 0.01,
-                    frequency: 40
-                }
-            }
-        };
-    }
-
-    createInner3DParams() {
-        return {
-            materialType: 'customize',
-            planType: 'dot_cloud',
-            parameter: {
-                customize: {
-                    subdivide: 0.1,
-                    speed: 80,
-                    dotDuration: 200,
-                    layer_h: 0.1,
-                    power: 1,
-                    repeat: 1,
-                    frequency: 40,
-                    refractive_index: 1.5,
-                    isPrintTexture: true,
-                    innerProcessMode: 'dot_cloud',
-                    strengthenEnable: false,
-                    strengthDirection: 0,
-                    strengthenMultiple: 2,
-                    isWhiteModel: true,
-                    supportWhiteModel: true,
-                    xySubdivideEnable: false,
-                    xySubdivide: 300
-                }
-            }
-        };
-    }
-
-    /**
-     * Generate device data structure
-     */
-    generateDeviceData(canvasId, displaySettings) {
-        const displaysMap = displaySettings.map(ds => [ds.id, ds.settings]);
-
-        return {
-            id: 'GS009-CLASS-4',
-            power: [5],
-            data: {
-                dataType: 'Map',
-                value: [[canvasId, {
-                    mode: 'LASER_PLANE',
-                    data: {
-                        LASER_PLANE: {
-                            material: 0,
-                            lightSourceMode: 'uv',
-                            thickness: 117,
-                            isProcessByLayer: false,
-                            pathPlanning: 'auto',
-                            fillPlanning: 'separate',
-                            dreedyTsp: false,
-                            avoidSmokeModal: false,
-                            scanDirection: 'topToBottom',
-                            enableOddEvenKerf: true,
-                            xcsUsed: []
+    generateDeviceData(canvasId, displays) {
+        // Build map of display settings
+        const displayEntries = displays.map(display => {
+            return [
+                display.id,
+                {
+                    "isFill": true,
+                    "type": "PATH",
+                    "processingType": "FILL_VECTOR_ENGRAVING",
+                    "data": {
+                        "FILL_VECTOR_ENGRAVING": {
+                            "materialType": "customize",
+                            "planType": "dot_cloud",
+                            "parameter": {
+                                "customize": {
+                                    "speed": parseInt(this.settings.speed) || 100,
+                                    "power": parseInt(this.settings.power) || 10,
+                                    "repeat": parseInt(this.settings.passes) || 1,
+                                    "frequency": 60,
+                                    "enableKerf": false,
+                                    "kerfDistance": 0
+                                }
+                            }
                         }
                     },
-                    displays: {
-                        dataType: 'Map',
-                        value: displaysMap
+                    "processIgnore": false
+                }
+            ];
+        });
+
+        // Build canvas settings map
+        const canvasEntry = [
+            canvasId,
+            {
+                "mode": "LASER_PLANE",
+                "data": {
+                    "LASER_PLANE": {
+                        "material": 0,
+                        "lightSourceMode": "uv",
+                        "thickness": 0,
+                        "isProcessByLayer": false,
+                        "pathPlanning": "auto",
+                        "fillPlanning": "separate",
+                        "dreedyTsp": false,
+                        "avoidSmokeModal": false,
+                        "scanDirection": "topToBottom",
+                        "enableOddEvenKerf": true,
+                        "xcsUsed": []
                     }
-                }]]
+                },
+                "displays": {
+                    "dataType": "Map",
+                    "value": displayEntries
+                }
+            }
+        ];
+
+        return {
+            "id": "GS009-CLASS-4",
+            "power": [20],
+            "data": {
+                "dataType": "Map",
+                "value": [canvasEntry]
             },
-            materialList: [],
-            materialTypeList: [],
-            customProjectData: {
-                tangentialCuttingUuids: [],
-                flyCutUuid2CanvasIds: {}
+            "materialList": [],
+            "materialTypeList": [],
+            "customProjectData": {
+                "tangentialCuttingUuids": [],
+                "flyCutUuid2CanvasIds": {}
             }
         };
     }
 
     /**
-     * Generate test grid XCS file
+     * Create a PATH display element
      */
-    generateTestGrid(cols, rows, cellSize, gap) {
-        const canvasId = this.generateUUID();
-        const now = Date.now();
+    createPathDisplayWithPath(id, index, name, dPath, color) {
+        // Tighten bounds
+        const tightened = this.calculateBoundsAndTighten(dPath);
 
-        const displays = [];
-        const displaySettings = [];
-        const layerData = {};
+        let x = tightened.bounds ? tightened.bounds.x : 0;
+        let y = tightened.bounds ? tightened.bounds.y : 0;
+        let width = tightened.bounds ? tightened.bounds.width : 50;
+        let height = tightened.bounds ? tightened.bounds.height : 50;
 
-        // Calculate frequency and LPI steps
-        const freqStep = (this.settings.freqMax - this.settings.freqMin) / (cols - 1);
-        const lpiStep = (this.settings.lpiMax - this.settings.lpiMin) / (rows - 1);
+        // Safety checks
+        if (!isFinite(x)) x = 0;
+        if (!isFinite(y)) y = 0;
+        if (!isFinite(width) || width < 0.001) width = 0.001;
+        if (!isFinite(height) || height < 0.001) height = 0.001;
 
-        let zOrder = 1;
+        const finalPath = tightened.dPath || "";
+        if (finalPath.length === 0) return null;
 
-        for (let row = 0; row < rows; row++) {
-            for (let col = 0; col < cols; col++) {
-                const displayId = this.generateUUID();
+        const colorHex = this.rgbToHex(color);
+        const colorInt = parseInt(colorHex.substring(1), 16);
 
-                // Calculate position
-                const x = col * (cellSize + gap);
-                const y = row * (cellSize + gap);
+        return {
+            "id": id,
+            "name": name,
+            "type": "PATH",
+            "x": x,
+            "y": y,
+            "angle": 0,
+            "scale": { "x": 1, "y": 1 },
+            "skew": { "x": 0, "y": 0 },
+            "pivot": { "x": 0, "y": 0 },
+            "localSkew": { "x": 0, "y": 0 },
+            "offsetX": x,
+            "offsetY": y,
+            "lockRatio": true,
+            "isClosePath": true,
+            "zOrder": index + 1,
+            "sourceId": "",
+            "groupTag": "",
+            "layerTag": colorHex,
+            "layerColor": colorHex,
+            "visible": true,
+            "originColor": colorHex,
+            "enableTransform": true,
+            "visibleState": true,
+            "lockState": false,
+            "resourceOrigin": "",
+            "customData": {},
+            "rootComponentId": "",
+            "minCanvasVersion": "0.0.0",
+            "fill": {
+                "paintType": "color",
+                "visible": true,
+                "color": colorInt,
+                "alpha": 1
+            },
+            "stroke": {
+                "paintType": "color",
+                "visible": false,
+                "color": colorInt,
+                "alpha": 1,
+                "width": 0.05,
+                "cap": "round",
+                "join": "round",
+                "miterLimit": 4,
+                "alignment": 0.5
+            },
+            "width": width,
+            "height": height,
+            "isFill": true,
+            "lineColor": colorInt,
+            "fillColor": colorHex,
+            "graphicX": x,
+            "graphicY": y,
+            "isCompoundPath": true,
+            "fillRule": "nonzero",
+            "points": [],
+            "dPath": finalPath
+        };
+    }
 
-                // Calculate settings for this cell
-                const frequency = Math.round(this.settings.freqMin + col * freqStep);
-                const lpi = Math.round(this.settings.lpiMax - row * lpiStep);
+    calculateBoundsAndTighten(dPath) {
+        const tokens = dPath.match(/[a-df-z]+|[-+]?\d*\.?\d+/gi);
+        if (!tokens) return { dPath, bounds: null };
 
-                // Generate a color based on position (for visual reference)
-                const hue = (col / cols) * 360;
-                const lightness = 30 + (row / rows) * 40;
-                const rgb = this.hslToRgb(hue / 360, 0.7, lightness / 100);
-                const colorHex = this.colorToHex(rgb.r, rgb.g, rgb.b);
-                const colorInt = this.colorToInt(rgb.r, rgb.g, rgb.b);
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let isX = true; // Track coordinate type (x or y)
 
-                // Add layer data
-                if (!layerData[colorHex]) {
-                    layerData[colorHex] = {
-                        name: `${frequency}kHz/${lpi}LPI`,
-                        order: zOrder,
-                        visible: true
-                    };
+        // Pass 1: Bounds
+        for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i];
+            if (/[a-z]/i.test(token)) {
+                continue;
+            }
+            const val = parseFloat(token);
+            if (!isNaN(val)) {
+                if (isX) {
+                    if (val < minX) minX = val;
+                    if (val > maxX) maxX = val;
+                } else {
+                    if (val < minY) minY = val;
+                    if (val > maxY) maxY = val;
                 }
-
-                // Create display for this cell
-                const display = this.createPathDisplay(
-                    displayId,
-                    `Cell ${col + 1}x${row + 1} (${frequency}kHz/${lpi}LPI)`,
-                    colorHex,
-                    colorInt,
-                    x, y,
-                    cellSize, cellSize,
-                    zOrder
-                );
-
-                displays.push(display);
-                displaySettings.push({
-                    id: displayId,
-                    settings: {
-                        isFill: true,
-                        type: 'PATH',
-                        processingType: 'FILL_VECTOR_ENGRAVING',
-                        data: {
-                            VECTOR_CUTTING: this.createCuttingParams(),
-                            VECTOR_ENGRAVING: this.createEngravingParams(),
-                            FILL_VECTOR_ENGRAVING: this.createFillEngravingParams(frequency, lpi),
-                            INTAGLIO: this.createIntaglioParams(),
-                            INNER_THREE_D: this.createInner3DParams()
-                        },
-                        processIgnore: false
-                    }
-                });
-
-                zOrder++;
+                isX = !isX;
             }
         }
 
-        // Build XCS structure
-        const xcs = {
-            canvasId: canvasId,
-            canvas: [{
-                id: canvasId,
-                title: `Test Grid ${cols}x${rows}`,
-                layerData: layerData,
-                groupData: {},
-                displays: displays
-            }],
-            extId: 'GS009-CLASS-4',
-            extName: 'F2 Ultra UV',
-            version: '1.3.6',
-            created: now,
-            modify: now,
-            device: this.generateDeviceData(canvasId, displaySettings)
-        };
+        if (minX === Infinity) return { dPath, bounds: null };
 
-        return JSON.stringify(xcs);
-    }
+        // Pass 2: Shift and Compact Format (No extra spaces)
+        let shiftedPath = "";
+        isX = true; // Reset tracker
+        let lastWasCommand = false;
 
-    /**
-     * Convert HSL to RGB
-     */
-    hslToRgb(h, s, l) {
-        let r, g, b;
+        for (let i = 0; i < tokens.length; i++) {
+            const token = tokens[i];
+            if (/[a-z]/i.test(token)) {
+                // Command
+                shiftedPath += (shiftedPath.length > 0 ? " " : "") + token;
+                lastWasCommand = true;
+                continue;
+            }
+            const val = parseFloat(token);
+            if (!isNaN(val)) {
+                const shifted = isX ? (val - minX) : (val - minY);
 
-        if (s === 0) {
-            r = g = b = l;
-        } else {
-            const hue2rgb = (p, q, t) => {
-                if (t < 0) t += 1;
-                if (t > 1) t -= 1;
-                if (t < 1 / 6) return p + (q - p) * 6 * t;
-                if (t < 1 / 2) return q;
-                if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
-                return p;
-            };
+                // If previous was command, NO SPACE (M0.000). 
+                // If previous was number, SPACE (0.000 0.000).
+                const prefix = lastWasCommand ? "" : " ";
+                shiftedPath += prefix + shifted.toFixed(3);
 
-            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-            const p = 2 * l - q;
-            r = hue2rgb(p, q, h + 1 / 3);
-            g = hue2rgb(p, q, h);
-            b = hue2rgb(p, q, h - 1 / 3);
+                isX = !isX;
+                lastWasCommand = false;
+            } else {
+                shiftedPath += token;
+            }
         }
 
         return {
-            r: Math.round(r * 255),
-            g: Math.round(g * 255),
-            b: Math.round(b * 255)
+            dPath: shiftedPath.trim(),
+            bounds: { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
         };
+    }
+
+    rgbToHex(color) {
+        const toHex = (c) => {
+            const hex = Math.round(c).toString(16);
+            return hex.length === 1 ? "0" + hex : hex;
+        };
+        return "#" + toHex(color.r) + toHex(color.g) + toHex(color.b);
     }
 }

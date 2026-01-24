@@ -1,0 +1,175 @@
+{
+  "input": "testfile/test_fruit.png",
+  "config": {
+    "colors": 8,
+    "width": 100,
+    "pxPerMm": 10
+  },
+  "stages": {
+    "resize": {
+      "duration": 223,
+      "inputSize": {
+        "width": 1024,
+        "height": 1024
+      },
+      "outputSize": {
+        "widthMm": 100,
+        "heightMm": 100,
+        "widthPx": 1000,
+        "heightPx": 1000
+      }
+    },
+    "quantize": {
+      "duration": 952,
+      "colorCount": 8
+    },
+    "vectorize": {
+      "duration": 85,
+      "totalRectangles": 91822
+    },
+    "xcsGenerate": {
+      "duration": 12,
+      "fileSize": 5645431,
+      "fileSizeMB": "5.38"
+    }
+  },
+  "palette": [
+    {
+      "rgb": [
+        51,
+        14,
+        6
+      ],
+      "hex": "#330e06"
+    },
+    {
+      "rgb": [
+        93,
+        67,
+        13
+      ],
+      "hex": "#5d430d"
+    },
+    {
+      "rgb": [
+        95,
+        63,
+        45
+      ],
+      "hex": "#5f3f2d"
+    },
+    {
+      "rgb": [
+        117,
+        95,
+        62
+      ],
+      "hex": "#755f3e"
+    },
+    {
+      "rgb": [
+        134,
+        116,
+        99
+      ],
+      "hex": "#867463"
+    },
+    {
+      "rgb": [
+        198,
+        134,
+        71
+      ],
+      "hex": "#c68647"
+    },
+    {
+      "rgb": [
+        218,
+        191,
+        79
+      ],
+      "hex": "#dabf4f"
+    },
+    {
+      "rgb": [
+        223,
+        220,
+        212
+      ],
+      "hex": "#dfdcd4"
+    }
+  ],
+  "layers": [
+    {
+      "name": "Layer 1",
+      "color": "#330e06",
+      "frequency": 40,
+      "lpi": 800,
+      "pathCount": 8767
+    },
+    {
+      "name": "Layer 2",
+      "color": "#5d430d",
+      "frequency": 46,
+      "lpi": 729,
+      "pathCount": 14135
+    },
+    {
+      "name": "Layer 3",
+      "color": "#5f3f2d",
+      "frequency": 51,
+      "lpi": 657,
+      "pathCount": 13077
+    },
+    {
+      "name": "Layer 4",
+      "color": "#755f3e",
+      "frequency": 57,
+      "lpi": 586,
+      "pathCount": 14639
+    },
+    {
+      "name": "Layer 5",
+      "color": "#867463",
+      "frequency": 63,
+      "lpi": 514,
+      "pathCount": 10935
+    },
+    {
+      "name": "Layer 6",
+      "color": "#c68647",
+      "frequency": 69,
+      "lpi": 443,
+      "pathCount": 11374
+    },
+    {
+      "name": "Layer 7",
+      "color": "#dabf4f",
+      "frequency": 74,
+      "lpi": 371,
+      "pathCount": 10380
+    },
+    {
+      "name": "Layer 8",
+      "color": "#dfdcd4",
+      "frequency": 80,
+      "lpi": 300,
+      "pathCount": 8515
+    }
+  ],
+  "validation": {
+    "errors": [],
+    "warnings": [],
+    "valid": true
+  },
+  "outputFiles": {
+    "resized": "testfile\\results_fruit\\test_fruit_1_resized.png",
+    "quantized": "testfile\\results_fruit\\test_fruit_2_quantized.png",
+    "vectors": "testfile\\results_fruit\\test_fruit_3_vectors.svg",
+    "xcs": "testfile\\results_fruit\\test_fruit_4_output.xcs"
+  },
+  "summary": {
+    "totalDuration": 1272,
+    "valid": true
+  }
+}

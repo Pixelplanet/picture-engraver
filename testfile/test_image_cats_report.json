@@ -1,0 +1,115 @@
+{
+  "input": "testfile/test_image_cats.jpg",
+  "config": {
+    "colors": 4,
+    "width": 100,
+    "pxPerMm": 10
+  },
+  "stages": {
+    "resize": {
+      "duration": 243,
+      "inputSize": {
+        "width": 771,
+        "height": 1024
+      },
+      "outputSize": {
+        "widthMm": 75,
+        "heightMm": 100,
+        "widthPx": 750,
+        "heightPx": 1000
+      }
+    },
+    "quantize": {
+      "duration": 452,
+      "colorCount": 4
+    },
+    "vectorize": {
+      "duration": 36,
+      "totalRectangles": 28671
+    },
+    "xcsGenerate": {
+      "duration": 5,
+      "fileSize": 1763724,
+      "fileSizeMB": "1.68"
+    }
+  },
+  "palette": [
+    {
+      "rgb": [
+        42,
+        24,
+        18
+      ],
+      "hex": "#2a1812"
+    },
+    {
+      "rgb": [
+        81,
+        73,
+        73
+      ],
+      "hex": "#514949"
+    },
+    {
+      "rgb": [
+        155,
+        128,
+        114
+      ],
+      "hex": "#9b8072"
+    },
+    {
+      "rgb": [
+        196,
+        201,
+        202
+      ],
+      "hex": "#c4c9ca"
+    }
+  ],
+  "layers": [
+    {
+      "name": "Layer 1",
+      "color": "#2a1812",
+      "frequency": 40,
+      "lpi": 800,
+      "pathCount": 5219
+    },
+    {
+      "name": "Layer 2",
+      "color": "#514949",
+      "frequency": 53,
+      "lpi": 633,
+      "pathCount": 10719
+    },
+    {
+      "name": "Layer 3",
+      "color": "#9b8072",
+      "frequency": 67,
+      "lpi": 467,
+      "pathCount": 8842
+    },
+    {
+      "name": "Layer 4",
+      "color": "#c4c9ca",
+      "frequency": 80,
+      "lpi": 300,
+      "pathCount": 3891
+    }
+  ],
+  "validation": {
+    "errors": [],
+    "warnings": [],
+    "valid": true
+  },
+  "outputFiles": {
+    "resized": "testfile\\test_image_cats_1_resized.png",
+    "quantized": "testfile\\test_image_cats_2_quantized.png",
+    "vectors": "testfile\\test_image_cats_3_vectors.svg",
+    "xcs": "testfile\\test_image_cats_4_output.xcs"
+  },
+  "summary": {
+    "totalDuration": 736,
+    "valid": true
+  }
+}

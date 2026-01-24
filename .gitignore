@@ -8,3 +8,4 @@ dist
 testfile/*.xcs
 testfile/*.png
 tasks/*
+debug
