@@ -168,6 +168,7 @@ export class XCSGenerator {
     createPathDisplayWithPath(id, name, colorHex, colorInt, x, y, width, height, zOrder, dPath) {
         const display = this.createPathDisplay(id, name, colorHex, colorInt, x, y, width, height, zOrder);
         display.dPath = dPath;
+        display.isCompoundPath = true; // Essential for complex filled paths
         return display;
     }
 
@@ -230,7 +231,7 @@ export class XCSGenerator {
             },
             stroke: {
                 paintType: 'color',
-                visible: true,  // Enabled to match original working logic
+                visible: false,  // Disabled to match 'Fixed' confirmed state
                 color: colorInt,
                 alpha: 1,
                 width: 0.1,
