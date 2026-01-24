@@ -72,8 +72,7 @@ const elements = {
     previewVectors: document.getElementById('previewVectors'),
 
     // Export
-    btnGenerate: document.getElementById('btnGenerate'),
-    btnDownload: document.getElementById('btnDownload'),
+    btnDownloadXCS: document.getElementById('btnDownloadXCS'),
 
     // Modals
     settingsModal: document.getElementById('settingsModal'),
@@ -546,49 +545,40 @@ function switchPreviewTab(tabName) {
 // Export
 // ===================================
 function setupExport() {
-    elements.btnGenerate.addEventListener('click', generateXCS);
-    elements.btnDownload.addEventListener('click', downloadXCS);
+    elements.btnDownloadXCS.addEventListener('click', downloadXCS);
 }
 
-let generatedXCS = null;
-
-async function generateXCS() {
+/**
+ * Generate and download XCS in one click
+ * Combined for faster workflow since generation is now very fast
+ */
+async function downloadXCS() {
     if (state.layers.length === 0) {
         showToast('Please process an image first', 'error');
         return;
     }
 
-    showToast('Generating XCS file...', 'success');
-
     try {
+        // Generate XCS
         const generator = new XCSGenerator(state.settings);
-        generatedXCS = generator.generate(state.processedImage, state.layers, getOutputSize());
+        const xcsContent = generator.generate(state.processedImage, state.layers, getOutputSize());
 
-        elements.btnDownload.disabled = false;
-        showToast('XCS file generated successfully!', 'success');
+        // Download immediately
+        const blob = new Blob([xcsContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `engraving_${Date.now()}.xcs`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast('XCS file downloaded!', 'success');
     } catch (error) {
         console.error('XCS generation error:', error);
         showToast('Error generating XCS: ' + error.message, 'error');
     }
-}
-
-function downloadXCS() {
-    if (!generatedXCS) {
-        showToast('Please generate XCS first', 'error');
-        return;
-    }
-
-    const blob = new Blob([generatedXCS], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `engraving_${Date.now()}.xcs`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    showToast('XCS file downloaded!', 'success');
 }
 
 // ===================================
