@@ -15,7 +15,24 @@ export class OnboardingManager {
 
     init() {
         if (this.hasCompletedOnboarding()) return;
+
+        // Hide Process button initially for new users
+        // It helps prevent "processing before asked"
+        this.toggleProcessButton(false);
+
         setTimeout(() => this.showWelcomeModal(), 500);
+    }
+
+    toggleProcessButton(visible) {
+        const btn = document.querySelector('#btnProcess');
+        if (btn) {
+            // Use opacity/pointer-events or display?
+            // Display:none removes it from layout, might shift things.
+            // Visibility:hidden preserves space.
+            btn.style.visibility = visible ? 'visible' : 'hidden';
+            // Also ensure display is not none if we are showing
+            if (visible) btn.style.display = '';
+        }
     }
 
     hasCompletedOnboarding() {
@@ -54,7 +71,7 @@ export class OnboardingManager {
                     </div>
 
                     <div class="modal-actions" style="justify-content: center; gap: 15px;">
-                        <button class="btn btn-secondary" onclick="document.getElementById('welcomeModal').remove(); window.onboarding.markCompleted();">Skip Tutorial</button>
+                        <button class="btn btn-secondary" onclick="document.getElementById('welcomeModal').remove(); window.onboarding.endTour();">Skip Tutorial</button>
                         <button class="btn btn-primary" onclick="window.onboarding.startMainTour()">Start Interactive Tour</button>
                     </div>
                 </div>
@@ -86,6 +103,9 @@ export class OnboardingManager {
         this.currentStepIndex = 0;
         this.createTourElements();
 
+        // Ensure Process Button is HIDDEN at start of tour
+        this.toggleProcessButton(false);
+
         this.tourSteps = [
             {
                 target: '#dropZone',
@@ -102,7 +122,8 @@ export class OnboardingManager {
                 target: '#btnProcess',
                 title: '3. Process',
                 description: 'Click "Process Image" to convert your picture into laser-ready vectors.',
-                waitForAction: 'process'
+                waitForAction: 'process',
+                onShow: () => this.toggleProcessButton(true) // Show button when this step starts
             },
             {
                 target: '#previewPanel',
@@ -127,7 +148,7 @@ export class OnboardingManager {
 
         this.tourSteps = [
             {
-                target: '#gridSettings', // ID of the settings column
+                target: '#gridSettings',
                 title: 'Test Grid Settings',
                 description: 'Configure the Power, Speed, and Frequency ranges relevant to your material.'
             },
@@ -156,9 +177,27 @@ export class OnboardingManager {
         const targetEl = document.querySelector(step.target);
 
         if (!targetEl || targetEl.offsetParent === null) {
-            this.showStep(index + 1);
+            // Check if element is missing because it's hidden (like btnProcess)
+            // But we handled that with onShow?
+            // If onShow exists, run it!
+            if (step.onShow) step.onShow();
+
+            // Re-query after onShow might have revealed it
+            const targetElRetry = document.querySelector(step.target);
+            if (!targetElRetry || targetElRetry.offsetParent === null) {
+                // Still hidden, skip
+                this.showStep(index + 1);
+                return;
+            }
+            // Proceed with retry element
+            this.positionElements(targetElRetry, step, index);
+            // Scroll logic...
+            targetElRetry.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
+
+        // Execute onShow if exists/needed
+        if (step.onShow) step.onShow();
 
         targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
@@ -206,19 +245,13 @@ export class OnboardingManager {
         const tooltipWidth = 320;
         const tooltipHeight = 220;
 
-        // Initial pos: Bottom Center
         let top = rect.bottom + 20 + scrollY;
         let left = rect.left + (rect.width / 2) - (tooltipWidth / 2) + scrollX;
 
         // Vertical Flip
-        // If element is near bottom of viewport, put tooltip above
         const spaceBelow = window.innerHeight - rect.bottom;
-        if (spaceBelow < tooltipHeight) {
-            // Put above
+        if (spaceBelow < tooltipHeight && rect.top > tooltipHeight) {
             top = rect.top - tooltipHeight + scrollY;
-            // Add some margin?
-            // If tooltipHeight is large, it might go off top. 
-            // CSS should handle text flow.
         }
 
         // Horizontal Clamp
@@ -263,6 +296,9 @@ export class OnboardingManager {
         this.elements.highlight = null;
         this.elements.tooltip = null;
         this.isActive = false;
+
+        // Restore Process Button Visibility
+        this.toggleProcessButton(true);
 
         if (this.currentTourType === 'main') this.markCompleted();
         if (this.currentTourType === 'testgrid') this.markTestGridCompleted();
