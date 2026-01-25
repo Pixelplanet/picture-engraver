@@ -1,3 +1,0 @@
-@echo off
-echo Starting deployment script...
-powershell.exe -NoExit -ExecutionPolicy Bypass -File "%~dp0deploy_update.ps1"
