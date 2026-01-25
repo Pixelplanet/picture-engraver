@@ -46,6 +46,10 @@
     z-index: 100000;
     max-width: 350px;
     min-width: 300px;
+    max-height: 80vh;
+    /* Prevent extending beyond viewport height */
+    overflow-y: auto;
+    /* Allow internal scrolling if content is long */
     opacity: 0;
     transform: translateY(10px);
     transition: all 0.3s;

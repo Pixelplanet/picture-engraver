@@ -14,23 +14,20 @@ export class OnboardingManager {
     }
 
     init() {
+        // Always check completion status
         if (this.hasCompletedOnboarding()) return;
 
         // Hide Process button initially for new users
-        // It helps prevent "processing before asked"
         this.toggleProcessButton(false);
 
+        // Show welcome/consent modal
         setTimeout(() => this.showWelcomeModal(), 500);
     }
 
     toggleProcessButton(visible) {
         const btn = document.querySelector('#btnProcess');
         if (btn) {
-            // Use opacity/pointer-events or display?
-            // Display:none removes it from layout, might shift things.
-            // Visibility:hidden preserves space.
             btn.style.visibility = visible ? 'visible' : 'hidden';
-            // Also ensure display is not none if we are showing
             if (visible) btn.style.display = '';
         }
     }
@@ -60,19 +57,26 @@ export class OnboardingManager {
                 <div class="modal-content welcome-content">
                     <div class="welcome-icon">👋</div>
                     <h2>Welcome to Picture Engraver!</h2>
-                    <p style="font-size: 1.1em; line-height: 1.6;">
-                        Easily convert your images into high-quality laser engraving files.
-                        Let's walk through the basic workflow.
-                    </p>
                     
-                    <div class="privacy-notice">
-                        <strong>🔒 Privacy Promise:</strong><br>
-                        Everything runs 100% locally in your browser. Your images and settings never leave your device.
+                    <div class="privacy-notice" style="background: rgba(0, 122, 255, 0.05); border: 1px solid var(--border-primary); padding: 20px; border-radius: 8px;">
+                        <h4 style="margin-top: 0; color: var(--accent-primary);">🍪 Cookie & Privacy Consent</h4>
+                        <p style="margin-bottom: 10px;">
+                            This website uses <strong>Local Storage</strong> (similar to cookies) to save your settings and preferences. 
+                            This is required for the application to function.
+                        </p>
+                        <p style="margin-bottom: 0;">
+                            <strong>Privacy Promise:</strong> Everything runs 100% locally in your browser. 
+                            Your images never leave your device. We track nothing externally.
+                        </p>
                     </div>
 
+                    <p>
+                        Ready to learn how to create perfect engravings?
+                    </p>
+
                     <div class="modal-actions" style="justify-content: center; gap: 15px;">
-                        <button class="btn btn-secondary" onclick="document.getElementById('welcomeModal').remove(); window.onboarding.endTour();">Skip Tutorial</button>
-                        <button class="btn btn-primary" onclick="window.onboarding.startMainTour()">Start Interactive Tour</button>
+                        <button class="btn btn-secondary" onclick="document.getElementById('welcomeModal').remove(); window.onboarding.endTour();">Accept & Skip</button>
+                        <button class="btn btn-primary" onclick="window.onboarding.startMainTour()">Accept & Start Tour</button>
                     </div>
                 </div>
             </div>
@@ -123,7 +127,7 @@ export class OnboardingManager {
                 title: '3. Process',
                 description: 'Click "Process Image" to convert your picture into laser-ready vectors.',
                 waitForAction: 'process',
-                onShow: () => this.toggleProcessButton(true) // Show button when this step starts
+                onShow: () => this.toggleProcessButton(true)
             },
             {
                 target: '#previewPanel',
@@ -148,7 +152,7 @@ export class OnboardingManager {
 
         this.tourSteps = [
             {
-                target: '#gridSettings',
+                target: '.setting-group', // Use class selector for stability
                 title: 'Test Grid Settings',
                 description: 'Configure the Power, Speed, and Frequency ranges relevant to your material.'
             },
@@ -177,26 +181,17 @@ export class OnboardingManager {
         const targetEl = document.querySelector(step.target);
 
         if (!targetEl || targetEl.offsetParent === null) {
-            // Check if element is missing because it's hidden (like btnProcess)
-            // But we handled that with onShow?
-            // If onShow exists, run it!
             if (step.onShow) step.onShow();
-
-            // Re-query after onShow might have revealed it
             const targetElRetry = document.querySelector(step.target);
             if (!targetElRetry || targetElRetry.offsetParent === null) {
-                // Still hidden, skip
                 this.showStep(index + 1);
                 return;
             }
-            // Proceed with retry element
             this.positionElements(targetElRetry, step, index);
-            // Scroll logic...
             targetElRetry.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
 
-        // Execute onShow if exists/needed
         if (step.onShow) step.onShow();
 
         targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -243,15 +238,23 @@ export class OnboardingManager {
 
         // Smart Positioning
         const tooltipWidth = 320;
-        const tooltipHeight = 220;
+        const tooltipHeight = 250; // Use max-height from CSS as guidance
 
+        // Initial: Bottom Center
         let top = rect.bottom + 20 + scrollY;
         let left = rect.left + (rect.width / 2) - (tooltipWidth / 2) + scrollX;
 
         // Vertical Flip
-        const spaceBelow = window.innerHeight - rect.bottom;
-        if (spaceBelow < tooltipHeight && rect.top > tooltipHeight) {
+        // If bottom of tooltip would go off screen
+        if (rect.bottom + tooltipHeight + 20 > window.innerHeight) {
+            // Flip up
             top = rect.top - tooltipHeight + scrollY;
+            // If going off top (element at top of screen)
+            if (rect.top - tooltipHeight < 0) {
+                // Stick to bottom, but use scrollable tooltip
+                top = rect.bottom + 20 + scrollY;
+                // CSS max-height will handle overflow
+            }
         }
 
         // Horizontal Clamp
