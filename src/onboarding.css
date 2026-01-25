@@ -139,3 +139,68 @@
     border-color: var(--accent-primary);
     color: var(--accent-primary);
 }
+
+/* =================================== */
+/* Footer Styles */
+/* =================================== */
+.footer {
+    margin-top: auto;
+    padding: var(--spacing-sm) var(--spacing-xl);
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.footer a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.2s;
+    margin-left: 10px;
+}
+
+.footer a:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+}
+
+.footer-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.donate-label {
+    display: none;
+    /* Hide on small screens? */
+}
+
+@media (min-width: 600px) {
+    .donate-label {
+        display: inline;
+    }
+}
+
+.donate-link {
+    background: rgba(255, 215, 0, 0.15);
+    color: #dcb000 !important;
+    /* Goldish */
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none !important;
+    border: 1px solid rgba(255, 215, 0, 0.2);
+    transition: all 0.2s;
+}
+
+.donate-link:hover {
+    background: rgba(255, 215, 0, 0.25);
+    transform: translateY(-1px);
+    color: #ffd700 !important;
+}
