@@ -29,31 +29,46 @@ if (fs.existsSync(LOG_DIR)) {
  * Handles console output (Docker logs) and file persistence
  */
 function writeLog(level, message, data = null) {
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date().toLocaleTimeString('en-GB', { hour12: false }); // HH:MM:SS
 
-    // Construct log entry object
+    // Construct log entry object (full data for file)
     const logEntry = {
-        timestamp,
+        timestamp: new Date().toISOString(), // Keep full ISO for file logs
         level,
         message,
         ...data
     };
 
     // 1. Write to Console (Stdout/Stderr) - Human Readable
-    // Format: [TIME] [LEVEL] Message [Key=Value, ...]
+    // Format: [HH:MM:SS] [LEVEL] Message [Key=Value, ...]
     let dataStr = '';
     if (data) {
-        // Flatten data for readability, excluding large objects if any
+        // Flatten data for readability
         try {
-            dataStr = Object.entries(data)
-                .map(([k, v]) => {
-                    if (typeof v === 'object' && v !== null) return ''; // Skip nested objects for cleaner console
-                    return `${k}=${v}`;
-                })
-                .filter(s => s)
-                .join(', ');
+            const parts = [];
 
-            if (dataStr) dataStr = `[${dataStr}]`;
+            Object.entries(data).forEach(([k, v]) => {
+                // If it's the stats object, extract interesting fields
+                if (k === 'stats' && v && typeof v === 'object') {
+                    Object.entries(v).forEach(([sk, sv]) => parts.push(`${sk}=${sv}`));
+                    return;
+                }
+
+                // If it's the details object (from client actions), extract fields
+                if (k === 'details' && v && typeof v === 'object') {
+                    Object.entries(v).forEach(([dk, dv]) => parts.push(`${dk}=${dv}`));
+                    return;
+                }
+
+                // Skip other objects to keep console clean, print primitives (source, ip, etc)
+                if (typeof v !== 'object') {
+                    parts.push(`${k}=${v}`);
+                }
+            });
+
+            if (parts.length > 0) {
+                dataStr = `[${parts.join(', ')}]`;
+            }
         } catch (e) { dataStr = ''; }
     }
 
@@ -70,7 +85,8 @@ function writeLog(level, message, data = null) {
         const logString = JSON.stringify(logEntry);
 
         // Rotate logs by date (simple YYYY-MM-DD.log)
-        const dateStr = timestamp.split('T')[0];
+        // Use logEntry.timestamp (ISO) for date extraction, not the short console timestamp
+        const dateStr = logEntry.timestamp.split('T')[0];
         const logFile = path.join(LOG_DIR, `app-${dateStr}.log`);
 
         // Append newline

@@ -34,4 +34,5 @@
   <Data/>
   <Environment/>
   <Config Name="Web Port" Target="80" Default="3002" Mode="tcp" Description="Port for the web interface" Type="Port" Display="always" Required="true" Mask="false">3002</Config>
+  <Config Name="Logs Path" Target="/app/logs" Default="/mnt/user/appdata/picture-engraver/logs" Mode="rw" Description="Container Path: /app/logs" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/picture-engraver/logs</Config>
 </Container>
