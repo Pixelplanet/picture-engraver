@@ -133,6 +133,7 @@ function init() {
     setupExport();
     setupTestGrid();
     setupAnalyzer();
+    setupLightbox(); // Initialize lightbox listeners
 
     Logger.info('Picture Engraver initialized', { appVersion: '1.20.0' });
 
@@ -700,6 +701,9 @@ async function downloadXCS() {
         URL.revokeObjectURL(url);
 
         showToast('XCS file downloaded!', 'success');
+
+        // Complete Onboarding if active
+        if (window.onboarding) window.onboarding.handleAction('download');
     } catch (error) {
         console.error('XCS generation error:', error);
         showToast('Error generating XCS: ' + error.message, 'error');
@@ -1373,3 +1377,71 @@ function saveColorMap() {
 // Start Application
 // ===================================
 document.addEventListener('DOMContentLoaded', init);
+
+// ===================================
+// Lightbox Logic
+// ===================================
+function setupLightbox() {
+    const modal = document.getElementById('lightboxModal');
+    const content = document.getElementById('lightboxContent');
+    const closeBtn = document.getElementById('closeLightbox');
+
+    if (!modal || !content || !closeBtn) return;
+
+    function openLightbox(el) {
+        content.innerHTML = '';
+        if (el.tagName === 'CANVAS') {
+            const img = new Image();
+            img.src = el.toDataURL();
+            content.appendChild(img);
+        } else {
+            // SVG container or plain element
+            const clone = el.cloneNode(true);
+            clone.style.height = 'auto';
+
+            // If vectorSvgContainer, fix SVG sizing
+            const svg = clone.querySelector('svg');
+            if (svg) {
+                // Ensure SVG scales
+                svg.setAttribute('width', '100%');
+                svg.setAttribute('height', '100%');
+                svg.style.width = '100%';
+                svg.style.height = '100%';
+            }
+            content.appendChild(clone);
+        }
+        modal.classList.add('active');
+    }
+
+    // Bind
+    const previewQ = document.getElementById('previewQuantized');
+    if (previewQ) {
+        previewQ.addEventListener('click', () => {
+            const canvas = document.getElementById('quantizedCanvas');
+            if (canvas) openLightbox(canvas);
+        });
+    }
+
+    const previewV = document.getElementById('previewVectors');
+    if (previewV) {
+        previewV.addEventListener('click', () => {
+            const container = document.getElementById('vectorSvgContainer');
+            if (container) openLightbox(container);
+        });
+    }
+
+    // Close
+    closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        modal.classList.remove('active');
+    });
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.remove('active');
+    });
+    // Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.classList.contains('active')) {
+            modal.classList.remove('active');
+        }
+    });
+}

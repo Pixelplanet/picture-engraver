@@ -1184,3 +1184,74 @@ body {
 .btn-delete-mapping:hover {
   background: rgba(255, 59, 48, 0.1);
 }
+
+/* Lightbox */
+.lightbox-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.lightbox-modal.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  background: none;
+  border: none;
+  font-size: 3rem;
+  color: white;
+  cursor: pointer;
+  z-index: 100001;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.lightbox-close:hover {
+  opacity: 1;
+}
+
+.lightbox-content {
+  max-width: 95vw;
+  max-height: 95vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.lightbox-content img,
+.lightbox-content svg {
+  max-width: 100%;
+  max-height: 95vh;
+  object-fit: contain;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  background: white;
+  /* Ensure transparency isn't lost against black */
+}
+
+/* Cursor pointer for previews */
+#previewQuantized,
+#previewVectors {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+#previewQuantized:hover,
+#previewVectors:hover {
+  transform: scale(1.01);
+  filter: brightness(1.05);
+}

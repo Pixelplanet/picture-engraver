@@ -164,12 +164,14 @@ export class OnboardingManager {
             {
                 target: '#previewPanel',
                 title: '4. Preview Results',
-                description: 'Review the output layers and vector paths here.'
+                description: 'Review the output layers and vector paths here.',
+                placement: 'top' // Force above
             },
             {
                 target: '#btnDownloadXCS',
                 title: '5. Export',
-                description: 'Download the .xcs file and you are ready to engrave!'
+                description: 'Click to download. <br><small><strong>Note:</strong> xTool Creative Space may take a while to render the vectors. The image might look weird until loading finishes.</small>',
+                waitForAction: 'download'
             }
         ];
 
@@ -245,17 +247,21 @@ export class OnboardingManager {
         const tooltipWidth = 320;
         const tooltipHeight = 250;
 
+        // Default: Bottom Center
         let top = rect.bottom + 20 + scrollY;
         let left = rect.left + (rect.width / 2) - (tooltipWidth / 2) + scrollX;
 
-        // Vertical Flip
-        if (rect.bottom + tooltipHeight + 20 > window.innerHeight) {
+        // Force placement if specified
+        if (step.placement === 'top') {
+            top = rect.top - tooltipHeight + scrollY - 20;
+        }
+        // Auto Flip otherwise
+        else if (rect.bottom + tooltipHeight + 20 > window.innerHeight) {
             top = rect.top - tooltipHeight + scrollY;
             if (rect.top - tooltipHeight < 0) {
                 top = rect.bottom + 20 + scrollY;
             }
         }
-
         // Horizontal Clamp
         const padding = 20;
         if (left < padding) left = padding;
@@ -276,6 +282,14 @@ export class OnboardingManager {
         const currentStep = this.tourSteps[this.currentStepIndex];
 
         if (currentStep && currentStep.waitForAction === actionName) {
+            // If this is the last step (Export), end the tour immediately with success
+            if (this.currentStepIndex === this.tourSteps.length - 1) {
+                this.endTour();
+                // Optional: Show a "Tutorial Complete" toast via main app if possible, 
+                // but sticking to silent close is fine as Download action usually shows its own feedback.
+                return;
+            }
+
             const btn = document.getElementById('tourNextBtn');
             if (btn) {
                 btn.innerText = 'Success! Next →';
