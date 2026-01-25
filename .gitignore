@@ -5,7 +5,12 @@ dist
 .idea
 .vscode
 *.local
-testfile/*.xcs
-testfile/*.png
+*.log
+*.zip
+*.xcs
+public/*.xcs
+!public/default_test_grid.xcs
 tasks/*
-debug
+test-results/
+playwright-report/
+blob-report/
