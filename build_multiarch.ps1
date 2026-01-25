@@ -22,7 +22,7 @@ $buildxVersion = docker buildx version 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Docker Buildx is not available!" -ForegroundColor Red
     Write-Host "Please install Docker Desktop 19.03+ or enable buildx plugin" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
+    # Read-Host "Press Enter to exit"
     exit 1
 }
 Write-Host "  Buildx available: $buildxVersion" -ForegroundColor Gray
@@ -65,7 +65,7 @@ else {
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
     Write-Host "ERROR: Build failed!" -ForegroundColor Red
-    Read-Host "Press Enter to exit"
+    # Read-Host "Press Enter to exit"
     exit 1
 }
 
@@ -86,4 +86,4 @@ Write-Host "To deploy on any architecture:" -ForegroundColor White
 Write-Host "  docker pull $IMAGE_NAME`:$Tag" -ForegroundColor Gray
 Write-Host ""
 
-Read-Host "Press Enter to close"
+# Read-Host "Press Enter to close"
