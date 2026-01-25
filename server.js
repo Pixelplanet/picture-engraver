@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import morgan from 'morgan';
 import cors from 'cors';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -10,6 +11,56 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 80;
+
+// Logging Configuration
+const LOG_DIR = process.env.LOG_DIR || '/app/logs';
+let FILE_LOGGING_ENABLED = false;
+
+// Initialize Logging
+if (fs.existsSync(LOG_DIR)) {
+    FILE_LOGGING_ENABLED = true;
+    console.log(`[${new Date().toISOString()}] Logging to file enabled: ${LOG_DIR}`);
+} else {
+    console.log(`[${new Date().toISOString()}] File logging disabled (Directory ${LOG_DIR} not found). Mount a volume to enable.`);
+}
+
+/**
+ * Centralized Logger
+ * Handles console output (Docker logs) and file persistence
+ */
+function writeLog(level, message, data = null) {
+    const timestamp = new Date().toISOString();
+
+    // Construct log entry object
+    const logEntry = {
+        timestamp,
+        level,
+        message,
+        ...data
+    };
+
+    const logString = JSON.stringify(logEntry);
+    const consoleString = `[${timestamp}] ${level}: ${message} ${data ? JSON.stringify(data) : ''}`;
+
+    // 1. Write to Console (Stdout/Stderr)
+    if (level === 'ERROR') {
+        console.error(consoleString);
+    } else {
+        console.log(consoleString);
+    }
+
+    // 2. Write to File (if enabled)
+    if (FILE_LOGGING_ENABLED) {
+        // Rotate logs by date (simple YYYY-MM-DD.log)
+        const dateStr = timestamp.split('T')[0];
+        const logFile = path.join(LOG_DIR, `app-${dateStr}.log`);
+
+        // Append newline
+        fs.appendFile(logFile, logString + '\n', (err) => {
+            if (err) console.error(`Failed to write to log file: ${err.message}`);
+        });
+    }
+}
 
 // Stats tracking
 const stats = {
@@ -23,11 +74,17 @@ morgan.token('real-ip', (req) => {
     return req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 });
 
-// Tone down logging: Skip static files
+// Use morgan for HTTP logs, but pipe to our logger
+// We use a custom format string to generate the message, then pass it to stream
 app.use(morgan(':real-ip - :method :url :status :res[content-length] - :response-time ms', {
     skip: (req, res) => {
         // Skip logs for static assets to reduce noise
         return req.url.match(/\.(js|css|png|jpg|ico|svg|map|woff2?)$/);
+    },
+    stream: {
+        write: (message) => {
+            writeLog('HTTP', message.trim());
+        }
     }
 }));
 
@@ -49,26 +106,14 @@ app.post('/api/log', (req, res) => {
         stats.processedCount++;
     }
 
-    // Format log for console (Docker logs)
-    // Only print meaningful application logs
-    const logEntry = JSON.stringify({
+    // Log the client event
+    writeLog(level || 'INFO', message, {
         source: 'client',
-        time: new Date().toLocaleTimeString(),
-        ip: ip,
-        level: level || 'INFO',
-        message: message,
-        // Include stats in relevant logs
+        ip,
         stats: message === 'Starting image processing' ?
             { totalProcessed: stats.processedCount, uniqueVisitors: stats.visitors.size } : undefined,
         details: details || {}
     });
-
-    // Write to stdout/stderr based on level
-    if (level === 'ERROR') {
-        console.error(logEntry);
-    } else {
-        console.log(logEntry);
-    }
 
     res.status(200).send('Log received');
 });
@@ -78,13 +123,14 @@ app.use((req, res, next) => {
     if (req.path === '/' || req.path === '/index.html') {
         const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
         stats.visitors.add(ip);
-        console.log(JSON.stringify({
+
+        writeLog('INFO', 'New Visitor', {
             source: 'server',
             type: 'visit',
             ip: ip,
             visitors: stats.visitors.size,
             processed: stats.processedCount
-        }));
+        });
     }
     next();
 });
@@ -100,6 +146,9 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`Serving static files from ${path.join(__dirname, 'dist')}`);
+    writeLog('INFO', `Server running on port ${PORT}`);
+    writeLog('INFO', `Serving static files from ${path.join(__dirname, 'dist')}`);
+    if (FILE_LOGGING_ENABLED) {
+        writeLog('INFO', `File logging active in ${LOG_DIR}`);
+    }
 });
