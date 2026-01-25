@@ -525,6 +525,51 @@
       </div>
     </div>
 
+    <!-- Layer Edit Modal -->
+    <div class="modal" id="layerEditModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Edit Layer</h2>
+          <button class="btn btn-icon modal-close" id="closeLayerEditModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- Manual Settings -->
+          <div class="setting-group">
+            <h3>Layer Settings</h3>
+            <div class="setting-row">
+              <label>Name</label>
+              <input type="text" class="input" id="layerEditName">
+            </div>
+            <div class="setting-row">
+              <label>Frequency (kHz)</label>
+              <input type="number" class="input" id="layerEditFreq" min="20" max="150">
+            </div>
+            <div class="setting-row">
+              <label>LPI (Lines/Inch)</label>
+              <input type="number" class="input" id="layerEditLpi" min="10" max="1000">
+            </div>
+          </div>
+
+          <!-- Color Picker from Calibration -->
+          <div class="setting-group">
+            <h3>Pick from Calibrated Colors</h3>
+            <p class="modal-description" style="margin-top: 0; margin-bottom: 10px;">
+              Select a color from your test grid to apply its settings.
+            </p>
+            <div id="layerEditColorGrid" class="color-map-grid" style="max-height: 200px; overflow-y: auto;">
+              <!-- Populated dynamically -->
+              <p class="text-muted" style="text-align: center; padding: 20px;">No calibration data available.</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="btnCancelLayerEdit">Cancel</button>
+          <button class="btn btn-primary" id="btnSaveLayerEdit">Save Changes</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Footer -->
     <footer class="footer">
       <div class="footer-left">

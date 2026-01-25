@@ -23,7 +23,8 @@ const state = {
     vectorizedLayers: [],
     palette: [],
     outputSize: { width: 200, height: 200 },
-    settings: null
+    settings: null,
+    editingLayerId: null
 };
 
 // ===================================
@@ -113,7 +114,17 @@ const elements = {
     statusBar: document.getElementById('statusBar'),
     statusText: document.getElementById('statusText'),
     progressContainer: document.getElementById('progressContainer'),
-    progressFill: document.getElementById('progressFill')
+    progressFill: document.getElementById('progressFill'),
+
+    // Layer Edit Modal
+    layerEditModal: document.getElementById('layerEditModal'),
+    closeLayerEditModal: document.getElementById('closeLayerEditModal'),
+    layerEditName: document.getElementById('layerEditName'),
+    layerEditFreq: document.getElementById('layerEditFreq'),
+    layerEditLpi: document.getElementById('layerEditLpi'),
+    layerEditColorGrid: document.getElementById('layerEditColorGrid'),
+    btnCancelLayerEdit: document.getElementById('btnCancelLayerEdit'),
+    btnSaveLayerEdit: document.getElementById('btnSaveLayerEdit')
 };
 
 // ===================================
@@ -135,7 +146,7 @@ function init() {
     setupAnalyzer();
     setupLightbox(); // Initialize lightbox listeners
 
-    Logger.info('Picture Engraver initialized', { appVersion: '1.20.3' });
+    Logger.info('Picture Engraver initialized', { appVersion: '1.20.4' });
 
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
@@ -509,7 +520,7 @@ function displayLayers() {
         layerEl.className = 'layer-item';
         layerEl.innerHTML = `
       <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''} data-layer-id="${layer.id}">
-      <div class="layer-color" style="background-color: rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b})"></div>
+      <div class="layer-color" style="background-color: rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b}); cursor: pointer;" data-layer-id="${layer.id}" title="Click to edit"></div>
       <div class="layer-info">
         <div class="layer-name">${layer.name}</div>
         <div class="layer-settings">${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)} LPI</div>
@@ -534,12 +545,28 @@ function displayLayers() {
         });
     });
 
+    // Add event listeners for Color Click
+    container.querySelectorAll('.layer-color').forEach(colorEl => {
+        colorEl.addEventListener('click', (e) => {
+            const layerId = e.target.dataset.layerId;
+            openLayerEditModal(layerId);
+        });
+    });
+
     // Add event listeners for Outline
     container.querySelectorAll('.outline-checkbox').forEach(checkbox => {
         checkbox.addEventListener('change', (e) => {
             const layerId = e.target.dataset.layerId;
             const layer = state.layers.find(l => l.id === layerId);
             if (layer) layer.outline = e.target.checked;
+        });
+    });
+
+    // Add event listeners for Edit Button
+    container.querySelectorAll('button[data-action="edit"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const layerId = e.target.dataset.layerId || e.target.closest('button').dataset.layerId;
+            openLayerEditModal(layerId);
         });
     });
 
@@ -646,6 +673,81 @@ function findClosestCalibrationColor(targetColor, entries) {
     return bestMatch;
 }
 
+function openLayerEditModal(layerId) {
+    const layer = state.layers.find(l => l.id === layerId);
+    if (!layer) return;
+
+    state.editingLayerId = layerId;
+
+    // Populate inputs
+    elements.layerEditName.value = layer.name;
+    elements.layerEditFreq.value = Math.round(layer.frequency);
+    elements.layerEditLpi.value = Math.round(layer.lpi);
+
+    // Render Color Grid from Calibration
+    renderLayerColorGrid();
+
+    openModal(elements.layerEditModal);
+}
+
+function renderLayerColorGrid() {
+    const grid = elements.layerEditColorGrid;
+    grid.innerHTML = '';
+
+    const colorMap = SettingsStorage.loadColorMap();
+    if (!colorMap || !colorMap.entries || colorMap.entries.length === 0) {
+        grid.innerHTML = '<p class="text-muted" style="text-align: center; padding: 20px;">No calibration data available.</p>';
+        return;
+    }
+
+    colorMap.entries.forEach(entry => {
+        const { color, frequency, lpi } = entry;
+        const div = document.createElement('div');
+        div.className = 'color-cell';
+        div.style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
+        div.title = `R:${color.r} G:${color.g} B:${color.b}\nFreq: ${frequency}kHz, LPI: ${lpi}`;
+
+        // Add click listener to apply settings
+        div.addEventListener('click', () => {
+            elements.layerEditFreq.value = frequency;
+            elements.layerEditLpi.value = lpi;
+
+            // Visual feedback
+            Array.from(grid.children).forEach(c => c.classList.remove('selected'));
+            div.classList.add('selected');
+
+            // Temporarily store the selected color to be applied on save
+            state.pendingLayerColor = color;
+        });
+
+        grid.appendChild(div);
+    });
+}
+
+function saveLayerEdit() {
+    if (!state.editingLayerId) return;
+
+    const layer = state.layers.find(l => l.id === state.editingLayerId);
+    if (layer) {
+        layer.name = elements.layerEditName.value;
+        layer.frequency = parseFloat(elements.layerEditFreq.value);
+        layer.lpi = parseFloat(elements.layerEditLpi.value);
+
+        // If a color was selected from the grid
+        if (state.pendingLayerColor) {
+            layer.color = { ...state.pendingLayerColor };
+            state.pendingLayerColor = null; // Reset
+        }
+
+        displayLayers();
+        displayVectorPreview(); // Refresh vector preview as color might have changed
+        showToast('Layer updated successfully', 'success');
+    }
+
+    closeModal(elements.layerEditModal);
+    state.editingLayerId = null;
+}
+
 // ===================================
 // Preview
 // ===================================
@@ -737,6 +839,11 @@ function setupModals() {
             closeModal(backdrop.closest('.modal'));
         });
     });
+
+    // Layer Edit Modal
+    elements.closeLayerEditModal.addEventListener('click', () => closeModal(elements.layerEditModal));
+    elements.btnCancelLayerEdit.addEventListener('click', () => closeModal(elements.layerEditModal));
+    elements.btnSaveLayerEdit.addEventListener('click', saveLayerEdit);
 }
 
 function openModal(modal) {
