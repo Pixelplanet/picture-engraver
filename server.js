@@ -39,18 +39,36 @@ function writeLog(level, message, data = null) {
         ...data
     };
 
-    const logString = JSON.stringify(logEntry);
-    const consoleString = `[${timestamp}] ${level}: ${message} ${data ? JSON.stringify(data) : ''}`;
+    // 1. Write to Console (Stdout/Stderr) - Human Readable
+    // Format: [TIME] [LEVEL] Message [Key=Value, ...]
+    let dataStr = '';
+    if (data) {
+        // Flatten data for readability, excluding large objects if any
+        try {
+            dataStr = Object.entries(data)
+                .map(([k, v]) => {
+                    if (typeof v === 'object' && v !== null) return ''; // Skip nested objects for cleaner console
+                    return `${k}=${v}`;
+                })
+                .filter(s => s)
+                .join(', ');
 
-    // 1. Write to Console (Stdout/Stderr)
+            if (dataStr) dataStr = `[${dataStr}]`;
+        } catch (e) { dataStr = ''; }
+    }
+
+    const consoleLog = `[${timestamp}] [${level}] ${message} ${dataStr}`.trim();
+
     if (level === 'ERROR') {
-        console.error(consoleString);
+        console.error(consoleLog);
     } else {
-        console.log(consoleString);
+        console.log(consoleLog);
     }
 
     // 2. Write to File (if enabled)
     if (FILE_LOGGING_ENABLED) {
+        const logString = JSON.stringify(logEntry);
+
         // Rotate logs by date (simple YYYY-MM-DD.log)
         const dateStr = timestamp.split('T')[0];
         const logFile = path.join(LOG_DIR, `app-${dateStr}.log`);
