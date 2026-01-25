@@ -84,6 +84,38 @@ export class OnboardingManager {
         document.body.insertAdjacentHTML('beforeend', modalHtml);
     }
 
+    showTestGridInfoModal() {
+        const existing = document.getElementById('testGridInfoModal');
+        if (existing) existing.remove();
+
+        const modalHtml = `
+            <div class="modal active" id="testGridInfoModal" style="z-index: 10002;">
+                <div class="modal-content welcome-content" style="max-width: 600px;">
+                    <div class="welcome-icon">📏</div>
+                    <h2>Calibration Workflow</h2>
+                    <p>Optimizing colors for stainless steel requires precise settings.</p>
+                    
+                    <div style="text-align: left; background: #f5f5f7; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <ol style="margin: 0; padding-left: 20px; line-height: 1.8;">
+                            <li><strong>Generate:</strong> Set your Power/Speed/Frequency range and click <em>"Download Custom XCS"</em>.</li>
+                            <li><strong>Engrave:</strong> Run this file on your laser machine on the target material.</li>
+                            <li><strong>Analyze:</strong> Take a clear photo of the result and upload it in the <strong>"Analyze Grid"</strong> tab.</li>
+                        </ol>
+                    </div>
+                    
+                    <p style="font-size: 0.9em; color: #666;">
+                        The system will then auto-map your image colors to these proven settings!
+                    </p>
+
+                    <div class="modal-actions" style="justify-content: center;">
+                        <button class="btn btn-primary" onclick="document.getElementById('testGridInfoModal').remove(); window.onboarding.markTestGridCompleted();">Got it</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+
     createTourElements() {
         if (!this.elements.highlight) {
             this.elements.highlight = document.createElement('div');
@@ -138,33 +170,6 @@ export class OnboardingManager {
                 target: '#btnDownloadXCS',
                 title: '5. Export',
                 description: 'Download the .xcs file and you are ready to engrave!'
-            }
-        ];
-
-        this.showStep(0);
-    }
-
-    startTestGridTour() {
-        this.isActive = true;
-        this.currentTourType = 'testgrid';
-        this.currentStepIndex = 0;
-        this.createTourElements();
-
-        this.tourSteps = [
-            {
-                target: '.setting-group', // Use class selector for stability
-                title: 'Test Grid Settings',
-                description: 'Configure the Power, Speed, and Frequency ranges relevant to your material.'
-            },
-            {
-                target: '#btnGenerateGrid',
-                title: 'Generate Grid',
-                description: 'Create an XCS, run it on your laser, and take a photo of the resulting grid.'
-            },
-            {
-                target: '.modal-tab[data-modal-tab="analyze"]',
-                title: 'Analyze',
-                description: 'Switch to the "Analyze Grid" tab to upload your photo and auto-calibrate colors.'
             }
         ];
 
@@ -238,22 +243,16 @@ export class OnboardingManager {
 
         // Smart Positioning
         const tooltipWidth = 320;
-        const tooltipHeight = 250; // Use max-height from CSS as guidance
+        const tooltipHeight = 250;
 
-        // Initial: Bottom Center
         let top = rect.bottom + 20 + scrollY;
         let left = rect.left + (rect.width / 2) - (tooltipWidth / 2) + scrollX;
 
         // Vertical Flip
-        // If bottom of tooltip would go off screen
         if (rect.bottom + tooltipHeight + 20 > window.innerHeight) {
-            // Flip up
             top = rect.top - tooltipHeight + scrollY;
-            // If going off top (element at top of screen)
             if (rect.top - tooltipHeight < 0) {
-                // Stick to bottom, but use scrollable tooltip
                 top = rect.bottom + 20 + scrollY;
-                // CSS max-height will handle overflow
             }
         }
 
@@ -304,6 +303,6 @@ export class OnboardingManager {
         this.toggleProcessButton(true);
 
         if (this.currentTourType === 'main') this.markCompleted();
-        if (this.currentTourType === 'testgrid') this.markTestGridCompleted();
+        // TEST GRID markCompleted is handled by 'Got it' button in modal
     }
 }

@@ -720,9 +720,9 @@ function setupModals() {
     elements.btnTestGrid.addEventListener('click', () => {
         openModal(elements.testGridModal);
 
-        // Start Test Grid Tour if needed
+        // Show Test Grid Info if needed
         if (window.onboarding && !window.onboarding.hasCompletedTestGridTour()) {
-            setTimeout(() => window.onboarding.startTestGridTour(), 500);
+            setTimeout(() => window.onboarding.showTestGridInfoModal(), 500);
         }
     });
     elements.closeTestGridModal.addEventListener('click', () => closeModal(elements.testGridModal));
