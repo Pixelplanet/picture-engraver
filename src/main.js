@@ -146,7 +146,7 @@ function init() {
     setupAnalyzer();
     setupLightbox(); // Initialize lightbox listeners
 
-    Logger.info('Picture Engraver initialized', { appVersion: '1.20.4' });
+    Logger.info('Picture Engraver initialized', { appVersion: '1.33.0' });
 
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
