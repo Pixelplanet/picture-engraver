@@ -557,29 +557,45 @@ function autoAssignColors() {
     }
 
     Logger.info(`Auto-assigning colors using ${colorMap.entries.length} calibrated colors`);
-    console.log(`Auto-assigning colors using ${colorMap.entries.length} calibrated colors`);
 
-    // For each layer, find the closest matching color from the calibration data
-    state.layers.forEach(layer => {
-        const bestMatch = findClosestCalibrationColor(layer.color, colorMap.entries);
+    // Disable button and show loading state
+    const btn = elements.btnAutoAssign;
+    const originalContent = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Assigning...';
 
-        if (bestMatch) {
-            layer.frequency = bestMatch.frequency;
-            layer.lpi = bestMatch.lpi;
-            // Use the actual calibrated color as requested
-            layer.color = { ...bestMatch.color };
-            console.log(`Layer ${layer.name}: Assigned calibrated color RGB(${layer.color.r},${layer.color.g},${layer.color.b})`);
+    // Allow UI to update before processing
+    setTimeout(() => {
+        try {
+            // For each layer, find the closest matching color from the calibration data
+            state.layers.forEach(layer => {
+                const bestMatch = findClosestCalibrationColor(layer.color, colorMap.entries);
+
+                if (bestMatch) {
+                    layer.frequency = bestMatch.frequency;
+                    layer.lpi = bestMatch.lpi;
+                    // Use the actual calibrated color as requested
+                    layer.color = { ...bestMatch.color };
+                }
+            });
+
+            // Refresh the layers display and preview
+            displayLayers();
+            if (state.vectorizedLayers.length > 0) {
+                displayVectorPreview();
+            }
+
+            Logger.info('Auto-assign colors completed', { layersUpdated: state.layers.length });
+            showToast(`Colors auto-assigned using calibrated color map!`, 'success');
+        } catch (error) {
+            Logger.error('Auto-assign error', { error: error.message });
+            showToast('Failed to assign colors: ' + error.message, 'error');
+        } finally {
+            // Re-enable button
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
         }
-    });
-
-    // Refresh the layers display and preview
-    displayLayers();
-    if (state.vectorizedLayers.length > 0) {
-        displayVectorPreview();
-    }
-
-    Logger.info('Auto-assign colors completed', { layersUpdated: state.layers.length });
-    showToast(`Colors auto-assigned using calibrated color map!`, 'success');
+    }, 50);
 }
 
 /**
@@ -1092,7 +1108,7 @@ function drawGridToCanvas(canvasId, settings) {
     const cellSize = settings.cellSize || 5;
     const gap = settings.cellGap !== undefined ? settings.cellGap : 1;
 
-    const qrCells = 2;
+    const qrCells = 3;
     const qrStartCol = gridInfo.numCols - qrCells;
     const qrStartRow = gridInfo.numRows - qrCells;
 
