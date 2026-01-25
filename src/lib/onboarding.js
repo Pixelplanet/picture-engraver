@@ -165,7 +165,7 @@ export class OnboardingManager {
                 target: '#previewPanel',
                 title: '4. Preview Results',
                 description: 'Review the output layers and vector paths here.',
-                placement: 'top' // Force above
+                placement: 'left' // Changed to left side
             },
             {
                 target: '#btnDownloadXCS',
@@ -254,6 +254,9 @@ export class OnboardingManager {
         // Force placement if specified
         if (step.placement === 'top') {
             top = rect.top - tooltipHeight + scrollY - 20;
+        } else if (step.placement === 'left') {
+            top = rect.top + (rect.height / 2) - (tooltipHeight / 2) + scrollY;
+            left = rect.left - tooltipWidth - 20 + scrollX;
         }
         // Auto Flip otherwise
         else if (rect.bottom + tooltipHeight + 20 > window.innerHeight) {
