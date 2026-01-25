@@ -6,6 +6,9 @@
     max-width: 700px;
     /* Increased from 500px */
     padding: 40px;
+    background: #ffffff;
+    color: #1a1a1a;
+    border-radius: 12px;
 }
 
 .welcome-icon {

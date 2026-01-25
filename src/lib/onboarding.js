@@ -95,7 +95,7 @@ export class OnboardingManager {
                     <h2>Calibration Workflow</h2>
                     <p>Optimizing colors for stainless steel requires precise settings.</p>
                     
-                    <div style="text-align: left; background: #f5f5f7; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <div style="text-align: left; background: #f5f5f7; color: #333; padding: 20px; border-radius: 8px; margin: 20px 0;">
                         <ol style="margin: 0; padding-left: 20px; line-height: 1.8;">
                             <li><strong>Generate:</strong> Set your Power/Speed/Frequency range and click <em>"Download Custom XCS"</em>.</li>
                             <li><strong>Engrave:</strong> Run this file on your laser machine on the target material.</li>
