@@ -75,4 +75,20 @@ This also fixes any custom grids generated from the browser UI, as the default v
 ## Prevention
 - Document the critical parameter values that XCS software requires
 - Add validation/warnings in the UI if users try to use incompatible combinations
-- Consider adding automated tests that compare generated files against known-working versions
+- Compare generated files against known-working versions
+
+## Issue: Layer Settings Ignored in XCS Export (2026-01-25)
+
+### Problem
+The XCS export was applying the global settings (power, speed, passes) to **all layers** identically, ignoring the per-layer calibration data (Frequency, LPI) determined by the application. This resulted in every layer having the exact same processing parameters.
+
+### Fix
+Modified `src/lib/xcs-generator.js` to:
+1. Capture layer-specific settings (`frequency`, `lpi`, `speed`, `power`, `passes`) during the generation loop.
+2. Pass these settings to the `generateDeviceData` method via a Map.
+3. In `generateDeviceData`, apply the specific settings for each display element.
+4. Added missing parameters `density`, `dpi` (mapped from LPI), and `bitmapScanMode` (mapped from crossHatch) to match the working Test Grid generator format.
+
+### Verification
+- Generated XCS files should now contain distinct `customize` blocks for each layer, reflecting their specific Frequency and LPI values.
+

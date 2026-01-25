@@ -33,6 +33,9 @@ export class XCSGenerator {
         // Displays collection
         const displays = [];
 
+        // Map to store settings for each display ID
+        const displaySettingsMap = new Map();
+
         layers.forEach((layer, layerIndex) => {
             if (!layer.visible) return;
 
@@ -41,9 +44,10 @@ export class XCSGenerator {
                 const combinedPath = layer.paths.filter(p => p && p.length > 0).join(' ');
 
                 if (combinedPath.length > 0) {
+                    const displayId = this.generateUUID();
                     // Create path display with auto-tightening
                     const display = this.createPathDisplayWithPath(
-                        this.generateUUID(),
+                        displayId,
                         layerIndex,
                         layer.name || `Layer ${layerIndex + 1}`,
                         combinedPath,
@@ -52,6 +56,17 @@ export class XCSGenerator {
 
                     if (display) {
                         displays.push(display);
+
+                        // Capture settings for this layer
+                        // Priority: Layer specific -> Global settings -> Default
+                        displaySettingsMap.set(displayId, {
+                            speed: layer.speed !== undefined ? layer.speed : (parseInt(this.settings.speed) || 100),
+                            power: layer.power !== undefined ? layer.power : (parseInt(this.settings.power) || 10),
+                            repeat: layer.passes !== undefined ? layer.passes : (parseInt(this.settings.passes) || 1),
+                            frequency: layer.frequency !== undefined ? layer.frequency : 60,
+                            lpi: layer.lpi !== undefined ? layer.lpi : 300,
+                            crossHatch: layer.crossHatch !== undefined ? layer.crossHatch : (this.settings.crossHatch || false)
+                        });
                     }
                 }
             }
@@ -72,7 +87,7 @@ export class XCSGenerator {
             "version": "1.3.6",
             "created": timestamp,
             "modify": timestamp,
-            "device": this.generateDeviceData(canvasId, displays)
+            "device": this.generateDeviceData(canvasId, displays, displaySettingsMap)
         };
 
         // Return minified JSON as per spec
@@ -92,9 +107,14 @@ export class XCSGenerator {
         return data;
     }
 
-    generateDeviceData(canvasId, displays) {
+    generateDeviceData(canvasId, displays, displaySettingsMap) {
         // Build map of display settings
         const displayEntries = displays.map(display => {
+            // Get settings for this specific display
+            const s = displaySettingsMap.get(display.id) || {
+                speed: 100, power: 10, repeat: 1, frequency: 60, lpi: 300, crossHatch: false
+            };
+
             return [
                 display.id,
                 {
@@ -107,12 +127,18 @@ export class XCSGenerator {
                             "planType": "dot_cloud",
                             "parameter": {
                                 "customize": {
-                                    "speed": parseInt(this.settings.speed) || 100,
-                                    "power": parseInt(this.settings.power) || 10,
-                                    "repeat": parseInt(this.settings.passes) || 1,
-                                    "frequency": 60,
+                                    "speed": parseInt(s.speed),
+                                    "power": parseInt(s.power),
+                                    "repeat": parseInt(s.repeat),
+                                    "frequency": parseInt(s.frequency),
+                                    "density": parseInt(s.lpi),
+                                    "dpi": parseInt(s.lpi),
                                     "enableKerf": false,
-                                    "kerfDistance": 0
+                                    "kerfDistance": 0,
+                                    "bitmapScanMode": s.crossHatch ? 'crossMode' : 'lineMode',
+                                    "crossAngle": s.crossHatch,
+                                    "bitmapEngraveMode": "normal",
+                                    "scanAngle": 0
                                 }
                             }
                         }
