@@ -1,0 +1,133 @@
+/* Onboarding / Tutorial Styles */
+
+/* Welcome Modal */
+.welcome-content {
+    text-align: center;
+    max-width: 700px;
+    /* Increased from 500px */
+    padding: 40px;
+}
+
+.welcome-icon {
+    font-size: 3rem;
+    margin-bottom: var(--spacing-md);
+}
+
+.privacy-notice {
+    background: rgba(0, 122, 255, 0.1);
+    border-left: 4px solid var(--accent-primary);
+    padding: 15px;
+    margin: 20px 0;
+    text-align: left;
+    font-size: 0.9em;
+}
+
+/* Spotlight Effect */
+.tour-highlight {
+    position: absolute;
+    z-index: 99999 !important;
+    /* Extremely high */
+    /* Massive shadow to create cut-out effect */
+    box-shadow: 0 0 0 4px var(--accent-primary), 0 0 0 9999px rgba(0, 0, 0, 0.85);
+    background: transparent;
+    pointer-events: none;
+    /* Let clicks pass through to target */
+    transition: all 0.3s ease;
+    border-radius: 6px;
+}
+
+/* Tooltip */
+.tour-tooltip {
+    position: absolute;
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    z-index: 100000;
+    max-width: 350px;
+    min-width: 300px;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    pointer-events: auto;
+}
+
+.tour-tooltip.active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.tour-tooltip h3 {
+    margin-top: 0;
+    color: var(--accent-primary);
+    margin-bottom: 10px;
+}
+
+.tour-tooltip p {
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin-bottom: 15px;
+}
+
+.tour-tooltip-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    border-top: 1px solid var(--border-primary);
+    padding-top: 15px;
+}
+
+.btn-tour-skip {
+    background: transparent;
+    color: #666;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 0.9em;
+}
+
+.btn-tour-skip:hover {
+    color: #333;
+}
+
+.btn-tour-next {
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: opacity 0.2s;
+}
+
+.btn-tour-next:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.btn-tour-next:hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+/* Help Button in Header */
+.help-btn {
+    background: none;
+    border: 1px solid var(--border-primary);
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 10px;
+    transition: all 0.2s;
+}
+
+.help-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+}

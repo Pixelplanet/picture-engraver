@@ -11,8 +11,9 @@ import { Vectorizer } from './lib/vectorizer.js';
 import { XCSGenerator } from './lib/xcs-generator.js';
 import { showToast } from './lib/toast.js';
 import { Logger } from './lib/logger.js';
+import { OnboardingManager } from './lib/onboarding.js';
 
-// ===================================
+
 // Application State
 // ===================================
 const state = {
@@ -134,6 +135,15 @@ function init() {
     setupAnalyzer();
 
     Logger.info('Picture Engraver initialized', { appVersion: '1.20.0' });
+
+    // Initialize Onboarding Logic
+    window.onboarding = new OnboardingManager();
+    window.onboarding.init();
+
+    // Hook Help Button
+    document.getElementById('btnHelp').addEventListener('click', () => {
+        window.onboarding.showWelcomeModal();
+    });
 }
 
 function updateStatus(msg, progress = -1) {
@@ -206,6 +216,10 @@ function handleFile(file) {
             state.originalImage = img;
             displayOriginalImage(img);
             showControls();
+
+            // Advance onboarding if active
+            if (window.onboarding) window.onboarding.handleAction('upload');
+
             showToast('Image loaded successfully!', 'success');
         };
         img.src = e.target.result;
@@ -367,6 +381,10 @@ async function processImage() {
                             elements.btnProcess.innerHTML = btnHtml;
                             elements.btnProcess.disabled = false;
                             updateStatus('Complete', 100);
+
+                            // Advance onboarding if active
+                            if (window.onboarding) window.onboarding.handleAction('process');
+
                             setTimeout(() => { if (elements.statusBar) elements.statusBar.style.display = 'none'; }, 3000);
                         } catch (error) {
                             console.error('Vectorization error:', error);
