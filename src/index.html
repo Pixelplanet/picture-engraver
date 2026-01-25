@@ -392,8 +392,15 @@
 
             <!-- Analysis Preview -->
             <div class="analysis-preview" id="analysisPreview" style="display: none;">
-              <div class="analysis-image">
-                <canvas id="analyzerCanvas"></canvas>
+              <div class="analysis-visualization"
+                style="flex: 1; max-width: 50%; display: flex; flex-direction: column; gap: 10px;">
+                <div class="analysis-image" style="max-width: 100%; width: 100%; flex: 0 0 auto;">
+                  <canvas id="analyzerCanvas"></canvas>
+                </div>
+                <div class="analysis-toolbar" style="display: flex; justify-content: center;">
+                  <button id="btnClearAnalyzer" class="btn btn-secondary btn-sm" title="Clear image and reset">🗑️ Clear
+                    Image</button>
+                </div>
               </div>
               <div class="analysis-info">
                 <h3>Detected Settings</h3>
@@ -402,13 +409,67 @@
                 </div>
                 <div id="analyzerFallback"
                   style="display: none; margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
-                  <p class="text-muted" style="font-size: 0.9em; margin-bottom: 10px;">
-                    Can't read the QR code? If this is the standard testgrid (85x55mm), you can load its default
-                    settings manually:
+                  <p class="text-muted" style="font-size: 0.9em; margin-bottom: 15px;">
+                    Can't read the QR code? You can use the default settings or enter them manually:
                   </p>
-                  <button class="btn btn-secondary btn-sm" id="btnUseDefaultGrid" style="width: 100%;">
-                    🎯 Use Default Testgrid Settings
-                  </button>
+
+                  <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <button class="btn btn-secondary btn-sm" id="btnUseDefaultGrid" style="flex: 1;">
+                      🎯 Use Default Settings
+                    </button>
+                    <button class="btn btn-outline btn-sm" id="btnToggleManualSettings" style="flex: 1;">
+                      ⚙️ Manual Input
+                    </button>
+                  </div>
+
+                  <!-- Manual Settings Panel -->
+                  <div id="manualSettingsPanel" style="display: none;">
+                    <div class="grid-settings-columns" style="margin-bottom: 15px;">
+
+                      <!-- Grid Layout -->
+                      <div class="setting-group">
+                        <h3>Grid Layout</h3>
+                        <div class="setting-row">
+                          <label>Columns</label>
+                          <input type="number" class="input" id="manualCols" value="14" min="1">
+                        </div>
+                        <div class="setting-row">
+                          <label>Rows</label>
+                          <input type="number" class="input" id="manualRows" value="9" min="1">
+                        </div>
+                      </div>
+
+                      <!-- Frequency Range -->
+                      <div class="setting-group">
+                        <h3>Frequency (kHz)</h3>
+                        <div class="setting-row">
+                          <label>Min</label>
+                          <input type="number" class="input" id="manualFreqMin" value="40">
+                        </div>
+                        <div class="setting-row">
+                          <label>Max</label>
+                          <input type="number" class="input" id="manualFreqMax" value="80">
+                        </div>
+                      </div>
+
+                      <!-- LPI Range -->
+                      <div class="setting-group">
+                        <h3>LPI</h3>
+                        <div class="setting-row">
+                          <label>Min</label>
+                          <input type="number" class="input" id="manualLpiMin" value="200">
+                        </div>
+                        <div class="setting-row">
+                          <label>Max</label>
+                          <input type="number" class="input" id="manualLpiMax" value="300">
+                        </div>
+                      </div>
+                    </div>
+
+                    <button id="btnApplyManualSettings" class="btn btn-primary" style="width: 100%;">
+                      Apply Settings & Enable Alignment
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

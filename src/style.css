@@ -1255,3 +1255,97 @@ body {
   transform: scale(1.01);
   filter: brightness(1.05);
 }
+
+#analyzerCanvas {
+  cursor: crosshair;
+}
+
+/* ===================================
+   Onboarding Tour
+   =================================== */
+.tour-highlight {
+  position: absolute;
+  border: 2px solid var(--accent-primary);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.75);
+  z-index: 9999;
+  border-radius: 4px;
+  pointer-events: none;
+  transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.tour-tooltip {
+  position: absolute;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  width: 320px;
+  max-width: 90vw;
+  z-index: 10000;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease, top 0.4s ease, left 0.4s ease;
+  pointer-events: none;
+}
+
+.tour-tooltip.active {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.tour-tooltip h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: var(--text-primary);
+  font-size: 1.1em;
+}
+
+.tour-tooltip p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 0.95em;
+  margin-bottom: 20px;
+}
+
+.tour-tooltip-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-tour-next {
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-tour-next:hover {
+  background: var(--accent-primary-hover);
+}
+
+.btn-tour-next:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  filter: grayscale(1);
+}
+
+.btn-tour-skip {
+  background: transparent;
+  color: var(--text-tertiary);
+  border: none;
+  padding: 8px 12px;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.btn-tour-skip:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}

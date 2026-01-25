@@ -885,6 +885,84 @@ function setupTestGrid() {
 function setupAnalyzer() {
     const canvas = document.getElementById('analyzerCanvas');
     canvas.addEventListener('click', handleAnalyzerCanvasClick);
+
+    // Clear Button
+    const btnClear = document.getElementById('btnClearAnalyzer');
+    if (btnClear) btnClear.addEventListener('click', resetAnalyzer);
+
+    // Manual Settings
+    const btnToggle = document.getElementById('btnToggleManualSettings');
+    if (btnToggle) btnToggle.addEventListener('click', toggleManualSettings);
+
+    const btnApply = document.getElementById('btnApplyManualSettings');
+    if (btnApply) btnApply.addEventListener('click', applyManualSettings);
+}
+
+function resetAnalyzer() {
+    analyzerState.corners = [];
+    analyzerState.originalImg = null;
+    analyzerState.extractedColors = [];
+    analyzerState.isActive = false;
+    analyzerState.selectedCell = null;
+
+    // Clear canvas
+    const canvas = document.getElementById('analyzerCanvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Reset inputs
+    document.getElementById('analyzerFileInput').value = '';
+
+    // Hide preview panels
+    document.getElementById('analysisPreview').style.display = 'none';
+    document.getElementById('analyzerDropZone').style.display = 'block';
+
+    // Hide color map
+    document.getElementById('colorMapSection').style.display = 'none';
+    document.getElementById('colorMapGrid').innerHTML = '';
+
+    showToast('Analyzer reset', 'info');
+}
+
+function toggleManualSettings() {
+    const panel = document.getElementById('manualSettingsPanel');
+    if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function applyManualSettings() {
+    const cols = parseInt(document.getElementById('manualCols').value) || 14;
+    const rows = parseInt(document.getElementById('manualRows').value) || 9;
+    const freqMin = parseInt(document.getElementById('manualFreqMin').value) || 40;
+    const freqMax = parseInt(document.getElementById('manualFreqMax').value) || 80;
+    const lpiMin = parseInt(document.getElementById('manualLpiMin').value) || 200;
+    const lpiMax = parseInt(document.getElementById('manualLpiMax').value) || 300;
+
+    // Update state
+    analyzerState.numCols = cols;
+    analyzerState.numRows = rows;
+
+    // Generate values
+    const generator = new TestGridGenerator({ freqMin, freqMax, lpiMin, lpiMax });
+    analyzerState.lpiValues = generator.linspace(lpiMax, lpiMin, cols);
+    analyzerState.freqValues = generator.linspace(freqMin, freqMax, rows);
+
+    // Update UI
+    const settingsDiv = document.getElementById('analysisSettings');
+    settingsDiv.innerHTML = `
+        <div class="detected-value"><span>Frequency (Manual)</span> <span>${freqMin}-${freqMax}kHz</span></div>
+        <div class="detected-value"><span>LPI (Manual)</span> <span>${lpiMax}-${lpiMin}</span></div>
+        <div class="detected-value"><span>Grid Size</span> <span>${cols}×${rows}</span></div>
+    `;
+
+    document.getElementById('analyzerFallback').style.display = 'none';
+
+    if (analyzerState.corners.length === 4) {
+        showToast('Settings updated! Re-calculating colors...', 'info');
+        drawAnalyzerUI();
+        updateExtractedColors();
+    } else {
+        showToast('Manual settings applied! Click the 4 corners of the grid.', 'success');
+    }
 }
 
 function handleAnalyzerCanvasClick(e) {
@@ -1429,6 +1507,20 @@ function setupLightbox() {
             if (container) openLightbox(container);
         });
     }
+
+    // Analyzer and Original Canvas
+    const analyzerC = document.getElementById('analyzerCanvas');
+    if (analyzerC) {
+        analyzerC.addEventListener('click', (e) => {
+            // Only open lightbox if NOT defining corners (corners need clicks)
+            if (analyzerState.corners.length === 4) {
+                openLightbox(analyzerC);
+            }
+        });
+    }
+
+    const originalC = document.getElementById('originalCanvas');
+    if (originalC) originalC.addEventListener('click', () => openLightbox(originalC));
 
     // Close
     closeBtn.addEventListener('click', (e) => {

@@ -243,33 +243,43 @@ export class OnboardingManager {
             </div>
         `;
 
-        // Smart Positioning
-        const tooltipWidth = 320;
-        const tooltipHeight = 250;
+        // Measure tooltip
+        this.elements.tooltip.style.display = 'block';
+        this.elements.tooltip.style.visibility = 'hidden';
 
+        const tooltipWidth = this.elements.tooltip.offsetWidth || 320;
+        const tooltipHeight = this.elements.tooltip.offsetHeight || 200;
+
+        this.elements.tooltip.style.visibility = '';
+        this.elements.tooltip.style.display = '';
+
+        // Smart Positioning
         // Default: Bottom Center
         let top = rect.bottom + 20 + scrollY;
         let left = rect.left + (rect.width / 2) - (tooltipWidth / 2) + scrollX;
+        let placement = step.placement || 'auto';
 
-        // Force placement if specified
-        if (step.placement === 'top') {
-            top = rect.top - tooltipHeight + scrollY - 20;
-        } else if (step.placement === 'left') {
+        // Check if bottom fits
+        const bottomFits = (rect.bottom + 20 + tooltipHeight) < (window.scrollY + window.innerHeight);
+
+        if (placement === 'top' || (placement === 'auto' && !bottomFits)) {
+            // Try Top
+            const topPos = rect.top - tooltipHeight - 20 + scrollY;
+            if (topPos > window.scrollY) { // Only if it doesn't go off top
+                top = topPos;
+            }
+        }
+
+        if (placement === 'left') {
             top = rect.top + (rect.height / 2) - (tooltipHeight / 2) + scrollY;
             left = rect.left - tooltipWidth - 20 + scrollX;
         }
-        // Auto Flip otherwise
-        else if (rect.bottom + tooltipHeight + 20 > window.innerHeight) {
-            top = rect.top - tooltipHeight + scrollY;
-            if (rect.top - tooltipHeight < 0) {
-                top = rect.bottom + 20 + scrollY;
-            }
-        }
+
         // Horizontal Clamp
         const padding = 20;
-        if (left < padding) left = padding;
-        if (left + tooltipWidth > window.innerWidth - padding) {
-            left = window.innerWidth - tooltipWidth - padding;
+        if (left < padding + scrollX) left = padding + scrollX;
+        if (left + tooltipWidth > window.innerWidth - padding + scrollX) {
+            left = window.innerWidth - tooltipWidth - padding + scrollX;
         }
 
         Object.assign(this.elements.tooltip.style, {

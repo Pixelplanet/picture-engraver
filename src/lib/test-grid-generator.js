@@ -28,7 +28,7 @@ export class TestGridGenerator {
             crossHatch: true,
 
             // QR code settings
-            qrPower: 45,
+            qrPower: 85,
             qrSpeed: 80,
             qrSize: 12,
             qrFrequency: 45,
