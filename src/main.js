@@ -717,7 +717,14 @@ function setupModals() {
     elements.btnResetSettings.addEventListener('click', resetSettings);
 
     // Test grid modal
-    elements.btnTestGrid.addEventListener('click', () => openModal(elements.testGridModal));
+    elements.btnTestGrid.addEventListener('click', () => {
+        openModal(elements.testGridModal);
+
+        // Start Test Grid Tour if needed
+        if (window.onboarding && !window.onboarding.hasCompletedTestGridTour()) {
+            setTimeout(() => window.onboarding.startTestGridTour(), 500);
+        }
+    });
     elements.closeTestGridModal.addEventListener('click', () => closeModal(elements.testGridModal));
 
     // Close on backdrop click

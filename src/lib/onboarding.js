@@ -5,11 +5,11 @@ export class OnboardingManager {
         this.currentStepIndex = 0;
         this.tourSteps = [];
         this.isActive = false;
+        this.currentTourType = null;
 
         this.elements = {
-            overlay: null, // Removed in favor of box-shadow on highlight, but kept for cleanup safety
-            tooltip: null,
-            highlight: null
+            highlight: null,
+            tooltip: null
         };
     }
 
@@ -26,8 +26,15 @@ export class OnboardingManager {
         localStorage.setItem(this.STORAGE_KEY, 'completed');
     }
 
+    hasCompletedTestGridTour() {
+        return localStorage.getItem(this.STORAGE_KEY + '_testgrid') === 'completed';
+    }
+
+    markTestGridCompleted() {
+        localStorage.setItem(this.STORAGE_KEY + '_testgrid', 'completed');
+    }
+
     showWelcomeModal() {
-        // Remove exists
         const existing = document.getElementById('welcomeModal');
         if (existing) existing.remove();
 
@@ -37,8 +44,8 @@ export class OnboardingManager {
                     <div class="welcome-icon">👋</div>
                     <h2>Welcome to Picture Engraver!</h2>
                     <p style="font-size: 1.1em; line-height: 1.6;">
-                        Easily convert your images into high-quality laser engraving files for stainless steel.
-                        We'll guide you through the process step-by-step.
+                        Easily convert your images into high-quality laser engraving files.
+                        Let's walk through the basic workflow.
                     </p>
                     
                     <div class="privacy-notice">
@@ -48,7 +55,7 @@ export class OnboardingManager {
 
                     <div class="modal-actions" style="justify-content: center; gap: 15px;">
                         <button class="btn btn-secondary" onclick="document.getElementById('welcomeModal').remove(); window.onboarding.markCompleted();">Skip Tutorial</button>
-                        <button class="btn btn-primary" onclick="window.onboarding.startTour()">Start Interactive Tour</button>
+                        <button class="btn btn-primary" onclick="window.onboarding.startMainTour()">Start Interactive Tour</button>
                     </div>
                 </div>
             </div>
@@ -56,11 +63,26 @@ export class OnboardingManager {
         document.body.insertAdjacentHTML('beforeend', modalHtml);
     }
 
-    startTour() {
+    createTourElements() {
+        if (!this.elements.highlight) {
+            this.elements.highlight = document.createElement('div');
+            this.elements.highlight.className = 'tour-highlight';
+            document.body.appendChild(this.elements.highlight);
+        }
+
+        if (!this.elements.tooltip) {
+            this.elements.tooltip = document.createElement('div');
+            this.elements.tooltip.className = 'tour-tooltip';
+            document.body.appendChild(this.elements.tooltip);
+        }
+    }
+
+    startMainTour() {
         const modal = document.getElementById('welcomeModal');
         if (modal) modal.remove();
 
         this.isActive = true;
+        this.currentTourType = 'main';
         this.currentStepIndex = 0;
         this.createTourElements();
 
@@ -68,55 +90,60 @@ export class OnboardingManager {
             {
                 target: '#dropZone',
                 title: '1. Upload Image',
-                description: 'Drag & drop an image here or click to browse. We support PNG, JPG.',
+                description: 'Start by dragging & dropping an image here.',
                 waitForAction: 'upload'
             },
             {
                 target: '#controlsSection',
                 title: '2. Adjust Settings',
-                description: 'Set your output size, engraving power, and speed. Choosing the right "Number of Colors" is key.'
-            },
-            {
-                target: '#btnTestGrid',
-                title: '3. Calibrate Colors',
-                description: 'Generate a Test Grid on your material to know exactly what params produce what colors. Then use "Analyze Grid".'
+                description: 'Set your size and parameters. The <strong>Dithering</strong> slider controls how many colors are used.'
             },
             {
                 target: '#btnProcess',
-                title: '4. Process',
-                description: 'Click "Process Image" to vectorize your image into layers.',
+                title: '3. Process',
+                description: 'Click "Process Image" to convert your picture into laser-ready vectors.',
                 waitForAction: 'process'
             },
             {
-                target: '#layersPanel',
-                title: '5. Auto-Assign',
-                description: 'Use our new "Auto-Assign" button to instantly match layers to your saved Test Grid calibration!'
-            },
-            {
                 target: '#previewPanel',
-                title: '6. Preview Results',
-                description: 'Check the "Vectors" tab to see exactly what the laser will follow.'
+                title: '4. Preview Results',
+                description: 'Review the output layers and vector paths here.'
             },
             {
                 target: '#btnDownloadXCS',
-                title: '7. Export',
-                description: 'Download the final .xcs file ready for xTool Creative Space.'
+                title: '5. Export',
+                description: 'Download the .xcs file and you are ready to engrave!'
             }
         ];
 
         this.showStep(0);
     }
 
-    createTourElements() {
-        // Highlight Box (Spotlight)
-        this.elements.highlight = document.createElement('div');
-        this.elements.highlight.className = 'tour-highlight';
-        document.body.appendChild(this.elements.highlight);
+    startTestGridTour() {
+        this.isActive = true;
+        this.currentTourType = 'testgrid';
+        this.currentStepIndex = 0;
+        this.createTourElements();
 
-        // Tooltip
-        this.elements.tooltip = document.createElement('div');
-        this.elements.tooltip.className = 'tour-tooltip';
-        document.body.appendChild(this.elements.tooltip);
+        this.tourSteps = [
+            {
+                target: '#gridSettings', // ID of the settings column
+                title: 'Test Grid Settings',
+                description: 'Configure the Power, Speed, and Frequency ranges relevant to your material.'
+            },
+            {
+                target: '#btnGenerateGrid',
+                title: 'Generate Grid',
+                description: 'Create an XCS, run it on your laser, and take a photo of the resulting grid.'
+            },
+            {
+                target: '.modal-tab[data-modal-tab="analyze"]',
+                title: 'Analyze',
+                description: 'Switch to the "Analyze Grid" tab to upload your photo and auto-calibrate colors.'
+            }
+        ];
+
+        this.showStep(0);
     }
 
     showStep(index) {
@@ -128,31 +155,39 @@ export class OnboardingManager {
         const step = this.tourSteps[index];
         const targetEl = document.querySelector(step.target);
 
-        if (!targetEl) {
-            // Skip step if element missing
+        if (!targetEl || targetEl.offsetParent === null) {
             this.showStep(index + 1);
             return;
         }
 
-        // 1. Position Highlight
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        requestAnimationFrame(() => {
+            this.positionElements(targetEl, step, index);
+        });
+    }
+
+    positionElements(targetEl, step, index) {
         const rect = targetEl.getBoundingClientRect();
         const highlightPadding = 10;
         const scrollY = window.scrollY;
+        const scrollX = window.scrollX;
 
+        // Position Highlight
         Object.assign(this.elements.highlight.style, {
             top: `${rect.top - highlightPadding + scrollY}px`,
-            left: `${rect.left - highlightPadding}px`,
+            left: `${rect.left - highlightPadding + scrollX}px`,
             width: `${rect.width + (highlightPadding * 2)}px`,
             height: `${rect.height + (highlightPadding * 2)}px`
         });
 
-        // 2. Setup Tooltip Content
+        // Setup Tooltip Content
         let btnNextText = index === this.tourSteps.length - 1 ? 'Finish' : 'Next →';
         let isWaiting = false;
 
         if (step.waitForAction) {
             isWaiting = true;
-            btnNextText = 'Waiting for you...';
+            btnNextText = 'Waiting for action...';
         }
 
         this.elements.tooltip.innerHTML = `
@@ -167,29 +202,38 @@ export class OnboardingManager {
             </div>
         `;
 
-        // 3. Position Tooltip
-        let tooltipTop = rect.bottom + 20 + scrollY;
-        let tooltipLeft = rect.left + (rect.width / 2) - 150; // Center
+        // Smart Positioning
+        const tooltipWidth = 320;
+        const tooltipHeight = 220;
 
-        // Boundary checks
-        if (tooltipLeft < 20) tooltipLeft = 20;
-        if (tooltipLeft + 300 > window.innerWidth) tooltipLeft = window.innerWidth - 320;
+        // Initial pos: Bottom Center
+        let top = rect.bottom + 20 + scrollY;
+        let left = rect.left + (rect.width / 2) - (tooltipWidth / 2) + scrollX;
 
-        // If too low, flip to top
-        const tooltipHeight = 200; // Approx
-        if (rect.bottom + tooltipHeight > window.innerHeight) {
-            tooltipTop = rect.top - tooltipHeight + scrollY - 20;
+        // Vertical Flip
+        // If element is near bottom of viewport, put tooltip above
+        const spaceBelow = window.innerHeight - rect.bottom;
+        if (spaceBelow < tooltipHeight) {
+            // Put above
+            top = rect.top - tooltipHeight + scrollY;
+            // Add some margin?
+            // If tooltipHeight is large, it might go off top. 
+            // CSS should handle text flow.
+        }
+
+        // Horizontal Clamp
+        const padding = 20;
+        if (left < padding) left = padding;
+        if (left + tooltipWidth > window.innerWidth - padding) {
+            left = window.innerWidth - tooltipWidth - padding;
         }
 
         Object.assign(this.elements.tooltip.style, {
-            top: `${tooltipTop}px`,
-            left: `${tooltipLeft}px`
+            top: `${top}px`,
+            left: `${left}px`
         });
 
         this.elements.tooltip.classList.add('active');
-
-        // Scroll into view
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     handleAction(actionName) {
@@ -197,13 +241,11 @@ export class OnboardingManager {
         const currentStep = this.tourSteps[this.currentStepIndex];
 
         if (currentStep && currentStep.waitForAction === actionName) {
-            // Flash success? 
             const btn = document.getElementById('tourNextBtn');
             if (btn) {
-                btn.innerText = 'Great! Next →';
+                btn.innerText = 'Success! Next →';
                 btn.disabled = false;
-                // Auto advance after short delay
-                setTimeout(() => this.nextStep(), 800);
+                setTimeout(() => this.nextStep(), 600);
             } else {
                 this.nextStep();
             }
@@ -211,9 +253,6 @@ export class OnboardingManager {
     }
 
     nextStep() {
-        // Prevent manual next if waiting? 
-        // No, user might want to force next if detection fails, 
-        // but we disabled the button for waitForAction steps.
         this.currentStepIndex++;
         this.showStep(this.currentStepIndex);
     }
@@ -221,8 +260,11 @@ export class OnboardingManager {
     endTour() {
         if (this.elements.highlight) this.elements.highlight.remove();
         if (this.elements.tooltip) this.elements.tooltip.remove();
-
+        this.elements.highlight = null;
+        this.elements.tooltip = null;
         this.isActive = false;
-        this.markCompleted();
+
+        if (this.currentTourType === 'main') this.markCompleted();
+        if (this.currentTourType === 'testgrid') this.markTestGridCompleted();
     }
 }
