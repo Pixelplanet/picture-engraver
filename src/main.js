@@ -518,19 +518,56 @@ function displayLayers() {
     state.layers.forEach((layer, index) => {
         const layerEl = document.createElement('div');
         layerEl.className = 'layer-item';
+
+        // Indent outline layers
+        if (layer.type === 'outline') {
+            layerEl.style.marginLeft = '20px';
+            layerEl.style.borderLeft = '3px solid #666';
+        }
+
+        const isOutline = layer.type === 'outline';
+
+        let actionsHtml = '';
+        let settingsHtml = '';
+
+        if (isOutline) {
+            // Outline Layer: Show Thickness Input + Apply + Delete
+            const thickness = layer.thickness || 5;
+
+            // Adjust settings display just for outline? Or keep frequency/LPI?
+            // Usually outlines share settings with parent or have their own. 
+            // For now, let's keep the settings info but maybe smaller.
+            // And add the controls in the actions area or settings area.
+
+            // We'll put the controls in a compact flex row
+            actionsHtml = `
+                <div style="display:flex; align-items:center; gap:2px; margin-right:5px;">
+                    <input type="number" class="outline-thickness-input" value="${thickness}" min="1" max="50" style="width: 40px; padding: 2px; font-size: 0.8em;" data-layer-id="${layer.id}">
+                    <button class="btn btn-icon btn-sm btn-update-outline" title="Apply Thickness" data-layer-id="${layer.id}" style="color: #4CAF50;">✔️</button>
+                    <button class="btn btn-icon btn-sm btn-delete-layer" title="Delete Layer" data-layer-id="${layer.id}" style="color: #ff4444;">🗑️</button>
+                </div>
+            `;
+
+            settingsHtml = `<div class="layer-settings">Offset: ${thickness}px</div>`;
+
+        } else {
+            // Normal Layer: Add Outline + Edit
+            actionsHtml = `
+                <button class="btn btn-sm btn-primary btn-add-outline" title="Add Outline Layer" data-layer-id="${layer.id}" style="margin-right: 5px; font-size: 0.8em; display:flex; align-items:center; gap:4px;"><span>+</span> Add Outline</button>
+                <button class="btn btn-icon btn-sm" title="Edit" data-action="edit" data-layer-id="${layer.id}">✏️</button>
+            `;
+            settingsHtml = `<div class="layer-settings">${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)} LPI</div>`;
+        }
+
         layerEl.innerHTML = `
       <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''} data-layer-id="${layer.id}">
       <div class="layer-color" style="background-color: rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b}); cursor: pointer;" data-layer-id="${layer.id}" title="Click to edit"></div>
       <div class="layer-info">
         <div class="layer-name">${layer.name}</div>
-        <div class="layer-settings">${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)} LPI</div>
+        ${settingsHtml}
       </div>
       <div class="layer-actions" style="display: flex; align-items: center;">
-        <label class="layer-outline-control" style="margin-right: 10px; display: flex; align-items: center; font-size: 0.8em; color: var(--text-secondary);">
-            <input type="checkbox" class="outline-checkbox" ${layer.outline ? 'checked' : ''} data-layer-id="${layer.id}">
-            <span style="margin-left: 4px;">Outline</span>
-        </label>
-        <button class="btn btn-icon btn-sm" title="Edit" data-action="edit" data-layer-id="${layer.id}">✏️</button>
+        ${actionsHtml}
       </div>
     `;
         container.appendChild(layerEl);
@@ -541,7 +578,10 @@ function displayLayers() {
         checkbox.addEventListener('change', (e) => {
             const layerId = e.target.dataset.layerId;
             const layer = state.layers.find(l => l.id === layerId);
-            if (layer) layer.visible = e.target.checked;
+            if (layer) {
+                layer.visible = e.target.checked;
+                displayVectorPreview(); // Refresh preview when visibility changes
+            }
         });
     });
 
@@ -553,12 +593,143 @@ function displayLayers() {
         });
     });
 
-    // Add event listeners for Outline
-    container.querySelectorAll('.outline-checkbox').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
-            const layerId = e.target.dataset.layerId;
+    // Add event listeners for Add Outline (New Logic: Default 5px, no prompt)
+    container.querySelectorAll('.btn-add-outline').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const layerId = e.target.dataset.layerId || e.target.closest('button').dataset.layerId;
             const layer = state.layers.find(l => l.id === layerId);
-            if (layer) layer.outline = e.target.checked;
+
+            if (layer) {
+                try {
+                    const thickness = 5; // Default
+
+                    const btnEl = e.target.closest('button');
+                    if (btnEl.disabled) return;
+
+                    const originalText = btnEl.innerHTML;
+                    btnEl.innerHTML = '⏳ Gener...';
+                    btnEl.disabled = true;
+
+                    // Small delay
+                    await new Promise(r => setTimeout(r, 10));
+
+                    const vectorizer = new Vectorizer();
+                    const pxPerMm = 10;
+
+                    const paths = vectorizer.generateOutline(
+                        {
+                            data: state.processedImage.data,
+                            width: state.processedImage.width,
+                            height: state.processedImage.height
+                        },
+                        layer.color,
+                        thickness,
+                        pxPerMm
+                    );
+
+                    const outlineLayer = {
+                        id: layer.id + '_outline_' + Date.now(), // Unique ID
+                        name: layer.name + ' Outline',
+                        type: 'outline',
+                        color: { r: 0, g: 0, b: 0 }, // Default to Black
+                        sourceColor: { ...layer.color }, // Store original source color
+                        paths: paths,
+                        visible: true,
+                        parentId: layer.id,
+                        frequency: layer.frequency,
+                        lpi: layer.lpi,
+                        bounds: layer.bounds,
+                        thickness: thickness // Store thickness state
+                    };
+
+                    const idx = state.layers.findIndex(l => l.id === layer.id);
+                    if (idx !== -1) {
+                        state.layers.splice(idx + 1, 0, outlineLayer);
+                    }
+
+                    displayLayers();
+                    displayVectorPreview();
+                    showToast('Outline layer added', 'success');
+
+                } catch (err) {
+                    console.error('Outline generation failed:', err);
+                    showToast('Failed to generate outline', 'error');
+                    displayLayers();
+                }
+            }
+        });
+    });
+
+    // Add event listeners for Apply/Update Outline Thickness
+    container.querySelectorAll('.btn-update-outline').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const layerId = e.target.dataset.layerId || e.target.closest('button').dataset.layerId;
+            const layer = state.layers.find(l => l.id === layerId);
+
+            if (layer && layer.type === 'outline') {
+                const row = e.target.closest('.layer-item');
+                const input = row.querySelector('.outline-thickness-input');
+                const newThickness = parseInt(input.value);
+
+                if (newThickness && newThickness > 0) {
+                    try {
+                        const btnEl = e.target.closest('button');
+                        btnEl.innerHTML = '⏳';
+                        btnEl.disabled = true;
+
+                        await new Promise(r => setTimeout(r, 10));
+
+                        const vectorizer = new Vectorizer();
+                        const pxPerMm = 10;
+
+                        // Use stored sourceColor or fallback to parent lookup or current color
+                        // Best is sourceColor if available.
+                        let colorToTrace = layer.sourceColor;
+                        if (!colorToTrace) {
+                            // Fallback for older outlines
+                            const parentLayer = state.layers.find(l => l.id === layer.parentId);
+                            colorToTrace = parentLayer ? parentLayer.color : layer.color;
+                        }
+
+                        const paths = vectorizer.generateOutline(
+                            {
+                                data: state.processedImage.data,
+                                width: state.processedImage.width,
+                                height: state.processedImage.height
+                            },
+                            colorToTrace,
+                            newThickness,
+                            pxPerMm
+                        );
+
+                        // Update layer
+                        layer.paths = paths;
+                        layer.thickness = newThickness;
+
+                        displayLayers();
+                        displayVectorPreview();
+                        showToast('Outline updated', 'success');
+
+                    } catch (err) {
+                        console.error('Outline update failed:', err);
+                        showToast('Failed to update outline', 'error');
+                        displayLayers();
+                    }
+                }
+            }
+        });
+    });
+
+    // Add event listeners for Delete Outline
+    container.querySelectorAll('.btn-delete-layer').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const layerId = e.target.dataset.layerId || e.target.closest('button').dataset.layerId;
+            const idx = state.layers.findIndex(l => l.id === layerId);
+            if (idx !== -1) {
+                state.layers.splice(idx, 1);
+                displayLayers();
+                displayVectorPreview();
+            }
         });
     });
 
@@ -695,17 +866,41 @@ function renderLayerColorGrid() {
     grid.innerHTML = '';
 
     const colorMap = SettingsStorage.loadColorMap();
-    if (!colorMap || !colorMap.entries || colorMap.entries.length === 0) {
-        grid.innerHTML = '<p class="text-muted" style="text-align: center; padding: 20px;">No calibration data available.</p>';
-        return;
+    let entries = [];
+
+    // Always add Black and White as standard colors
+    const standardColors = [
+        { color: { r: 0, g: 0, b: 0 }, frequency: 40, lpi: 300, name: 'Standard Black' },
+        { color: { r: 255, g: 255, b: 255 }, frequency: 40, lpi: 300, name: 'Standard White' }
+    ];
+
+    if (colorMap && colorMap.entries && colorMap.entries.length > 0) {
+        entries = [...standardColors, ...colorMap.entries];
+    } else {
+        entries = [...standardColors];
+        // If no calibration, we still show standard colors, but maybe warn if user wants more
+        if (!colorMap) {
+            const warning = document.createElement('div');
+            warning.style.gridColumn = '1 / -1';
+            warning.style.fontSize = '0.8rem';
+            warning.style.color = '#888';
+            warning.style.marginBottom = '5px';
+            warning.innerText = 'No calibration data. Only standard colors available.';
+            grid.appendChild(warning);
+        }
     }
 
-    colorMap.entries.forEach(entry => {
+    entries.forEach(entry => {
         const { color, frequency, lpi } = entry;
         const div = document.createElement('div');
         div.className = 'color-cell';
         div.style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
         div.title = `R:${color.r} G:${color.g} B:${color.b}\nFreq: ${frequency}kHz, LPI: ${lpi}`;
+
+        // Visual indicator for standard colors
+        if (entry.name && entry.name.startsWith('Standard')) {
+            div.style.border = '2px solid #666';
+        }
 
         // Add click listener to apply settings
         div.addEventListener('click', () => {

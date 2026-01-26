@@ -21,27 +21,16 @@ export class Vectorizer {
      * @param {number} pxPerMm - Pixels per mm for scaling (default: 10)
      * @returns {string[]} - Array of SVG path strings (rectangles)
      */
-    createMergedRectPaths(quantizedData, color, pxPerMm = 10) {
-        const data = quantizedData.data;
-        const width = quantizedData.width;
-        const height = quantizedData.height;
+    /**
+     * Internal helper to generate paths from a binary grid
+     * @param {Uint8Array} grid - 1D array of 0s and 1s
+     * @param {number} width 
+     * @param {number} height 
+     * @param {number} pxPerMm 
+     * @returns {string[]} SVG paths
+     */
+    gridToPaths(grid, width, height, pxPerMm) {
         const scale = 1 / pxPerMm;
-        const tolerance = this.options.tolerance;
-
-        // Build a 2D grid of matching pixels
-        const grid = new Uint8Array(width * height);
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const i = (y * width + x) * 4;
-                const matches =
-                    Math.abs(data[i] - color.r) <= tolerance &&
-                    Math.abs(data[i + 1] - color.g) <= tolerance &&
-                    Math.abs(data[i + 2] - color.b) <= tolerance;
-                grid[y * width + x] = matches ? 1 : 0;
-            }
-        }
-
-        // Find and merge rectangles using greedy algorithm
         const rects = [];
         const visited = new Uint8Array(width * height);
 
@@ -82,15 +71,116 @@ export class Vectorizer {
         }
 
         // Convert rectangles to SVG path strings
-        const paths = rects.map(r => {
+        return rects.map(r => {
             const x1 = (r.x * scale).toFixed(3);
             const y1 = (r.y * scale).toFixed(3);
             const x2 = ((r.x + r.w) * scale).toFixed(3);
             const y2 = ((r.y + r.h) * scale).toFixed(3);
             return `M${x1} ${y1} L${x2} ${y1} L${x2} ${y2} L${x1} ${y2} Z`;
         });
+    }
 
-        return paths;
+    /**
+     * Create merged rectangle paths from a quantized image for a specific color
+     */
+    createMergedRectPaths(quantizedData, color, pxPerMm = 10) {
+        const data = quantizedData.data;
+        const width = quantizedData.width;
+        const height = quantizedData.height;
+        const tolerance = this.options.tolerance;
+
+        // Build a 2D grid of matching pixels
+        const grid = new Uint8Array(width * height);
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const i = (y * width + x) * 4;
+                const matches =
+                    Math.abs(data[i] - color.r) <= tolerance &&
+                    Math.abs(data[i + 1] - color.g) <= tolerance &&
+                    Math.abs(data[i + 2] - color.b) <= tolerance;
+                grid[y * width + x] = matches ? 1 : 0;
+            }
+        }
+
+        return this.gridToPaths(grid, width, height, pxPerMm);
+    }
+
+    /**
+     * Generate an outline by eroding the original shape and subtracting it.
+     * Creates a "thick" outline based on the specified thickness in pixels.
+     * 
+     * @param {Object} quantizedData - { data: Uint8ClampedArray, width, height }
+     * @param {Object} color - Target color { r, g, b }
+     * @param {number} thickness - Thickness of the outline in pixels
+     * @param {number} pxPerMm - Pixels per mm for scaling (default: 10)
+     * @returns {string[]} - Array of SVG path strings
+     */
+    generateOutline(quantizedData, color, thickness = 2, pxPerMm = 10) {
+        const data = quantizedData.data;
+        const width = quantizedData.width;
+        const height = quantizedData.height;
+        const tolerance = this.options.tolerance;
+
+        // 1. Create Binary Mask of the object
+        const grid = new Uint8Array(width * height);
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const i = (y * width + x) * 4;
+                const matches =
+                    Math.abs(data[i] - color.r) <= tolerance &&
+                    Math.abs(data[i + 1] - color.g) <= tolerance &&
+                    Math.abs(data[i + 2] - color.b) <= tolerance;
+                grid[y * width + x] = matches ? 1 : 0;
+            }
+        }
+
+        // 2. Erode the mask (shrink it)
+        // We alternate source/dest buffers to handle iterations
+        let current = new Uint8Array(grid);
+        let next = new Uint8Array(width * height);
+
+        for (let i = 0; i < thickness; i++) {
+            next.fill(0);
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = y * width + x;
+                    if (current[idx] === 1) {
+                        // Check neighbors (4-connectivity sufficient for erosion)
+                        const n = y > 0 ? current[idx - width] : 0;
+                        const s = y < height - 1 ? current[idx + width] : 0;
+                        const w = x > 0 ? current[idx - 1] : 0;
+                        const e = x < width - 1 ? current[idx + 1] : 0;
+
+                        // If any neighbor is 0, this pixel becomes 0 (eroded edge)
+                        // Keep 1 only if fully surrounded
+                        if (n && s && w && e) {
+                            next[idx] = 1;
+                        }
+                    }
+                }
+            }
+            // Swap buffers
+            let temp = current;
+            current = next;
+            next = temp;
+        }
+
+        // 3. Subtract Eroded (current) from Original (grid)
+        // Outline = Original AND (NOT Eroded)
+        const outlineGrid = new Uint8Array(width * height);
+        for (let k = 0; k < width * height; k++) {
+            if (grid[k] === 1 && current[k] === 0) {
+                outlineGrid[k] = 1;
+            }
+        }
+
+        // 4. Convert Outline Grid to Paths
+        return this.gridToPaths(outlineGrid, width, height, pxPerMm);
+    }
+
+    // Kept for compatibility but points to new optimized method
+    traceOutlines(quantizedData, color, pxPerMm = 10) {
+        return this.generateOutline(quantizedData, color, 3, pxPerMm); // Default 3px thickness
     }
 
     /**
