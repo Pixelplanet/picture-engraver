@@ -5,6 +5,8 @@
 
 const STORAGE_KEY = 'pictureEngraverSettings';
 
+import { DEFAULT_COLOR_MAP_DATA } from './default-color-map.js';
+
 const DEFAULT_SETTINGS = {
     // Engraving defaults
     power: 70,
@@ -22,7 +24,17 @@ const DEFAULT_SETTINGS = {
 
     // Size defaults (mm)
     defaultWidth: 200,
-    defaultHeight: 200
+    defaultHeight: 200,
+
+    // Standard Color Settings
+    blackFreq: 40,
+    blackLpi: 300,
+    blackSpeed: 425,
+    blackPower: 70,
+    whiteFreq: 40,
+    whiteLpi: 300,
+    whiteSpeed: 425,
+    whitePower: 70
 };
 
 export const SettingsStorage = {
@@ -76,57 +88,258 @@ export const SettingsStorage = {
     },
 
     // ===================================
-    // Color Map Storage
+    // Multi Color Map Storage
     // ===================================
 
     /**
-     * Save color map data from analyzer
-     * @param {Object} colorMapData - The color map containing colors and their settings
+     * Get all saved color maps
+     * Performs auto-migration of legacy single map if found
+     * @returns {Array} Array of color map objects
      */
-    saveColorMap(colorMapData) {
+    getColorMaps() {
         try {
-            localStorage.setItem(STORAGE_KEY + '_colormap', JSON.stringify(colorMapData));
-            return true;
-        } catch (error) {
-            console.error('Failed to save color map:', error);
-            return false;
-        }
-    },
+            // Check for legacy migration
+            this._migrateLegacyColorMap();
 
-    /**
-     * Load saved color map
-     * @returns {Object|null} The saved color map or null if not found
-     */
-    loadColorMap() {
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY + '_colormap');
+            const stored = localStorage.getItem(STORAGE_KEY + '_maps');
             if (stored) {
                 return JSON.parse(stored);
             }
         } catch (error) {
-            console.warn('Failed to load color map:', error);
+            console.warn('Failed to load color maps:', error);
         }
-        return null;
+        return [];
     },
 
     /**
-     * Check if a color map exists
-     * @returns {boolean}
+     * Ensure a system default map exists
+     * Uses real extracted data from calibration
      */
-    hasColorMap() {
-        return localStorage.getItem(STORAGE_KEY + '_colormap') !== null;
-    },
-
-    /**
-     * Clear the saved color map
-     */
-    clearColorMap() {
+    ensureSystemDefaultMap() {
         try {
-            localStorage.removeItem(STORAGE_KEY + '_colormap');
+            const maps = this.getColorMaps();
+            const defaultId = 'system_default_v3'; // Bump version to force update
+
+            // If already exists, do nothing
+            if (maps.some(m => m.id === defaultId)) return;
+
+            // Use real extracted data (from imported constant)
+            const defaultMap = {
+                id: defaultId,
+                name: 'System Default (Optimized)',
+                active: true,
+                createdAt: new Date().toISOString(),
+                data: DEFAULT_COLOR_MAP_DATA
+            };
+
+            // Remove old default if exists (v1 or v2)
+            const oldIdx = maps.findIndex(m => m.id.startsWith('system_default_v'));
+            if (oldIdx !== -1) maps.splice(oldIdx, 1);
+
+            maps.unshift(defaultMap); // Add to beginning
+            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
+            console.info('Created/Updated System Default color map');
+
+        } catch (error) {
+            console.error('Failed to create default map:', error);
+        }
+    },
+
+    /**
+     * Save a new color map
+     * @param {Object} data - The color map data
+     * @param {string} name - User defined name for the map
+     * @returns {string|null} The new ID or null on failure
+     */
+    saveColorMap(data, name) {
+        try {
+            const maps = this.getColorMaps();
+            const id = 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+
+            const newMap = {
+                id: id,
+                name: name || `Test Grid ${new Date().toLocaleDateString()}`,
+                active: true, // Auto-activate new maps
+                createdAt: new Date().toISOString(),
+                data: data // The actual map data (entries, ranges, etc)
+            };
+
+            maps.push(newMap);
+            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
+            return id;
+        } catch (error) {
+            console.error('Failed to save color map:', error);
+            return null;
+        }
+    },
+
+    /**
+     * Delete a color map by ID
+     * @param {string} id 
+     */
+    deleteColorMap(id) {
+        try {
+            let maps = this.getColorMaps();
+            maps = maps.filter(m => m.id !== id);
+            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
             return true;
         } catch (error) {
-            console.error('Failed to clear color map:', error);
+            console.error('Failed to delete color map:', error);
             return false;
         }
+    },
+
+    /**
+     * Toggle active state of a map
+     * @param {string} id 
+     * @param {boolean} isActive 
+     */
+    toggleColorMapActive(id, isActive) {
+        try {
+            const maps = this.getColorMaps();
+            const map = maps.find(m => m.id === id);
+            if (map) {
+                map.active = isActive;
+                localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
+                return true;
+            }
+        } catch (error) {
+            console.error('Failed to toggle map:', error);
+        }
+        return false;
+    },
+
+    /**
+     * Export all color maps to JSON string
+     */
+    exportColorMaps() {
+        const maps = this.getColorMaps();
+        const exportData = {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            maps: maps
+        };
+        return JSON.stringify(exportData, null, 2);
+    },
+
+    /**
+     * Import color maps from JSON string
+     * @param {string} jsonString 
+     * @returns {number} Count of imported maps
+     */
+    importColorMaps(jsonString) {
+        try {
+            const parsed = JSON.parse(jsonString);
+            if (!parsed.maps || !Array.isArray(parsed.maps)) {
+                throw new Error('Invalid format: missing maps array');
+            }
+
+            const currentMaps = this.getColorMaps();
+            let addedCount = 0;
+
+            parsed.maps.forEach(importedMap => {
+                // Determine if we should generate a new ID (avoid collision)
+                // We'll regenerate IDs on import to be safe, unless it's a backup restore logic
+                // For simplicity, let's treat them as new maps if they don't exactly match ID
+
+                // Check for duplicate by content/name to avoid spamming duplicates?
+                // For now, simple append
+                const newId = 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                importedMap.id = newId;
+                importedMap.importedAt = new Date().toISOString();
+                importedMap.active = true; // Activate imported maps by default
+
+                currentMaps.push(importedMap);
+                addedCount++;
+            });
+
+            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(currentMaps));
+            return addedCount;
+        } catch (error) {
+            console.error('Import failed:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Private: Migrate legacy single map structure to new list
+     */
+    _migrateLegacyColorMap() {
+        try {
+            const legacyKey = STORAGE_KEY + '_colormap';
+            const legacyData = localStorage.getItem(legacyKey);
+
+            // Optimization: check if we already migrated
+            if (localStorage.getItem(STORAGE_KEY + '_migrated')) return;
+
+            if (legacyData) {
+                const mapData = JSON.parse(legacyData);
+                const maps = [];
+
+                // Create new map structure
+                const newMap = {
+                    id: 'legacy_import',
+                    name: 'Previous Calibration',
+                    active: true,
+                    createdAt: mapData.savedAt || new Date().toISOString(),
+                    data: mapData
+                };
+
+                maps.push(newMap);
+                localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
+                localStorage.setItem(STORAGE_KEY + '_migrated', 'true');
+                console.info('Migrated legacy color map to new storage format');
+            }
+        } catch (error) {
+            console.error('Migration failed:', error);
+        }
+    },
+
+    // Compatibility methods for existing code (will direct to new storage)
+
+    /**
+     * @deprecated Use getColorMaps()
+     * Returns a "merged" map of all active maps specifically for the unified palette logic
+     */
+    loadColorMap() {
+        const maps = this.getColorMaps();
+        const activeMaps = maps.filter(m => m.active);
+
+        if (activeMaps.length === 0) return null;
+
+        // Merge entries
+        let mergedEntries = [];
+        activeMaps.forEach(map => {
+            // Add reference to source map in entries if useful
+            const entries = map.data.entries.map(e => ({
+                ...e,
+                _sourceMap: map.name
+            }));
+            mergedEntries = mergedEntries.concat(entries);
+        });
+
+        return {
+            entries: mergedEntries,
+            // Ranges might be ambiguous if maps differ, but usually we just care about entries for matching
+            freqRange: activeMaps[0].data.freqRange,
+            lpiRange: activeMaps[0].data.lpiRange
+        };
+    },
+
+    /**
+     * @deprecated Use hasColorMaps()
+     */
+    hasColorMap() {
+        const maps = this.getColorMaps();
+        return maps.some(m => m.active);
+    },
+
+    /**
+     * Clear all maps (Dangerous)
+     */
+    clearColorMap() {
+        localStorage.removeItem(STORAGE_KEY + '_maps');
+        localStorage.removeItem(STORAGE_KEY + '_migrated');
+        return true;
     }
 };

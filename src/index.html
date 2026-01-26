@@ -179,6 +179,8 @@
             </div>
           </div>
 
+
+
           <div class="setting-group">
             <h3>Frequency Range (kHz)</h3>
             <div class="setting-row">
@@ -200,6 +202,49 @@
             <div class="setting-row">
               <label>Max</label>
               <input type="number" class="input" id="settingLpiMax" value="800" min="100" max="1000">
+            </div>
+          </div>
+
+          <div class="setting-group">
+            <h3>Standard Colors (Black & White)</h3>
+            <div class="setting-row">
+              <label><strong>Black Layer</strong></label>
+            </div>
+            <div class="setting-row">
+              <label>Freq (kHz)</label>
+              <input type="number" class="input" id="settingBlackFreq" value="40" min="20" max="150">
+            </div>
+            <div class="setting-row">
+              <label>LPI</label>
+              <input type="number" class="input" id="settingBlackLpi" value="300" min="10" max="1000">
+            </div>
+            <div class="setting-row">
+              <label>Speed (mm/s)</label>
+              <input type="number" class="input" id="settingBlackSpeed" value="425" min="1" max="1000">
+            </div>
+            <div class="setting-row">
+              <label>Power (%)</label>
+              <input type="number" class="input" id="settingBlackPower" value="70" min="1" max="100">
+            </div>
+
+            <div class="setting-row" style="margin-top: 15px;">
+              <label><strong>White Layer</strong></label>
+            </div>
+            <div class="setting-row">
+              <label>Freq (kHz)</label>
+              <input type="number" class="input" id="settingWhiteFreq" value="40" min="20" max="150">
+            </div>
+            <div class="setting-row">
+              <label>LPI</label>
+              <input type="number" class="input" id="settingWhiteLpi" value="300" min="10" max="1000">
+            </div>
+            <div class="setting-row">
+              <label>Speed (mm/s)</label>
+              <input type="number" class="input" id="settingWhiteSpeed" value="425" min="1" max="1000">
+            </div>
+            <div class="setting-row">
+              <label>Power (%)</label>
+              <input type="number" class="input" id="settingWhitePower" value="70" min="1" max="100">
             </div>
           </div>
         </div>
@@ -397,7 +442,9 @@
                 <div class="analysis-image" style="max-width: 100%; width: 100%; flex: 0 0 auto;">
                   <canvas id="analyzerCanvas"></canvas>
                 </div>
-                <div class="analysis-toolbar" style="display: flex; justify-content: center;">
+                <div class="analysis-toolbar" style="display: flex; justify-content: center; gap: 10px;">
+                  <button id="btnRotateAnalyzer" class="btn btn-secondary btn-sm" title="Rotate Image 90°">🔄
+                    Rotate</button>
                   <button id="btnClearAnalyzer" class="btn btn-secondary btn-sm" title="Clear image and reset">🗑️ Clear
                     Image</button>
                 </div>
@@ -548,6 +595,14 @@
             <div class="setting-row">
               <label>LPI (Lines/Inch)</label>
               <input type="number" class="input" id="layerEditLpi" min="10" max="1000">
+            </div>
+            <div class="setting-row">
+              <label>Speed (mm/s)</label>
+              <input type="number" class="input" id="layerEditSpeed" min="1" max="1000">
+            </div>
+            <div class="setting-row">
+              <label>Power (%)</label>
+              <input type="number" class="input" id="layerEditPower" min="1" max="100">
             </div>
           </div>
 

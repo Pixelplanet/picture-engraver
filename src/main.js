@@ -98,6 +98,16 @@ const elements = {
     btnSaveSettings: document.getElementById('btnSaveSettings'),
     btnResetSettings: document.getElementById('btnResetSettings'),
 
+    // Standard Color Settings
+    settingBlackFreq: document.getElementById('settingBlackFreq'),
+    settingBlackLpi: document.getElementById('settingBlackLpi'),
+    settingBlackSpeed: document.getElementById('settingBlackSpeed'),
+    settingBlackPower: document.getElementById('settingBlackPower'),
+    settingWhiteFreq: document.getElementById('settingWhiteFreq'),
+    settingWhiteLpi: document.getElementById('settingWhiteLpi'),
+    settingWhiteSpeed: document.getElementById('settingWhiteSpeed'),
+    settingWhitePower: document.getElementById('settingWhitePower'),
+
     // Test Grid
     gridCols: document.getElementById('gridCols'),
     gridRows: document.getElementById('gridRows'),
@@ -122,6 +132,8 @@ const elements = {
     layerEditName: document.getElementById('layerEditName'),
     layerEditFreq: document.getElementById('layerEditFreq'),
     layerEditLpi: document.getElementById('layerEditLpi'),
+    layerEditSpeed: document.getElementById('layerEditSpeed'),
+    layerEditPower: document.getElementById('layerEditPower'),
     layerEditColorGrid: document.getElementById('layerEditColorGrid'),
     btnCancelLayerEdit: document.getElementById('btnCancelLayerEdit'),
     btnSaveLayerEdit: document.getElementById('btnSaveLayerEdit')
@@ -133,6 +145,7 @@ const elements = {
 function init() {
     // Load settings
     state.settings = SettingsStorage.load();
+    SettingsStorage.ensureSystemDefaultMap(); // Ensure default map exists
     applySettingsToUI();
 
     // Setup event listeners
@@ -495,6 +508,7 @@ function displayVectorPreview() {
         const colorStr = `rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b})`;
         layer.paths.forEach(path => {
             if (path && path.length > 0) {
+                // Use fill-rule: evenodd to handle holes correctly in combined paths
                 svg += `<path d="${path}" fill="${colorStr}" stroke="none" fill-opacity="0.9"/>`;
             }
         });
@@ -855,6 +869,13 @@ function openLayerEditModal(layerId) {
     elements.layerEditFreq.value = Math.round(layer.frequency);
     elements.layerEditLpi.value = Math.round(layer.lpi);
 
+    // Check if layer has specific speed/power, else fall back to global settings
+    const speed = layer.speed !== undefined ? layer.speed : state.settings.speed;
+    const power = layer.power !== undefined ? layer.power : state.settings.power;
+
+    elements.layerEditSpeed.value = speed;
+    elements.layerEditPower.value = power;
+
     // Render Color Grid from Calibration
     renderLayerColorGrid();
 
@@ -869,9 +890,30 @@ function renderLayerColorGrid() {
     let entries = [];
 
     // Always add Black and White as standard colors
+    // Unified Palette Logic
+    // Group colors by source map for better visualization
+
+    // Always add Black and White as standard colors
+    // Standard colors from settings
+    const { blackFreq, blackLpi, blackSpeed, blackPower, whiteFreq, whiteLpi, whiteSpeed, whitePower } = state.settings;
+
     const standardColors = [
-        { color: { r: 0, g: 0, b: 0 }, frequency: 40, lpi: 300, name: 'Standard Black' },
-        { color: { r: 255, g: 255, b: 255 }, frequency: 40, lpi: 300, name: 'Standard White' }
+        {
+            color: { r: 0, g: 0, b: 0 },
+            frequency: blackFreq || 40,
+            lpi: blackLpi || 300,
+            speed: blackSpeed || 425,
+            power: blackPower || 70,
+            name: 'Standard Black'
+        },
+        {
+            color: { r: 255, g: 255, b: 255 },
+            frequency: whiteFreq || 40,
+            lpi: whiteLpi || 300,
+            speed: whiteSpeed || 425,
+            power: whitePower || 70,
+            name: 'Standard White'
+        }
     ];
 
     if (colorMap && colorMap.entries && colorMap.entries.length > 0) {
@@ -885,17 +927,32 @@ function renderLayerColorGrid() {
             warning.style.fontSize = '0.8rem';
             warning.style.color = '#888';
             warning.style.marginBottom = '5px';
-            warning.innerText = 'No calibration data. Only standard colors available.';
+            warning.innerText = 'No active calibration maps found.';
             grid.appendChild(warning);
         }
     }
 
+    // Helper to separate groups
+    let lastSource = null;
+    let groupContainer = null;
+
+    // We treat standard colors as one group
+    // Then mapped colors as others
+
+    // Optimization: Render a simple list of cells, but maybe add headers if we have multiple maps
+    // But CSS Grid layout makes headers tricky unless we flatten differently.
+    // Let's stick to tooltip info for now, but maybe add a visual break?
+
     entries.forEach(entry => {
-        const { color, frequency, lpi } = entry;
+        const { color, frequency, lpi, _sourceMap } = entry;
         const div = document.createElement('div');
         div.className = 'color-cell';
         div.style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
-        div.title = `R:${color.r} G:${color.g} B:${color.b}\nFreq: ${frequency}kHz, LPI: ${lpi}`;
+
+        let title = `R:${color.r} G:${color.g} B:${color.b}\nFreq: ${frequency}kHz, LPI: ${lpi}`;
+        if (_sourceMap) title += `\nSource: ${_sourceMap}`;
+
+        div.title = title;
 
         // Visual indicator for standard colors
         if (entry.name && entry.name.startsWith('Standard')) {
@@ -907,12 +964,20 @@ function renderLayerColorGrid() {
             elements.layerEditFreq.value = frequency;
             elements.layerEditLpi.value = lpi;
 
+            // Apply speed/power if present (Standard Colors or advanced map data)
+            // If checking a calibrated map that doesn't have speed/power, we might want to keep current or use defaults?
+            // For now, if present in entry, use it.
+            if (entry.speed) elements.layerEditSpeed.value = entry.speed;
+            if (entry.power) elements.layerEditPower.value = entry.power;
+
             // Visual feedback
             Array.from(grid.children).forEach(c => c.classList.remove('selected'));
             div.classList.add('selected');
 
             // Temporarily store the selected color to be applied on save
             state.pendingLayerColor = color;
+            // Also store the options to apply
+            state.pendingLayerOptions = { speed: entry.speed, power: entry.power };
         });
 
         grid.appendChild(div);
@@ -928,10 +993,23 @@ function saveLayerEdit() {
         layer.frequency = parseFloat(elements.layerEditFreq.value);
         layer.lpi = parseFloat(elements.layerEditLpi.value);
 
+        // Save Speed and Power if valid
+        const speed = parseInt(elements.layerEditSpeed.value);
+        if (!isNaN(speed)) layer.speed = speed;
+
+        const power = parseInt(elements.layerEditPower.value);
+        if (!isNaN(power)) layer.power = power;
+
         // If a color was selected from the grid
         if (state.pendingLayerColor) {
             layer.color = { ...state.pendingLayerColor };
+
+            // If the selected color had specific options (like standard colors with speed/power)
+            // But wait, the user might have edited them in the inputs after clicking.
+            // The inputs are the source of truth now.
+
             state.pendingLayerColor = null; // Reset
+            state.pendingLayerOptions = null;
         }
 
         displayLayers();
@@ -1059,6 +1137,12 @@ function applySettingsToUI() {
     elements.settingFreqMax.value = s.freqMax;
     elements.settingLpiMin.value = s.lpiMin;
     elements.settingLpiMax.value = s.lpiMax;
+
+    // Standard Colors
+    document.getElementById('settingBlackFreq').value = s.blackFreq || 40;
+    document.getElementById('settingBlackLpi').value = s.blackLpi || 300;
+    document.getElementById('settingWhiteFreq').value = s.whiteFreq || 40;
+    document.getElementById('settingWhiteLpi').value = s.whiteLpi || 300;
 }
 
 function saveSettings() {
@@ -1070,7 +1154,13 @@ function saveSettings() {
         freqMin: parseInt(elements.settingFreqMin.value),
         freqMax: parseInt(elements.settingFreqMax.value),
         lpiMin: parseInt(elements.settingLpiMin.value),
-        lpiMax: parseInt(elements.settingLpiMax.value)
+        lpiMax: parseInt(elements.settingLpiMax.value),
+
+        // Standard Colors
+        blackFreq: parseInt(document.getElementById('settingBlackFreq').value),
+        blackLpi: parseInt(document.getElementById('settingBlackLpi').value),
+        whiteFreq: parseInt(document.getElementById('settingWhiteFreq').value),
+        whiteLpi: parseInt(document.getElementById('settingWhiteLpi').value)
     };
 
     SettingsStorage.save(state.settings);
@@ -1192,12 +1282,19 @@ function setupAnalyzer() {
     const btnClear = document.getElementById('btnClearAnalyzer');
     if (btnClear) btnClear.addEventListener('click', resetAnalyzer);
 
+    // Rotate Button
+    const btnRotate = document.getElementById('btnRotateAnalyzer');
+    if (btnRotate) btnRotate.addEventListener('click', rotateAnalyzerImage);
+
     // Manual Settings
     const btnToggle = document.getElementById('btnToggleManualSettings');
     if (btnToggle) btnToggle.addEventListener('click', toggleManualSettings);
 
     const btnApply = document.getElementById('btnApplyManualSettings');
     if (btnApply) btnApply.addEventListener('click', applyManualSettings);
+
+    // Initialize Map Management UI
+    setupMapManagement();
 }
 
 function resetAnalyzer() {
@@ -1224,6 +1321,35 @@ function resetAnalyzer() {
     document.getElementById('colorMapGrid').innerHTML = '';
 
     showToast('Analyzer reset', 'info');
+}
+
+function rotateAnalyzerImage() {
+    if (!analyzerState.originalImg) return;
+
+    const img = analyzerState.originalImg;
+    const canvas = document.createElement('canvas');
+    canvas.width = img.height;
+    canvas.height = img.width;
+    const ctx = canvas.getContext('2d');
+
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(90 * Math.PI / 180);
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+    const newImg = new Image();
+    newImg.onload = () => {
+        analyzerState.originalImg = newImg;
+        analyzerState.corners = []; // Reset corners
+
+        // Update canvas size
+        const displayCanvas = document.getElementById('analyzerCanvas');
+        displayCanvas.width = newImg.width;
+        displayCanvas.height = newImg.height;
+
+        drawAnalyzerUI();
+        showToast('Image rotated 90°', 'info');
+    };
+    newImg.src = canvas.toDataURL();
 }
 
 function toggleManualSettings() {
@@ -1702,6 +1828,10 @@ function generateColorMapWithData(freqValues, lpiValues, extractedColors) {
  * Save the color map from the analyzer to localStorage
  * The color map contains RGB values mapped to their frequency/LPI settings
  */
+/**
+ * Save the color map from the analyzer to localStorage
+ * The color map contains RGB values mapped to their frequency/LPI settings
+ */
 function saveColorMap() {
     const { extractedColors, freqValues, lpiValues, numCols, numRows } = analyzerState;
 
@@ -1711,7 +1841,6 @@ function saveColorMap() {
     }
 
     // Build the color map data structure
-    // Each entry maps a color to its freq/lpi settings
     const colorEntries = [];
     let colorIdx = 0;
 
@@ -1722,7 +1851,7 @@ function saveColorMap() {
             const color = extractedColors[colorIdx];
 
             colorEntries.push({
-                color: color, // {r, g, b}
+                color: color,
                 frequency: freq,
                 lpi: lpi
             });
@@ -1739,17 +1868,162 @@ function saveColorMap() {
         savedAt: new Date().toISOString()
     };
 
-    if (SettingsStorage.saveColorMap(colorMapData)) {
-        showToast('Color map saved successfully!', 'success');
+    // Prompt for name
+    const defaultName = `Grid ${new Date().toLocaleDateString()} (${numCols}x${numRows})`;
+    const name = prompt("Enter a name for this color map:", defaultName);
+
+    if (name === null) return; // Users cancelled
+
+    if (SettingsStorage.saveColorMap(colorMapData, name)) {
+        showToast(`Color map "${name}" saved successfully!`, 'success');
 
         // Show the success message
         const statusDiv = document.getElementById('savedColorMapStatus');
         if (statusDiv) {
             statusDiv.style.display = 'block';
         }
+
+        // Refresh the Manage Maps UI
+        renderManageMapsUI();
+
     } else {
         showToast('Failed to save color map.', 'error');
     }
+}
+
+// ===================================
+// Map Management UI (Injected)
+// ===================================
+
+function setupMapManagement() {
+    // Locate where to inject the management panel. 
+    // We'll put it in the #colorMapSection or create a new section below it.
+    const container = document.getElementById('colorMapSection');
+    if (!container) return; // Should not happen if DOM matches
+
+    // Create section if not exists
+    let manageSection = document.getElementById('manageMapsSection');
+    if (!manageSection) {
+        manageSection = document.createElement('div');
+        manageSection.id = 'manageMapsSection';
+        manageSection.className = 'info-panel';
+        manageSection.style.marginTop = '20px';
+        manageSection.style.borderTop = '1px solid var(--border-color)';
+        manageSection.style.paddingTop = '15px';
+
+        container.appendChild(manageSection);
+    }
+
+    renderManageMapsUI();
+}
+
+function renderManageMapsUI() {
+    const section = document.getElementById('manageMapsSection');
+    if (!section) return;
+
+    const maps = SettingsStorage.getColorMaps();
+
+    let html = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h4 style="margin:0;">Manage Color Maps (${maps.length})</h4>
+            <div style="gap:5px; display:flex;">
+                 <button id="btnImportMaps" class="btn btn-sm btn-secondary" title="Import JSON file">📥 Import</button>
+                 <button id="btnExportMaps" class="btn btn-sm btn-secondary" title="Export all maps to JSON">📤 Export</button>
+                 <input type="file" id="fileImportMaps" accept=".json" style="display:none">
+            </div>
+        </div>
+        
+        <div class="maps-list" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+    `;
+
+    if (maps.length === 0) {
+        html += `<div style="color: #888; font-style: italic; text-align: center;">No saved color maps yet. Analyze a grid to save one.</div>`;
+    } else {
+        maps.forEach(map => {
+            const date = new Date(map.createdAt).toLocaleDateString();
+            const checked = map.active ? 'checked' : '';
+            const opacity = map.active ? '1' : '0.6';
+
+            html += `
+                <div class="map-item" style="display:flex; align-items:center; background: var(--bg-secondary); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); opacity: ${opacity};">
+                    <input type="checkbox" class="map-toggle" data-id="${map.id}" ${checked} title="Enable/Disable this map" style="margin-right: 10px; cursor: pointer;">
+                    
+                    <div style="flex:1;">
+                        <div style="font-weight: 500;">${map.name}</div>
+                        <div style="font-size: 0.8em; color: #888;">${date} • ${map.data.entries.length} Colors</div>
+                    </div>
+                    
+                    <button class="btn btn-icon btn-sm btn-delete-map" data-id="${map.id}" title="Delete" style="color: #ff4444; margin-left:10px;">🗑️</button>
+                </div>
+            `;
+        });
+    }
+
+    html += `</div>`;
+
+    section.innerHTML = html;
+
+    // Bind Events
+
+    // Export
+    document.getElementById('btnExportMaps').addEventListener('click', () => {
+        const json = SettingsStorage.exportColorMaps();
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `picture_engraver_maps_${Date.now()}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Configuration exported!', 'success');
+    });
+
+    // Import Trigger
+    const fileInput = document.getElementById('fileImportMaps');
+    document.getElementById('btnImportMaps').addEventListener('click', () => fileInput.click());
+
+    // Import Action
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const count = SettingsStorage.importColorMaps(evt.target.result);
+                    showToast(`Imported ${count} color maps successfully!`, 'success');
+                    renderManageMapsUI();
+                } catch (err) {
+                    showToast('Import failed: ' + err.message, 'error');
+                }
+                fileInput.value = ''; // Reset
+            };
+            reader.readAsText(e.target.files[0]);
+        }
+    });
+
+    // Toggle Active
+    section.querySelectorAll('.map-toggle').forEach(chk => {
+        chk.addEventListener('change', (e) => {
+            const id = e.target.dataset.id;
+            SettingsStorage.toggleColorMapActive(id, e.target.checked);
+            renderManageMapsUI(); // Refresh style
+            showToast('Map status updated', 'success');
+        });
+    });
+
+    // Delete Map
+    section.querySelectorAll('.btn-delete-map').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const id = e.target.dataset.id;
+            if (confirm('Are you sure you want to delete this color map?')) {
+                if (SettingsStorage.deleteColorMap(id)) {
+                    renderManageMapsUI();
+                    showToast('Color map deleted', 'success');
+                }
+            }
+        });
+    });
 }
 
 

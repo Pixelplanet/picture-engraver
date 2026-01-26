@@ -6,11 +6,21 @@ import cors from 'cors';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
+import rateLimit from 'express-rate-limit';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 80;
+
+// Rate limiter for logs to prevent spam
+const logLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 log requests per windowMs
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
 
 // Logging Configuration
 const LOG_DIR = process.env.LOG_DIR || '/app/logs';
@@ -123,14 +133,20 @@ app.use(morgan(':real-ip - :method :url :status :res[content-length] - :response
 }));
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10kb' })); // Limit JSON body size to preventing flooding
 
 // Serve static files from the build directory
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // API Endpoint for Client Logs
-app.post('/api/log', (req, res) => {
+app.post('/api/log', logLimiter, (req, res) => {
     const { level, message, details } = req.body;
+
+    // Basic Input Validation
+    if (!message || typeof message !== 'string' || message.length > 500) {
+        return res.status(400).send('Invalid log message');
+    }
+
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
     // Update stats

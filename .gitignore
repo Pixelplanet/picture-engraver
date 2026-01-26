@@ -13,4 +13,7 @@ public/*.xcs
 tasks/*
 test-results/
 playwright-report/
-blob-report/
+# Deployment
+deploy-scripts/
+*.key
+deployment*.log

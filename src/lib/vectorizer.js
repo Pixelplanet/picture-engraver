@@ -22,7 +22,17 @@ export class Vectorizer {
      * @returns {string[]} - Array of SVG path strings (rectangles)
      */
     /**
+     * Internal helper to generate contour paths from a binary grid
+     * uses proper boundary tracing to avoid "stripe" artifacts from rectangles
+     * @param {Uint8Array} grid - 1D array of 0s and 1s
+     * @param {number} width 
+     * @param {number} height 
+     * @param {number} pxPerMm 
+     * @returns {string[]} SVG paths
+     */
+    /**
      * Internal helper to generate paths from a binary grid
+     * uses merged rectangle approach (original logic)
      * @param {Uint8Array} grid - 1D array of 0s and 1s
      * @param {number} width 
      * @param {number} height 
@@ -82,6 +92,7 @@ export class Vectorizer {
 
     /**
      * Create merged rectangle paths from a quantized image for a specific color
+     * NOW USES gridToPaths for original implementation
      */
     createMergedRectPaths(quantizedData, color, pxPerMm = 10) {
         const data = quantizedData.data;

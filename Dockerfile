@@ -18,6 +18,10 @@ RUN npm install --omit=dev
 COPY server.js .
 COPY --from=build /app/dist ./dist
 
+# Security: Run as non-root user
+RUN chown -R node:node /app
+USER node
+
 ENV PORT=80
 EXPOSE 80
 CMD ["node", "server.js"]
