@@ -132,9 +132,14 @@ export const SettingsStorage = {
                 data: DEFAULT_COLOR_MAP_DATA
             };
 
-            // Remove old default if exists (v1 or v2)
-            const oldIdx = maps.findIndex(m => m.id.startsWith('system_default_v'));
-            if (oldIdx !== -1) maps.splice(oldIdx, 1);
+            // Remove ANY old default maps if they exist to prevent duplicates
+            // We want exactly one system default map
+            let i = maps.length;
+            while (i--) {
+                if (maps[i].id.startsWith('system_default_v')) {
+                    maps.splice(i, 1);
+                }
+            }
 
             maps.unshift(defaultMap); // Add to beginning
             localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));

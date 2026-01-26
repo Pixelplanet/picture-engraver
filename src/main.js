@@ -159,7 +159,7 @@ function init() {
     setupAnalyzer();
     setupLightbox(); // Initialize lightbox listeners
 
-    Logger.info('Picture Engraver initialized', { appVersion: '1.33.0' });
+    Logger.info('Picture Engraver initialized', { appVersion: '1.4.0' });
 
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
@@ -1117,6 +1117,46 @@ function setupModals() {
     elements.closeLayerEditModal.addEventListener('click', () => closeModal(elements.layerEditModal));
     elements.btnCancelLayerEdit.addEventListener('click', () => closeModal(elements.layerEditModal));
     elements.btnSaveLayerEdit.addEventListener('click', saveLayerEdit);
+
+    // Setup Export Data
+    const btnExport = document.getElementById('btnExportData');
+    if (btnExport) {
+        btnExport.addEventListener('click', () => {
+            const json = SettingsStorage.exportColorMaps();
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `picture_engraver_data_${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('Data exported successfully!', 'success');
+        });
+    }
+
+    // Setup Import Data
+    const btnImport = document.getElementById('btnImportData');
+    const importInput = document.getElementById('importFileInput');
+    if (btnImport && importInput) {
+        btnImport.addEventListener('click', () => importInput.click());
+        importInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const count = SettingsStorage.importColorMaps(ev.target.result);
+                        showToast(`Imported ${count} color maps! Reloading...`, 'success');
+                        setTimeout(() => location.reload(), 1500);
+                    } catch (err) {
+                        showToast('Import failed: ' + err.message, 'error');
+                    }
+                };
+                reader.readAsText(e.target.files[0]);
+            }
+        });
+    }
 }
 
 function openModal(modal) {
@@ -1897,8 +1937,8 @@ function saveColorMap() {
 
 function setupMapManagement() {
     // Locate where to inject the management panel. 
-    // We'll put it in the #colorMapSection or create a new section below it.
-    const container = document.getElementById('colorMapSection');
+    // We'll put it in the #tabAnalyzer to ensure it's always visible even without active analysis
+    const container = document.getElementById('tabAnalyzer');
     if (!container) return; // Should not happen if DOM matches
 
     // Create section if not exists
@@ -1953,7 +1993,8 @@ function renderManageMapsUI() {
                         <div style="font-size: 0.8em; color: #888;">${date} • ${map.data.entries.length} Colors</div>
                     </div>
                     
-                    <button class="btn btn-icon btn-sm btn-delete-map" data-id="${map.id}" title="Delete" style="color: #ff4444; margin-left:10px;">🗑️</button>
+                    <button class="btn btn-icon btn-sm btn-export-single-map" data-id="${map.id}" title="Export this map" style="color: #4a90e2; margin-left:10px;">📤</button>
+                    <button class="btn btn-icon btn-sm btn-delete-map" data-id="${map.id}" title="Delete" style="color: #ff4444; margin-left:5px;">🗑️</button>
                 </div>
             `;
         });
@@ -2000,6 +2041,27 @@ function renderManageMapsUI() {
             };
             reader.readAsText(e.target.files[0]);
         }
+    });
+
+    // Export Single Map
+    section.querySelectorAll('.btn-export-single-map').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const id = e.target.closest('button').dataset.id;
+            const map = maps.find(m => m.id === id);
+            if (map) {
+                const exportData = { version: 1, exportedAt: new Date().toISOString(), maps: [map] };
+                const json = JSON.stringify(exportData, null, 2);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${map.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+        });
     });
 
     // Toggle Active

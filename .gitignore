@@ -17,3 +17,9 @@ playwright-report/
 deploy-scripts/
 *.key
 deployment*.log
+*.py
+picture_engraver_data_*.json
+picture_engraver_maps_*.json
+extracted_colors*.json
+duplicates_report*.txt
+cleanup_log.txt
