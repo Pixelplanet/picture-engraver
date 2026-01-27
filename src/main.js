@@ -159,7 +159,7 @@ function init() {
     setupAnalyzer();
     setupLightbox(); // Initialize lightbox listeners
 
-    Logger.info('Picture Engraver initialized', { appVersion: '1.6.1' });
+    Logger.info('Picture Engraver initialized', { appVersion: '1.6.2' });
 
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
@@ -780,6 +780,27 @@ function displayLayers() {
     });
 
     updateCalibrationStatus();
+    updateDownloadButtonState();
+}
+
+/**
+ * Update the download button state based on layer assignments
+ */
+function updateDownloadButtonState() {
+    if (!elements.btnDownloadXCS) return;
+
+    const unassignedLayers = state.layers.filter(l => l.visible && (l.frequency === null || l.lpi === null));
+    const btn = elements.btnDownloadXCS;
+
+    if (unassignedLayers.length > 0 && state.layers.length > 0) {
+        btn.disabled = true;
+        btn.title = `Please assign colors/settings to all ${unassignedLayers.length} pending layers first`;
+        btn.style.opacity = '0.5';
+    } else {
+        btn.disabled = false;
+        btn.title = 'Download XCS File';
+        btn.style.opacity = '1';
+    }
 }
 
 function updateCalibrationStatus() {
@@ -842,6 +863,9 @@ function autoAssignColors() {
 
             Logger.info('Auto-assign colors completed', { layersUpdated: state.layers.length });
             showToast(`Colors auto-assigned using calibrated color map!`, 'success');
+
+            // Onboarding action: Auto Assigning
+            if (window.onboarding) window.onboarding.handleAction('auto-assign');
         } catch (error) {
             Logger.error('Auto-assign error', { error: error.message });
             showToast('Failed to assign colors: ' + error.message, 'error');
