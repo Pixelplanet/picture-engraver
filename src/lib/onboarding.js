@@ -54,23 +54,33 @@ export class OnboardingManager {
 
         const modalHtml = `
             <div class="modal active" id="welcomeModal" style="z-index: 10000;">
-                <div class="modal-content welcome-content">
+                <div class="modal-content welcome-content" style="max-width: 550px;">
                     <div class="welcome-icon">👋</div>
-                    <h2>Welcome to Picture Engraver!</h2>
+                    <h2 style="margin-bottom: 20px;">Welcome to Picture Engraver!</h2>
                     
-                    <div class="privacy-notice" style="background: rgba(0, 122, 255, 0.05); border: 1px solid var(--border-primary); padding: 20px; border-radius: 8px;">
-                        <h4 style="margin-top: 0; color: var(--accent-primary);">🍪 Cookie & Privacy Consent</h4>
-                        <p style="margin-bottom: 10px;">
-                            This website uses <strong>Local Storage</strong> (similar to cookies) to save your settings and preferences. 
-                            This is required for the application to function.
+                    <div class="app-info-notice" style="text-align: left; background: rgba(88, 166, 255, 0.05); border: 1px solid var(--border-primary); padding: 20px; border-radius: 8px; margin-bottom: 15px;">
+                        <h4 style="margin-top: 0; color: var(--accent-primary); margin-bottom: 8px;">🚀 About this App</h4>
+                        <p style="margin-bottom: 15px; font-size: 0.95rem; line-height: 1.5;">
+                            This tool automates the creation of multi-colored laser engravings by converting images into calibrated vector layers. 
+                            By using your own test-grid results, it perfectly tunes Frequency and LPI settings for every color in your photo.
                         </p>
-                        <p style="margin-bottom: 0;">
-                            <strong>Privacy Promise:</strong> Everything runs 100% locally in your browser. 
-                            Your images never leave your device. We track nothing externally.
+                        
+                        <h4 style="margin-top: 20px; color: var(--accent-danger); margin-bottom: 8px;">⚠️ Hardware Compatibility</h4>
+                        <p style="margin-bottom: 0; font-size: 0.95rem; line-height: 1.5; border-left: 3px solid var(--accent-danger); padding-left: 12px;">
+                            This application is currently optimized <strong>exclusively for the XTool F2 Ultra UV</strong>. 
+                            It will not function correctly with other laser models at this time.
                         </p>
                     </div>
 
-                    <p>
+                    <div class="privacy-notice" style="text-align: left; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-primary); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin-top: 0; font-size: 0.9rem; color: var(--text-secondary);">🍪 Privacy & Storage</h4>
+                        <p style="margin-bottom: 0; font-size: 0.85rem; color: var(--text-secondary);">
+                            We use Local Storage to save your settings. All processing happens 100% locally in your browser.
+                            Your images never leave your device.
+                        </p>
+                    </div>
+
+                    <p style="margin-bottom: 25px; font-weight: 500;">
                         Ready to learn how to create perfect engravings?
                     </p>
 
