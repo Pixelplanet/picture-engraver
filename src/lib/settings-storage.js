@@ -18,9 +18,9 @@ const DEFAULT_SETTINGS = {
     freqMin: 40,
     freqMax: 80,
 
-    // LPI range (Lines Per Inch) - lowered to prevent wireframe rendering
-    lpiMin: 200,
-    lpiMax: 300,
+    // LPI range (Lines Per Inch) - optimized for XTool F2 Ultra UV
+    lpiMin: 500,
+    lpiMax: 2000,
 
     // Size defaults (mm)
     defaultWidth: 200,
@@ -28,11 +28,11 @@ const DEFAULT_SETTINGS = {
 
     // Standard Color Settings
     blackFreq: 40,
-    blackLpi: 300,
+    blackLpi: 500,
     blackSpeed: 425,
     blackPower: 70,
     whiteFreq: 40,
-    whiteLpi: 300,
+    whiteLpi: 500,
     whiteSpeed: 425,
     whitePower: 70
 };

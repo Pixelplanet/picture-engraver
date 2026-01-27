@@ -14,8 +14,8 @@ export class TestGridGenerator {
             cardHeight: 55,
 
             // Grid parameters
-            lpiMin: 300,
-            lpiMax: 800,
+            lpiMin: 500,
+            lpiMax: 2000,
             highLpiMode: false,
 
             freqMin: 40,
