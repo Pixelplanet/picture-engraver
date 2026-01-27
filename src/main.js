@@ -159,7 +159,7 @@ function init() {
     setupAnalyzer();
     setupLightbox(); // Initialize lightbox listeners
 
-    Logger.info('Picture Engraver initialized', { appVersion: '1.6.0' });
+    Logger.info('Picture Engraver initialized', { appVersion: '1.6.1' });
 
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
@@ -506,7 +506,9 @@ function displayVectorPreview() {
     state.layers.forEach(layer => {
         if (!layer.visible) return;
 
-        const colorStr = `rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b})`;
+        // Fallback to originalColor if calibrated color is not yet assigned
+        const displayColor = layer.color || layer.originalColor;
+        const colorStr = `rgb(${displayColor.r}, ${displayColor.g}, ${displayColor.b})`;
         layer.paths.forEach(path => {
             if (path && path.length > 0) {
                 // Use fill-rule: evenodd to handle holes correctly in combined paths
@@ -577,7 +579,8 @@ function displayLayers() {
 
         let colorHtml = '';
         if (isOutline) {
-            colorHtml = `<div class="layer-color" style="background-color: rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b});" data-layer-id="${layer.id}"></div>`;
+            const displayColor = layer.color || layer.originalColor;
+            colorHtml = `<div class="layer-color" style="background-color: rgb(${displayColor.r}, ${displayColor.g}, ${displayColor.b});" data-layer-id="${layer.id}"></div>`;
         } else {
             const assignedColor = layer.color;
             const assignedStyle = assignedColor
@@ -887,8 +890,8 @@ function openLayerEditModal(layerId) {
 
     // Populate inputs
     elements.layerEditName.value = layer.name;
-    elements.layerEditFreq.value = Math.round(layer.frequency);
-    elements.layerEditLpi.value = Math.round(layer.lpi);
+    elements.layerEditFreq.value = layer.frequency !== null ? Math.round(layer.frequency) : '';
+    elements.layerEditLpi.value = layer.lpi !== null ? Math.round(layer.lpi) : '';
 
     // Check if layer has specific speed/power, else fall back to global settings
     const speed = layer.speed !== undefined ? layer.speed : state.settings.speed;
