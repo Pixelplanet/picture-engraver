@@ -606,6 +606,12 @@ body {
   color: var(--text-tertiary);
 }
 
+.layer-settings.pending {
+  color: #ff9800;
+  /* Subtle orange warning */
+  font-style: italic;
+}
+
 .layer-actions {
   display: flex;
   gap: var(--spacing-xs);

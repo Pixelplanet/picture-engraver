@@ -159,7 +159,7 @@ function init() {
     setupAnalyzer();
     setupLightbox(); // Initialize lightbox listeners
 
-    Logger.info('Picture Engraver initialized', { appVersion: '1.5.3' });
+    Logger.info('Picture Engraver initialized', { appVersion: '1.6.0' });
 
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
@@ -380,11 +380,11 @@ async function processImage() {
                     state.layers = palette.map((color, index) => ({
                         id: `layer-${index}`,
                         name: `Layer ${index + 1}`,
-                        color: { ...color },
+                        color: null, // Explicitly null until assigned
                         originalColor: { ...color }, // Store static original color
                         visible: true,
-                        frequency: calculateFrequency(index, numColors),
-                        lpi: calculateLPI(index, numColors),
+                        frequency: null,
+                        lpi: null,
                         outline: false,
                         paths: []
                     }));
@@ -571,17 +571,25 @@ function displayLayers() {
                 <button class="btn btn-sm btn-primary btn-add-outline" title="Add Outline Layer" data-layer-id="${layer.id}" style="margin-right: 5px; font-size: 0.8em; display:flex; align-items:center; gap:4px;"><span>+</span> Add Outline</button>
                 <button class="btn btn-icon btn-sm" title="Edit" data-action="edit" data-layer-id="${layer.id}">✏️</button>
             `;
-            settingsHtml = `<div class="layer-settings">${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)} LPI</div>`;
+            const hasSettings = layer.frequency !== null && layer.lpi !== null;
+            settingsHtml = `<div class="layer-settings ${hasSettings ? '' : 'pending'}">${hasSettings ? `${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)} LPI` : '⚠️ Settings Pending'}</div>`;
         }
 
         let colorHtml = '';
         if (isOutline) {
             colorHtml = `<div class="layer-color" style="background-color: rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b});" data-layer-id="${layer.id}"></div>`;
         } else {
+            const assignedColor = layer.color;
+            const assignedStyle = assignedColor
+                ? `background-color: rgb(${assignedColor.r}, ${assignedColor.g}, ${assignedColor.b});`
+                : `background: #2e2e2e; border: 1px dashed #555; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #888;`;
+
+            const assignedContent = assignedColor ? '' : '<span>?</span>';
+
             colorHtml = `
                 <div class="layer-colors-container">
                     <div class="layer-color original" style="background-color: rgb(${layer.originalColor.r}, ${layer.originalColor.g}, ${layer.originalColor.b});" title="Original detected color"></div>
-                    <div class="layer-color assigned" style="background-color: rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b}); cursor: pointer;" data-layer-id="${layer.id}" title="Assigned calibrated color - Click to edit"></div>
+                    <div class="layer-color assigned" style="${assignedStyle} cursor: pointer;" data-layer-id="${layer.id}" title="${assignedColor ? 'Assigned calibrated color - Click to edit' : 'No color assigned - Click to pick'}">${assignedContent}</div>
                 </div>
             `;
         }
@@ -813,7 +821,7 @@ function autoAssignColors() {
         try {
             // For each layer, find the closest matching color from the calibration data
             state.layers.forEach(layer => {
-                const bestMatch = findClosestCalibrationColor(layer.color, colorMap.entries);
+                const bestMatch = findClosestCalibrationColor(layer.originalColor, colorMap.entries);
 
                 if (bestMatch) {
                     layer.frequency = bestMatch.frequency;
@@ -1078,6 +1086,13 @@ function setupExport() {
 async function downloadXCS() {
     if (state.layers.length === 0) {
         showToast('Please process an image first', 'error');
+        return;
+    }
+
+    // Check if any visible layer is missing settings
+    const unassignedLayers = state.layers.filter(l => l.visible && (l.frequency === null || l.lpi === null));
+    if (unassignedLayers.length > 0) {
+        showToast(`${unassignedLayers.length} layers have no color/settings assigned! Use "Auto Assign" or click the squares to pick colors manually.`, 'error');
         return;
     }
 
