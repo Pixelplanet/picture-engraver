@@ -200,38 +200,33 @@ export class OnboardingManager {
                 onShow: () => this.toggleProcessButton(true)
             },
             {
-                target: '.layer-colors-container',
-                title: '4. Color Mapping',
-                description: 'The left square is the <strong>original</strong> color. The right square (with 🎯) is the <strong>assigned</strong> calibrated color.'
-            },
-            {
                 target: '.layer-color.assigned',
-                title: '5. Manual Adjustment',
-                description: 'Click the assigned color square (🎯) to open the manual selection grid.',
+                title: '4. Color Mapping & Tuning',
+                description: 'The left square is the <strong>original</strong> color. The right square (🎯) is the <strong>calibrated</strong> color. <strong>Click it</strong> to manually pick a different color from your calibration.',
                 waitForAction: 'edit-modal-open'
             },
             {
                 target: '#layerEditColorGrid',
-                title: '6. Pick a Calibrated Color',
+                title: '5. Pick a Calibrated Color',
                 description: 'Select a color from the grid. These colors are pulled directly from your laser calibration data!',
                 waitForAction: 'color-picked',
                 placement: 'top'
             },
             {
                 target: '#btnSaveLayerEdit',
-                title: '7. Save Changes',
+                title: '6. Save Changes',
                 description: 'Click "Save Changes" to apply your custom color selection.',
                 waitForAction: 'save-edit'
             },
             {
                 target: '#previewPanel',
-                title: '8. Preview Results',
+                title: '7. Preview Results',
                 description: 'Review the output layers and vector paths here.',
                 placement: 'left'
             },
             {
                 target: '#btnDownloadXCS',
-                title: '9. Export',
+                title: '8. Export',
                 description: 'Click to download. <br><small><strong>Note:</strong> xTool Creative Space may take a while to render the vectors. The image might look weird until loading finishes.</small>',
                 waitForAction: 'download'
             }
@@ -305,8 +300,8 @@ export class OnboardingManager {
             <div class="tour-tooltip-footer">
                 <button class="btn-tour-skip" onclick="window.onboarding.endTour()">Stop</button>
                 <div style="flex:1"></div>
-                <button class="btn-tour-back" onclick="window.onboarding.prevStep()" ${index === 0 ? 'disabled' : ''}>
-                    ← Back
+                <button class="btn-tour-restart" onclick="window.onboarding.restartTour()" ${index === 0 ? 'disabled' : ''}>
+                    🔄 Restart
                 </button>
                 <button class="btn-tour-next" id="tourNextBtn" onclick="window.onboarding.nextStep()" ${isWaiting ? 'disabled' : ''}>
                     ${btnNextText}
@@ -398,10 +393,9 @@ export class OnboardingManager {
         this.showStep(this.currentStepIndex);
     }
 
-    prevStep() {
-        if (this.currentStepIndex > 0) {
-            this.currentStepIndex--;
-            this.showStep(this.currentStepIndex);
+    restartTour() {
+        if (confirm('Restart the tutorial from the beginning? This will refresh the page.')) {
+            location.reload();
         }
     }
 
