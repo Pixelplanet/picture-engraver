@@ -522,12 +522,42 @@ body {
   height: 18px;
 }
 
-.layer-color {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  border: 2px solid var(--border-primary);
+.layer-colors-container {
+  display: flex;
+  gap: 4px;
   flex-shrink: 0;
+}
+
+.layer-color {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-primary);
+  flex-shrink: 0;
+}
+
+.layer-color.assigned {
+  position: relative;
+  box-shadow: var(--shadow-sm);
+}
+
+.layer-color.assigned::after {
+  content: '🎯';
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-size: 10px;
+  background: var(--bg-secondary);
+  border-radius: 50%;
+  padding: 1px;
+}
+
+.layer-color.original {
+  opacity: 0.8;
+  width: 20px;
+  height: 20px;
+  align-self: center;
+  border-style: dashed;
 }
 
 .layer-info {

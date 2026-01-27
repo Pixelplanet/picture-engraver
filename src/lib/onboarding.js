@@ -75,13 +75,20 @@ export class OnboardingManager {
                     </p>
 
                     <div class="modal-actions" style="justify-content: center; gap: 15px;">
-                        <button class="btn btn-secondary" onclick="document.getElementById('welcomeModal').remove(); window.onboarding.endTour();">Accept & Skip</button>
+                        <button class="btn btn-secondary" onclick="window.onboarding.skipOnboarding()">Accept & Skip</button>
                         <button class="btn btn-primary" onclick="window.onboarding.startMainTour()">Accept & Start Tour</button>
                     </div>
                 </div>
             </div>
         `;
         document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
+
+    skipOnboarding() {
+        const modal = document.getElementById('welcomeModal');
+        if (modal) modal.remove();
+        this.markCompleted();
+        this.toggleProcessButton(true);
     }
 
     showTestGridInfoModal() {
@@ -162,14 +169,38 @@ export class OnboardingManager {
                 onShow: () => this.toggleProcessButton(true)
             },
             {
+                target: '.layer-colors-container',
+                title: '4. Color Mapping',
+                description: 'The left square is the <strong>original</strong> color. The right square (with 🎯) is the <strong>assigned</strong> calibrated color.'
+            },
+            {
+                target: '.layer-color.assigned',
+                title: '5. Manual Adjustment',
+                description: 'Click the assigned color square (🎯) to open the manual selection grid.',
+                waitForAction: 'edit-modal-open'
+            },
+            {
+                target: '#layerEditColorGrid',
+                title: '6. Pick a Calibrated Color',
+                description: 'Select a color from the grid. These colors are pulled directly from your laser calibration data!',
+                waitForAction: 'color-picked',
+                placement: 'top'
+            },
+            {
+                target: '#btnSaveLayerEdit',
+                title: '7. Save Changes',
+                description: 'Click "Save Changes" to apply your custom color selection.',
+                waitForAction: 'save-edit'
+            },
+            {
                 target: '#previewPanel',
-                title: '4. Preview Results',
+                title: '8. Preview Results',
                 description: 'Review the output layers and vector paths here.',
-                placement: 'left' // Changed to left side
+                placement: 'left'
             },
             {
                 target: '#btnDownloadXCS',
-                title: '5. Export',
+                title: '9. Export',
                 description: 'Click to download. <br><small><strong>Note:</strong> xTool Creative Space may take a while to render the vectors. The image might look weird until loading finishes.</small>',
                 waitForAction: 'download'
             }
@@ -235,8 +266,11 @@ export class OnboardingManager {
             <h3>${step.title}</h3>
             <p>${step.description}</p>
             <div class="tour-tooltip-footer">
-                <button class="btn-tour-skip" onclick="window.onboarding.endTour()">Stop Tutorial</button>
+                <button class="btn-tour-skip" onclick="window.onboarding.endTour()">Stop</button>
                 <div style="flex:1"></div>
+                <button class="btn-tour-back" onclick="window.onboarding.prevStep()" ${index === 0 ? 'disabled' : ''}>
+                    ← Back
+                </button>
                 <button class="btn-tour-next" id="tourNextBtn" onclick="window.onboarding.nextStep()" ${isWaiting ? 'disabled' : ''}>
                     ${btnNextText}
                 </button>
@@ -295,21 +329,29 @@ export class OnboardingManager {
         const currentStep = this.tourSteps[this.currentStepIndex];
 
         if (currentStep && currentStep.waitForAction === actionName) {
-            // If this is the last step (Export), end the tour immediately with success
-            if (this.currentStepIndex === this.tourSteps.length - 1) {
-                this.endTour();
-                // Optional: Show a "Tutorial Complete" toast via main app if possible, 
-                // but sticking to silent close is fine as Download action usually shows its own feedback.
-                return;
-            }
+            // Special case: if we are at the Save step, add a small delay to let modal close
+            const isSaveStep = actionName === 'save-edit';
+            const delay = isSaveStep ? 400 : 0;
 
             const btn = document.getElementById('tourNextBtn');
             if (btn) {
-                btn.innerText = 'Success! Next →';
+                btn.innerText = 'Success! →';
                 btn.disabled = false;
-                setTimeout(() => this.nextStep(), 600);
+
+                // If it's the last step, end it
+                if (this.currentStepIndex === this.tourSteps.length - 1) {
+                    setTimeout(() => this.endTour(), 600);
+                    return;
+                }
+
+                setTimeout(() => this.nextStep(), delay);
             } else {
-                this.nextStep();
+                // If we don't have a button, just advance
+                if (this.currentStepIndex === this.tourSteps.length - 1) {
+                    this.endTour();
+                } else {
+                    setTimeout(() => this.nextStep(), delay);
+                }
             }
         }
     }
@@ -317,6 +359,13 @@ export class OnboardingManager {
     nextStep() {
         this.currentStepIndex++;
         this.showStep(this.currentStepIndex);
+    }
+
+    prevStep() {
+        if (this.currentStepIndex > 0) {
+            this.currentStepIndex--;
+            this.showStep(this.currentStepIndex);
+        }
     }
 
     endTour() {

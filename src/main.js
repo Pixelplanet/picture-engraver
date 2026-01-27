@@ -159,7 +159,7 @@ function init() {
     setupAnalyzer();
     setupLightbox(); // Initialize lightbox listeners
 
-    Logger.info('Picture Engraver initialized', { appVersion: '1.4.0' });
+    Logger.info('Picture Engraver initialized', { appVersion: '1.4.1' });
 
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
@@ -380,7 +380,8 @@ async function processImage() {
                     state.layers = palette.map((color, index) => ({
                         id: `layer-${index}`,
                         name: `Layer ${index + 1}`,
-                        color: color,
+                        color: { ...color },
+                        originalColor: { ...color }, // Store static original color
                         visible: true,
                         frequency: calculateFrequency(index, numColors),
                         lpi: calculateLPI(index, numColors),
@@ -573,9 +574,21 @@ function displayLayers() {
             settingsHtml = `<div class="layer-settings">${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)} LPI</div>`;
         }
 
+        let colorHtml = '';
+        if (isOutline) {
+            colorHtml = `<div class="layer-color" style="background-color: rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b});" data-layer-id="${layer.id}"></div>`;
+        } else {
+            colorHtml = `
+                <div class="layer-colors-container">
+                    <div class="layer-color original" style="background-color: rgb(${layer.originalColor.r}, ${layer.originalColor.g}, ${layer.originalColor.b});" title="Original detected color"></div>
+                    <div class="layer-color assigned" style="background-color: rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b}); cursor: pointer;" data-layer-id="${layer.id}" title="Assigned calibrated color - Click to edit"></div>
+                </div>
+            `;
+        }
+
         layerEl.innerHTML = `
       <input type="checkbox" class="layer-checkbox" ${layer.visible ? 'checked' : ''} data-layer-id="${layer.id}">
-      <div class="layer-color" style="background-color: rgb(${layer.color.r}, ${layer.color.g}, ${layer.color.b}); cursor: pointer;" data-layer-id="${layer.id}" title="Click to edit"></div>
+      ${colorHtml}
       <div class="layer-info">
         <div class="layer-name">${layer.name}</div>
         ${settingsHtml}
@@ -600,7 +613,7 @@ function displayLayers() {
     });
 
     // Add event listeners for Color Click
-    container.querySelectorAll('.layer-color').forEach(colorEl => {
+    container.querySelectorAll('.layer-color.assigned').forEach(colorEl => {
         colorEl.addEventListener('click', (e) => {
             const layerId = e.target.dataset.layerId;
             openLayerEditModal(layerId);
@@ -880,6 +893,9 @@ function openLayerEditModal(layerId) {
     renderLayerColorGrid();
 
     openModal(elements.layerEditModal);
+
+    // Onboarding action: Edit Modal Opened
+    if (window.onboarding) window.onboarding.handleAction('edit-modal-open');
 }
 
 function renderLayerColorGrid() {
@@ -978,6 +994,9 @@ function renderLayerColorGrid() {
             state.pendingLayerColor = color;
             // Also store the options to apply
             state.pendingLayerOptions = { speed: entry.speed, power: entry.power };
+
+            // Onboarding action: Color Picked from Grid
+            if (window.onboarding) window.onboarding.handleAction('color-picked');
         });
 
         grid.appendChild(div);
@@ -1019,6 +1038,9 @@ function saveLayerEdit() {
 
     closeModal(elements.layerEditModal);
     state.editingLayerId = null;
+
+    // Onboarding action: Saved edit (Trigger AFTER closing modal)
+    if (window.onboarding) window.onboarding.handleAction('save-edit');
 }
 
 // ===================================
@@ -1059,6 +1081,11 @@ async function downloadXCS() {
         return;
     }
 
+    const btn = elements.btnDownloadXCS;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Generating...';
+
     try {
         // Generate XCS
         const generator = new XCSGenerator(state.settings);
@@ -1082,6 +1109,9 @@ async function downloadXCS() {
     } catch (error) {
         console.error('XCS generation error:', error);
         showToast('Error generating XCS: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
     }
 }
 
