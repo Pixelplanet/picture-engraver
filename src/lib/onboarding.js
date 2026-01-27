@@ -145,6 +145,26 @@ export class OnboardingManager {
             this.elements.tooltip.className = 'tour-tooltip';
             document.body.appendChild(this.elements.tooltip);
         }
+
+        // Add window listeners for responsiveness
+        if (!this._listenersInitialized) {
+            window.addEventListener('resize', () => {
+                if (this.isActive) this.updateCurrentStepPosition();
+            });
+            window.addEventListener('scroll', () => {
+                if (this.isActive) this.updateCurrentStepPosition();
+            }, true); // Use capture to catch scroll events in nested containers
+            this._listenersInitialized = true;
+        }
+    }
+
+    updateCurrentStepPosition() {
+        if (!this.isActive || this.currentStepIndex < 0) return;
+        const step = this.tourSteps[this.currentStepIndex];
+        const targetEl = document.querySelector(step.target);
+        if (targetEl && targetEl.offsetParent !== null) {
+            this.positionElements(targetEl, step, this.currentStepIndex);
+        }
     }
 
     startMainTour() {
@@ -169,7 +189,8 @@ export class OnboardingManager {
             {
                 target: '#controlsSection',
                 title: '2. Adjust Settings',
-                description: 'Set your size and parameters. The <strong>Dithering</strong> slider controls how many colors are used.'
+                description: 'Set your size and parameters. The <strong>Dithering</strong> slider controls how many colors are used.',
+                placement: 'top'
             },
             {
                 target: '#btnProcess',
@@ -230,23 +251,29 @@ export class OnboardingManager {
 
         if (!targetEl || targetEl.offsetParent === null) {
             if (step.onShow) step.onShow();
+            // Try one more time after onShow
             const targetElRetry = document.querySelector(step.target);
             if (!targetElRetry || targetElRetry.offsetParent === null) {
                 this.showStep(index + 1);
                 return;
             }
-            this.positionElements(targetElRetry, step, index);
-            targetElRetry.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            this.showStepHandle(targetElRetry, step, index);
             return;
         }
 
+        this.showStepHandle(targetEl, step, index);
+    }
+
+    showStepHandle(targetEl, step, index) {
         if (step.onShow) step.onShow();
 
+        // Ensure target is visible
         targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-        requestAnimationFrame(() => {
+        // Add a small delay for scroll to finish
+        setTimeout(() => {
             this.positionElements(targetEl, step, index);
-        });
+        }, 300);
     }
 
     positionElements(targetEl, step, index) {
