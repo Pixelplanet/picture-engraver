@@ -200,33 +200,38 @@ export class OnboardingManager {
                 onShow: () => this.toggleProcessButton(true)
             },
             {
+                target: '.layers-list',
+                title: '4. Layer Overview',
+                description: 'The image has been processed into separate layers. Each row represents a specific laser setting pass for a distinct color.'
+            },
+            {
                 target: '.layer-color.assigned',
-                title: '4. Color Mapping & Tuning',
-                description: 'The left square is the <strong>original</strong> color. The right square (🎯) is the <strong>calibrated</strong> color. <strong>Click it</strong> to manually pick a different color from your calibration.',
+                title: '5. Manual Tuning',
+                description: 'The left square is the original color. The right square (🎯) is the calibrated color. <strong>Click it</strong> to manually pick a different setting if needed.',
                 waitForAction: 'edit-modal-open'
             },
             {
                 target: '#layerEditColorGrid',
-                title: '5. Pick a Calibrated Color',
+                title: '6. Pick a Calibrated Color',
                 description: 'Select a color from the grid. These colors are pulled directly from your laser calibration data!',
                 waitForAction: 'color-picked',
                 placement: 'top'
             },
             {
                 target: '#btnSaveLayerEdit',
-                title: '6. Save Changes',
+                title: '7. Save Changes',
                 description: 'Click "Save Changes" to apply your custom color selection.',
                 waitForAction: 'save-edit'
             },
             {
                 target: '#previewPanel',
-                title: '7. Preview Results',
+                title: '8. Preview Results',
                 description: 'Review the output layers and vector paths here.',
                 placement: 'left'
             },
             {
                 target: '#btnDownloadXCS',
-                title: '8. Export',
+                title: '9. Export',
                 description: 'Click to download. <br><small><strong>Note:</strong> xTool Creative Space may take a while to render the vectors. The image might look weird until loading finishes.</small>',
                 waitForAction: 'download'
             }
