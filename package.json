@@ -1,6 +1,6 @@
 {
   "name": "picture-engraver",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Convert images to XCS laser engraving files for stainless steel color engraving",
   "type": "module",
   "scripts": {

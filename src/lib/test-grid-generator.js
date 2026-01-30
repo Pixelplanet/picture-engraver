@@ -4,7 +4,7 @@
  */
 
 import jsQR from 'jsqr';
-import { create as createQR } from 'qrcode';
+import QRCode from 'qrcode';
 
 export class TestGridGenerator {
     constructor(settings = {}) {
@@ -199,9 +199,8 @@ export class TestGridGenerator {
     // Generate QR Code Path
     generateQRPath(text, x, y, size) {
         try {
-            // Use low version and high error correction for better readability
-            const qr = createQR(text, {
-                errorCorrectionLevel: 'Q' // Auto version
+            const qr = QRCode.create(text, {
+                errorCorrectionLevel: 'M' // Medium is enough and smaller
             });
             const modules = qr.modules;
             const count = modules.size;
@@ -210,18 +209,16 @@ export class TestGridGenerator {
 
             for (let r = 0; r < count; r++) {
                 for (let c = 0; c < count; c++) {
-                    if (modules.get(c, r)) {
+                    if (modules.get(r, c)) { // row, col
                         const cx = x + c * cellSize;
                         const cy = y + r * cellSize;
-                        // Use simple L commands for compatibility
-                        path += `M${cx} ${cy} L${cx + cellSize} ${cy} L${cx + cellSize} ${cy + cellSize} L${cx} ${cy + cellSize} Z `;
+                        path += `M${cx.toFixed(3)} ${cy.toFixed(3)}h${cellSize.toFixed(3)}v${cellSize.toFixed(3)}h-${cellSize.toFixed(3)}z `;
                     }
                 }
             }
             return path;
         } catch (e) {
-            console.error('QR Gen Error', e);
-            // Fallback: square placeholder
+            console.error('QR Gen Error:', e);
             return `M${x} ${y}L${x + size} ${y}L${x + size} ${y + size}L${x} ${y + size}Z`;
         }
     }
