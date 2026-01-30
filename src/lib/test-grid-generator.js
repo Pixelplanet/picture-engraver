@@ -199,8 +199,16 @@ export class TestGridGenerator {
     // Generate QR Code Path
     generateQRPath(text, x, y, size) {
         try {
-            const qr = QRCode.create(text, {
-                errorCorrectionLevel: 'M' // Medium is enough and smaller
+            // Robustly find the create function (handles different bundling targets)
+            let qrc = QRCode;
+            if (qrc && qrc.default) qrc = qrc.default;
+
+            if (typeof qrc.create !== 'function') {
+                throw new Error('QRCode.create is not a function');
+            }
+
+            const qr = qrc.create(text, {
+                errorCorrectionLevel: 'M'
             });
             const modules = qr.modules;
             const count = modules.size;
@@ -212,6 +220,7 @@ export class TestGridGenerator {
                     if (modules.get(r, c)) { // row, col
                         const cx = x + c * cellSize;
                         const cy = y + r * cellSize;
+                        // Use relative coordinates for smaller output
                         path += `M${cx.toFixed(3)} ${cy.toFixed(3)}h${cellSize.toFixed(3)}v${cellSize.toFixed(3)}h-${cellSize.toFixed(3)}z `;
                     }
                 }
@@ -219,7 +228,9 @@ export class TestGridGenerator {
             return path;
         } catch (e) {
             console.error('QR Gen Error:', e);
-            return `M${x} ${y}L${x + size} ${y}L${x + size} ${y + size}L${x} ${y + size}Z`;
+            // Fallback: A recognizable frame with an X instead of a solid box
+            const s = size;
+            return `M${x} ${y}h${s}v${s}h-${s}z M${x + 2} ${y + 2}L${x + s - 2} ${y + s - 2} M${x + s - 2} ${y + 2}L${x + 2} ${y + s - 2}`;
         }
     }
 
