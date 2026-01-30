@@ -1896,14 +1896,24 @@ function drawGridToCanvas(canvasId, settings) {
     const qrX = (margin + qrStartCol * (cellSize + gap)) * scale;
     const qrY = (margin + qrStartRow * (cellSize + gap)) * scale;
 
-    ctx.fillStyle = '#000';
-    ctx.fillRect(qrX, qrY, qrSize, qrSize);
+    // Real QR Rendering
+    if (gridInfo.qrData) {
+        const qrPathStr = generator.generateQRPath(gridInfo.qrData, qrX, qrY, qrSize);
+        const p = new Path2D(qrPathStr);
+        ctx.fillStyle = '#000';
+        ctx.fill(p);
+    } else {
+        // Fallback for older grids or errors
+        ctx.fillStyle = '#000';
+        ctx.fillRect(qrX, qrY, qrSize, qrSize);
+    }
 
     return gridInfo;
 }
 
 function updateStandardPreview() {
-    drawGridToCanvas('standardPreviewCanvas', {});
+    const currentSettings = SettingsStorage.load();
+    drawGridToCanvas('standardPreviewCanvas', currentSettings);
 }
 
 function downloadTestGridXCS(xcsContent, filename) {
