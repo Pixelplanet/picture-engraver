@@ -65,7 +65,9 @@ export class XCSGenerator {
                             repeat: layer.passes !== undefined ? layer.passes : (parseInt(this.settings.passes) || 1),
                             frequency: layer.frequency !== undefined ? layer.frequency : 60,
                             lpi: layer.lpi !== undefined ? layer.lpi : 300,
-                            crossHatch: layer.crossHatch !== undefined ? layer.crossHatch : (this.settings.crossHatch || false)
+                            crossHatch: layer.crossHatch !== undefined ? layer.crossHatch : (this.settings.crossHatch || false),
+                            // Base Support
+                            pulseWidth: layer.pulseWidth !== undefined ? layer.pulseWidth : (parseInt(this.settings.pulseWidth) || 80)
                         });
                     }
                 }
@@ -73,6 +75,15 @@ export class XCSGenerator {
         });
 
         // Top-level Structure matching Documentation
+        const deviceId = this.settings.activeDevice || 'f2_ultra_uv';
+        const isMopa = deviceId === 'f2_ultra_mopa' || deviceId === 'f2_ultra_base';
+
+        // Device Identifiers
+        // "GS009-CLASS-4" is definitely the UV module
+        // "GS009-CLASS-1" is a guess for the Base/Blue module, or we use a safe fallback
+        const extId = isMopa ? "GS009-CLASS-1" : "GS009-CLASS-4";
+        const extName = isMopa ? "F2 Ultra (MOPA)" : "F2 Ultra UV";
+
         const fileContent = {
             "canvasId": canvasId,
             "canvas": [{
@@ -82,12 +93,12 @@ export class XCSGenerator {
                 "groupData": {},
                 "displays": displays
             }],
-            "extId": "GS009-CLASS-4", // F2 Ultra ID
-            "extName": "F2 Ultra UV",
+            "extId": extId,
+            "extName": extName,
             "version": "1.3.6",
             "created": timestamp,
             "modify": timestamp,
-            "device": this.generateDeviceData(canvasId, displays, displaySettingsMap)
+            "device": this.generateDeviceData(canvasId, displays, displaySettingsMap, isMopa)
         };
 
         // Return minified JSON as per spec
@@ -107,13 +118,35 @@ export class XCSGenerator {
         return data;
     }
 
-    generateDeviceData(canvasId, displays, displaySettingsMap) {
+    generateDeviceData(canvasId, displays, displaySettingsMap, isMopa) {
         // Build map of display settings
         const displayEntries = displays.map(display => {
             // Get settings for this specific display
             const s = displaySettingsMap.get(display.id) || {
-                speed: 100, power: 10, repeat: 1, frequency: 60, lpi: 300, crossHatch: false
+                speed: 100, power: 10, repeat: 1, frequency: 60, lpi: 300, crossHatch: false, pulseWidth: 80
             };
+
+            const customize = {
+                "speed": parseInt(s.speed),
+                "power": parseInt(s.power),
+                "repeat": parseInt(s.repeat),
+                "frequency": parseInt(s.frequency),
+                "density": parseInt(s.lpi),
+                "dpi": parseInt(s.lpi),
+                "enableKerf": false,
+                "kerfDistance": 0,
+                "bitmapScanMode": s.crossHatch ? 'crossMode' : 'lineMode',
+                "crossAngle": s.crossHatch,
+                "bitmapEngraveMode": "normal",
+                "scanAngle": 0
+            };
+
+            // Inject MOPA-specific parameters if active
+            if (isMopa) {
+                customize.pulseWidth = parseInt(s.pulseWidth) || 80;
+                customize.mopaFrequency = parseInt(s.frequency); // Map standard freq to mopaFreq
+                customize.processingLightSource = "red";
+            }
 
             return [
                 display.id,
@@ -126,20 +159,7 @@ export class XCSGenerator {
                             "materialType": "customize",
                             "planType": "dot_cloud",
                             "parameter": {
-                                "customize": {
-                                    "speed": parseInt(s.speed),
-                                    "power": parseInt(s.power),
-                                    "repeat": parseInt(s.repeat),
-                                    "frequency": parseInt(s.frequency),
-                                    "density": parseInt(s.lpi),
-                                    "dpi": parseInt(s.lpi),
-                                    "enableKerf": false,
-                                    "kerfDistance": 0,
-                                    "bitmapScanMode": s.crossHatch ? 'crossMode' : 'lineMode',
-                                    "crossAngle": s.crossHatch,
-                                    "bitmapEngraveMode": "normal",
-                                    "scanAngle": 0
-                                }
+                                "customize": customize
                             }
                         }
                     },
@@ -149,6 +169,10 @@ export class XCSGenerator {
         });
 
         // Build canvas settings map
+        // Base implies Fiber/MOPA (Red/Infrared) for F2 Ultra Base
+        // UV is 'uv'
+        const lightSource = isMopa ? "red" : "uv";
+
         const canvasEntry = [
             canvasId,
             {
@@ -156,7 +180,7 @@ export class XCSGenerator {
                 "data": {
                     "LASER_PLANE": {
                         "material": 0,
-                        "lightSourceMode": "uv",
+                        "lightSourceMode": lightSource,
                         "thickness": 0,
                         "isProcessByLayer": false,
                         "pathPlanning": "auto",
@@ -176,7 +200,7 @@ export class XCSGenerator {
         ];
 
         return {
-            "id": "GS009-CLASS-4",
+            "id": isMopa ? "GS009-CLASS-1" : "GS009-CLASS-4",
             "power": [20],
             "data": {
                 "dataType": "Map",

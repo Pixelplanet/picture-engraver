@@ -5,10 +5,17 @@ export default defineConfig({
     publicDir: '../public',
     build: {
         outDir: '../dist',
-        emptyOutDir: true
+        emptyOutDir: true,
+        rollupOptions: {
+            input: {
+                main: 'src/index.html',
+                privacy: 'src/privacy.html',
+                'privacy-en': 'src/privacy-en.html'
+            }
+        }
     },
     server: {
         port: 3002,
-        open: true
+        open: false
     }
 });

@@ -7,42 +7,98 @@ const STORAGE_KEY = 'pictureEngraverSettings';
 
 import { DEFAULT_COLOR_MAP_DATA } from './default-color-map.js';
 
-const DEFAULT_SETTINGS = {
-    // Engraving defaults
-    power: 70,
-    speed: 425,
-    passes: 1,
-    crossHatch: true,
+// Device Profiles definitions
+export const DEVICE_PROFILES = {
+    'f2_ultra_uv': {
+        id: 'f2_ultra_uv',
+        name: 'XTool F2 Ultra (UV)',
+        description: 'Optimized for UV Laser Module',
+        settings: {
+            // Engraving defaults
+            power: 70,
+            speed: 425,
+            passes: 1,
+            crossHatch: true,
+            // Frequency range (kHz)
+            freqMin: 40,
+            freqMax: 80,
+            // LPI range
+            lpiMin: 300,
+            lpiMax: 2000,
+            // Standard Color Settings (UV Defaults)
+            blackFreq: 40,
+            blackLpi: 500,
+            blackSpeed: 100,
+            blackPower: 100,
+            whiteFreq: 123,
+            whiteLpi: 400,
+            whiteSpeed: 425,
+            whitePower: 70
+        }
+    },
+    'f2_ultra_mopa': {
+        id: 'f2_ultra_mopa',
+        name: 'XTool F2 Ultra (MOPA)',
+        description: 'Standard Fiber/Diode usage (MOPA)',
+        settings: {
+            // Engraving defaults
+            power: 14,
+            speed: 1000,
+            passes: 1,
+            crossHatch: false,
+            pulseWidth: 80,
 
-    // Frequency range (kHz)
-    freqMin: 40,
-    freqMax: 80,
+            // Grid Ranges (Speed vs Frequency)
+            freqMin: 200,
+            freqMax: 1200,
+            speedMin: 200,
+            speedMax: 1200,
 
-    // LPI range (Lines Per Inch) - optimized for XTool F2 Ultra UV
-    lpiMin: 500,
-    lpiMax: 2000,
+            // Lines/cm (LPC) - High Density
+            lpiMin: 300,
+            lpiMax: 5000,
+            lpi: 5000,
 
+            // Standard Color Settings (MOPA Defaults)
+            blackFreq: 30,
+            blackLpi: 300,
+            blackSpeed: 1000,
+            blackPower: 80,
+            whiteFreq: 50,
+            whiteLpi: 300,
+            whiteSpeed: 1000,
+            whitePower: 40
+        }
+    },
+};
+
+const DEFAULT_PROFILE_ID = 'f2_ultra_uv'; // Default to UV for backward compat
+
+const COMMON_DEFAULTS = {
     // Size defaults (mm)
     defaultWidth: 200,
     defaultHeight: 200,
-
-    // Standard Color Settings
-    blackFreq: 40,
-    blackLpi: 500,
-    blackSpeed: 425,
-    blackPower: 70,
-    whiteFreq: 40,
-    whiteLpi: 500,
-    whiteSpeed: 425,
-    whitePower: 70
+    activeDevice: null // Will be set by user
 };
 
 export const SettingsStorage = {
     /**
-     * Get default settings
+     * Get available profiles
      */
-    getDefaults() {
-        return { ...DEFAULT_SETTINGS };
+    getProfiles() {
+        return DEVICE_PROFILES;
+    },
+
+    /**
+     * Get default settings for a specific profile (or system default)
+     */
+    getDefaults(profileId = DEFAULT_PROFILE_ID) {
+        const profile = DEVICE_PROFILES[profileId] || DEVICE_PROFILES[DEFAULT_PROFILE_ID];
+        return {
+            ...COMMON_DEFAULTS,
+            ...profile.settings,
+            activeDevice: profileId
+        };
     },
 
     /**
@@ -53,11 +109,21 @@ export const SettingsStorage = {
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
                 const parsed = JSON.parse(stored);
-                return { ...DEFAULT_SETTINGS, ...parsed };
+
+                // If we have an active device, ensure we merge with THAT device's defaults
+                // to get correct ranges (in case they changed in code)
+                const deviceId = parsed.activeDevice || DEFAULT_PROFILE_ID;
+                const baseDefaults = this.getDefaults(deviceId);
+
+                // We overlay parsed settings on top of defaults
+                // But we must be careful: if the user switched devices, we might want to respect that
+                return { ...baseDefaults, ...parsed };
             }
         } catch (error) {
             console.warn('Failed to load settings:', error);
         }
+        // If nothing stored, return defaults
+        // Note: activeDevice will be 'f2_ultra_uv' but logic might check if it was explicitly chosen later
         return this.getDefaults();
     },
 
@@ -66,6 +132,11 @@ export const SettingsStorage = {
      */
     save(settings) {
         try {
+            // Ensure activeDevice is preserved
+            if (!settings.activeDevice) {
+                console.warn('Saving settings without activeDevice, defaulting to UV');
+                settings.activeDevice = DEFAULT_PROFILE_ID;
+            }
             localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
             return true;
         } catch (error) {

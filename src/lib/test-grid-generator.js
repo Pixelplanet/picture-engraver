@@ -111,32 +111,33 @@ export class TestGridGenerator {
         };
     }
 
-    createDisplaySettings(frequency, lpi, power, speed, passes) {
+    createDisplaySettings(frequency, lpi, power, speed, passes, extraParams = {}) {
+        const customize = {
+            bitmapEngraveMode: 'normal',
+            speed,
+            density: lpi,
+            dpi: lpi,
+            power,
+            repeat: passes,
+            bitmapScanMode: this.settings.crossHatch ? 'crossMode' : 'lineMode',
+            frequency,
+            crossAngle: this.settings.crossHatch,
+            scanAngle: 0,
+            angleType: 2,
+            ...extraParams // Inject extra params like pulseWidth, mopaFrequency, processingLightSource
+        };
+
         return {
             isFill: true, type: 'PATH', processingType: 'FILL_VECTOR_ENGRAVING',
             data: {
-                VECTOR_CUTTING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { power, speed, repeat: passes, frequency: 40 } } },
-                VECTOR_ENGRAVING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { speed, power, repeat: passes, frequency: 40 } } },
+                VECTOR_CUTTING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, frequency: 40 } } },
+                VECTOR_ENGRAVING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, frequency: 40 } } },
                 FILL_VECTOR_ENGRAVING: {
                     materialType: 'customize', planType: 'dot_cloud',
-                    parameter: {
-                        customize: {
-                            bitmapEngraveMode: 'normal',
-                            speed,
-                            density: lpi,
-                            dpi: lpi,
-                            power,
-                            repeat: passes,
-                            bitmapScanMode: this.settings.crossHatch ? 'crossMode' : 'lineMode',
-                            frequency,
-                            crossAngle: this.settings.crossHatch,
-                            scanAngle: 0,
-                            angleType: 2
-                        }
-                    }
+                    parameter: { customize }
                 },
-                INTAGLIO: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { speed: 80, density: 300, power: 1, repeat: 1, frequency: 40 } } },
-                INNER_THREE_D: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { subdivide: 0.1, speed: 80, power: 1, repeat: 1, frequency: 40 } } }
+                INTAGLIO: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, speed: 80, density: 300, power: 1, repeat: 1, frequency: 40 } } },
+                INNER_THREE_D: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, subdivide: 0.1, speed: 80, power: 1, repeat: 1, frequency: 40 } } }
             },
             processIgnore: false
         };
@@ -145,13 +146,17 @@ export class TestGridGenerator {
     // Encode settings for QR code
     encodeSettings(numCols, numRows) {
         const s = this.settings;
+        const deviceId = this.settings.activeDevice || 'f2_ultra_uv';
+        const type = (deviceId.includes('mopa') || deviceId.includes('base')) ? 'mopa' : 'uv';
+
         // Use very short keys to reduce QR code density
         return JSON.stringify({
             v: 1,
             l: [s.lpiMax, s.lpiMin, numCols],
             f: [s.freqMin, s.freqMax, numRows],
             p: s.power,
-            s: s.speed
+            s: s.speed,
+            t: type
         });
     }
 
@@ -169,6 +174,7 @@ export class TestGridGenerator {
                     freq: raw.f || raw.freq,
                     pwr: raw.p || raw.pwr,
                     spd: raw.s || raw.spd,
+                    type: raw.t || 'uv', // Default to UV if missing
                     ts: raw.ts || Date.now()
                 };
 
@@ -195,8 +201,7 @@ export class TestGridGenerator {
         try {
             // Use low version and high error correction for better readability
             const qr = createQR(text, {
-                errorCorrectionLevel: 'Q', // Medium-High error correction
-                version: 5 // Allow larger versions for more data
+                errorCorrectionLevel: 'Q' // Auto version
             });
             const modules = qr.modules;
             const count = modules.size;
@@ -324,6 +329,17 @@ export class TestGridGenerator {
         layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
 
         // Build XCS
+        const deviceId = this.settings.activeDevice || 'f2_ultra_uv';
+        const isMopa = deviceId === 'f2_ultra_mopa' || deviceId === 'f2_ultra_base';
+
+        if (isMopa) {
+            return this.generateMopaGrid(canvasId, now);
+        }
+
+        const extId = "GS009-CLASS-4";
+        const extName = "F2 Ultra UV";
+        const lightSource = "uv";
+
         const xcs = {
             canvasId,
             canvas: [{
@@ -333,19 +349,19 @@ export class TestGridGenerator {
                 groupData: {},
                 displays
             }],
-            extId: 'GS009-CLASS-4',
-            extName: 'F2 Ultra UV',
+            extId: extId,
+            extName: extName,
             version: '1.3.6',
             created: now,
             modify: now,
             device: {
-                id: 'GS009-CLASS-4',
+                id: extId,
                 power: [5],
                 data: {
                     dataType: 'Map',
                     value: [[canvasId, {
                         mode: 'LASER_PLANE',
-                        data: { LASER_PLANE: { material: 0, lightSourceMode: 'uv', thickness: 117, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
+                        data: { LASER_PLANE: { material: 0, lightSourceMode: lightSource, thickness: 117, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
                         displays: { dataType: 'Map', value: displaySettings }
                     }]]
                 },
@@ -370,4 +386,130 @@ export class TestGridGenerator {
             }
         };
     }
+
+
+    generateMopaGrid(canvasId, now) {
+        const s = this.settings;
+        const displays = [];
+        const displaySettings = [];
+        const layerData = {};
+
+        // MOPA Grid Configuration
+        // X-Axis: Speed
+        // Y-Axis: Frequency
+        const speedMin = s.speedMin || 200;
+        const speedMax = s.speedMax || 1200;
+        const freqMin = s.freqMin || 200;
+        const freqMax = s.freqMax || 1200;
+
+        // Constants (User Confirmed: Power 14, Pulse 80, LPI 5000 LPC)
+        const power = s.power || 14;
+        const lpi = s.lpi || 5000;
+        const pulseWidth = s.pulseWidth || 80;
+        const passes = s.passes || 1;
+
+        // XCS Structure for MOPA
+        const extId = "GS009-CLASS-1";
+        const extName = "F2 Ultra (MOPA)";
+        const lightSource = "red"; // MOPA IR
+
+        // Layout Config
+        const cols = Math.floor((s.cardWidth - (s.margin * 2)) / (s.cellSize + s.cellGap));
+        const rows = Math.floor((s.cardHeight - (s.margin * 2)) / (s.cellSize + s.cellGap));
+
+        // Calculate steps
+        const speedStep = cols > 1 ? (speedMax - speedMin) / (cols - 1) : 0;
+        const freqStep = rows > 1 ? (freqMax - freqMin) / (rows - 1) : 0;
+
+        let zOrder = 1;
+
+        // Iterate Rows (Frequency: Min to Max, top to bottom)
+        for (let r = 0; r < rows; r++) {
+            const rowFreq = Math.round(freqMin + (r * freqStep));
+
+            // Iterate Cols (Speed: Min to Max, left to right)
+            for (let c = 0; c < cols; c++) {
+                const colSpeed = Math.round(speedMin + (c * speedStep));
+
+                // ID & Position
+                const id = this.generateUUID();
+                const x = s.margin + (c * (s.cellSize + s.cellGap));
+                const y = s.margin + (r * (s.cellSize + s.cellGap));
+
+                // Color Helper (Gray Gradient)
+                const grayVal = Math.floor(255 - ((c / cols) * 200));
+                const colorHex = this.rgbToHex(grayVal, grayVal, grayVal);
+                const colorInt = (grayVal << 16) | (grayVal << 8) | grayVal;
+
+                // Create Path
+                const path = `M${x} ${y} L${x + s.cellSize} ${y} L${x + s.cellSize} ${y + s.cellSize} L${x} ${y + s.cellSize} Z`;
+
+                // Display Name: "S{speed} F{freq}"
+                const displayName = `S${colSpeed} F${rowFreq}`;
+
+                const display = this.createPathDisplay(id, displayName, colorHex, colorInt, x, y, s.cellSize, s.cellSize, zOrder, path);
+                displays.push(display);
+
+                // Settings Injection
+                const extraParams = {
+                    pulseWidth: pulseWidth,
+                    mopaFrequency: rowFreq, // Specific for MOPA
+                    processingLightSource: lightSource
+                };
+
+                // Pass rowFreq as standard frequency too, though MOPA might use mopaFrequency
+                const settingsStr = this.createDisplaySettings(rowFreq, lpi, power, colSpeed, passes, extraParams);
+
+                displaySettings.push([id, settingsStr]);
+                layerData[colorHex] = { name: displayName, order: zOrder++, visible: true };
+            }
+        }
+
+        const xcs = {
+            canvasId,
+            canvas: [{
+                id: canvasId,
+                title: `MOPA Grid S${speedMin}-${speedMax} F${freqMin}-${freqMax}`,
+                layerData,
+                groupData: {},
+                displays
+            }],
+            extId: extId,
+            extName: extName,
+            version: '1.3.6',
+            created: now,
+            modify: now,
+            device: {
+                id: extId,
+                power: [20],
+                data: {
+                    dataType: 'Map',
+                    value: [[canvasId, {
+                        mode: 'LASER_PLANE',
+                        data: { LASER_PLANE: { material: 0, lightSourceMode: lightSource, thickness: 0, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
+                        displays: { dataType: 'Map', value: displaySettings }
+                    }]]
+                },
+                materialList: [],
+                materialTypeList: [],
+                customProjectData: { tangentialCuttingUuids: [], flyCutUuid2CanvasIds: {} }
+            }
+        };
+
+        return {
+            xcs: JSON.stringify(xcs),
+            gridInfo: {
+                width: s.cardWidth,
+                height: s.cardHeight,
+                numCols: cols,
+                numRows: rows,
+                totalCells: cols * rows,
+                qrData: "{}",
+                qrSize: 0,
+                qrX: 0,
+                qrY: 0
+            }
+        };
+    }
+
 }

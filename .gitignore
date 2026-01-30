@@ -23,3 +23,9 @@ picture_engraver_maps_*.json
 extracted_colors*.json
 duplicates_report*.txt
 cleanup_log.txt
+
+# Assistant & Skills
+.agent/
+
+# Test Artifacts
+tests/*.png

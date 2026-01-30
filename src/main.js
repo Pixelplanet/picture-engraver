@@ -3,6 +3,12 @@
  * Converts images to XCS laser engraving files
  */
 
+import '@fontsource/inter/300.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
+
 import { TestGridGenerator } from './lib/test-grid-generator.js';
 import { SettingsStorage } from './lib/settings-storage.js';
 import { ImageProcessor } from './lib/image-processor.js';
@@ -11,6 +17,7 @@ import { Vectorizer } from './lib/vectorizer.js';
 import { XCSGenerator } from './lib/xcs-generator.js';
 import { showToast } from './lib/toast.js';
 import { Logger } from './lib/logger.js';
+import { LandingPage } from './lib/landing-page.js';
 import { OnboardingManager } from './lib/onboarding.js';
 
 
@@ -91,6 +98,8 @@ const elements = {
     settingSpeed: document.getElementById('settingSpeed'),
     settingPasses: document.getElementById('settingPasses'),
     settingCrossHatch: document.getElementById('settingCrossHatch'),
+    settingPulseWidth: document.getElementById('settingPulseWidth'),
+    rowPulseWidth: document.getElementById('rowPulseWidth'),
     settingFreqMin: document.getElementById('settingFreqMin'),
     settingFreqMax: document.getElementById('settingFreqMax'),
     settingLpiMin: document.getElementById('settingLpiMin'),
@@ -143,10 +152,26 @@ const elements = {
 // Initialization
 // ===================================
 function init() {
-    // Load settings
-    state.settings = SettingsStorage.load();
-    SettingsStorage.ensureSystemDefaultMap(); // Ensure default map exists
-    applySettingsToUI();
+    // 1. Initialize Settings Storage & Defaults
+    SettingsStorage.ensureSystemDefaultMap();
+
+    // 2. Initialize Landing Page for Device Selection
+    const landingPage = new LandingPage(SettingsStorage, (deviceId) => {
+        console.log('Device selected:', deviceId);
+
+        // RELOAD Settings completely to get the correct defaults for this device
+        state.settings = SettingsStorage.load();
+
+        // Update UI with new settings (ranges, defaults)
+        applySettingsToUI();
+
+        // Update Header/UI to show current device
+        updateDeviceUI(deviceId);
+    });
+
+    // 3. Show Landing Page (if needed)
+    // This will either trigger the callback immediately (if saved) or show UI
+    landingPage.show();
 
     // Setup event listeners
     setupDropZone();
@@ -157,7 +182,7 @@ function init() {
     setupExport();
     setupTestGrid();
     setupAnalyzer();
-    setupLightbox(); // Initialize lightbox listeners
+    setupLightbox();
 
     Logger.info('Picture Engraver initialized', { appVersion: '1.6.2' });
 
@@ -168,6 +193,50 @@ function init() {
     // Hook Help Button
     document.getElementById('btnHelp').addEventListener('click', () => {
         window.onboarding.showWelcomeModal();
+    });
+
+    // Add "Switch Device" capability (e.g., via title click or new button)
+    // For now, let's just make the title in header clickable if in dev mode?
+    // Or add a small indicator.
+    setupDeviceSwitching(landingPage);
+}
+
+function updateDeviceUI(deviceId) {
+    const profiles = SettingsStorage.getProfiles();
+    const profile = profiles[deviceId];
+
+    if (profile) {
+        // Update Title or Add Badge
+        const titleContainer = document.querySelector('.title-container .brand-subtitle');
+        if (titleContainer) {
+            titleContainer.innerHTML = `by lasertools.org &nbsp; <span class="device-badge" style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; cursor:pointer;" title="Click to switch device">📍 ${profile.name}</span>`;
+
+            // Add click listener to the badge to re-open landing page
+            const badge = titleContainer.querySelector('.device-badge');
+            badge.addEventListener('click', () => {
+                // We need to access landingPage instance. 
+                // Since this is inside a function, we might need a global ref or pass it.
+                // See setupDeviceSwitching below which handles the logic easier.
+                // We'll leave the click handling to setupDeviceSwitching mostly, 
+                // but here we just render the visual.
+            });
+        }
+    }
+}
+
+function setupDeviceSwitching(landingPage) {
+    // Attach listener to the badge we created in updateDeviceUI
+    // Since badge is dynamic, we use event delegation or just re-attach
+    // Actually, simpler: let's add a button to the header right
+
+    // OR, just make the subtitle clickable as implemented above, 
+    // but we need to ensure the element exists.
+
+    const titleContainer = document.querySelector('.title-container');
+    titleContainer.addEventListener('click', (e) => {
+        if (e.target.closest('.device-badge')) {
+            landingPage.show(true); // Force show
+        }
     });
 }
 
@@ -1250,6 +1319,15 @@ function applySettingsToUI() {
     elements.settingLpiMin.value = s.lpiMin;
     elements.settingLpiMax.value = s.lpiMax;
 
+    // Separation Logic: Pulse Width
+    const isMopa = s.activeDevice === 'f2_ultra_mopa' || s.activeDevice === 'f2_ultra_base'; // Support legacy
+    if (elements.rowPulseWidth) {
+        elements.rowPulseWidth.style.display = isMopa ? 'flex' : 'none';
+        if (isMopa) {
+            elements.settingPulseWidth.value = s.pulseWidth || 80;
+        }
+    }
+
     // Standard Colors
     document.getElementById('settingBlackFreq').value = s.blackFreq || 40;
     document.getElementById('settingBlackLpi').value = s.blackLpi || 300;
@@ -1259,10 +1337,12 @@ function applySettingsToUI() {
 
 function saveSettings() {
     state.settings = {
+        ...state.settings,
         power: parseInt(elements.settingPower.value),
         speed: parseInt(elements.settingSpeed.value),
         passes: parseInt(elements.settingPasses.value),
         crossHatch: elements.settingCrossHatch.checked,
+        pulseWidth: parseInt(elements.settingPulseWidth ? elements.settingPulseWidth.value : 80),
         freqMin: parseInt(elements.settingFreqMin.value),
         freqMax: parseInt(elements.settingFreqMax.value),
         lpiMin: parseInt(elements.settingLpiMin.value),
@@ -1323,10 +1403,14 @@ function setupTestGrid() {
     document.getElementById('btnPreviewGrid').addEventListener('click', updateGridPreview);
     document.getElementById('btnGenerateGrid').addEventListener('click', generateCustomGridXCS);
 
-    /* Converted to direct link in HTML
+    // Standard Grid Button
     const btnStd = document.getElementById('btnGenerateStandard');
-    if (btnStd) btnStd.addEventListener('click', generateStandardGridXCS);
-    */
+    if (btnStd) {
+        btnStd.addEventListener('click', (e) => {
+            e.preventDefault(); // Prevent # navigation
+            generateStandardGridXCS();
+        });
+    }
 
     // Modal Tabs
     const tabs = document.querySelectorAll('.modal-tab');
@@ -1718,20 +1802,50 @@ function unused_updateGridPreview() {
 }
 */
 
+
+function getSmartGridFilename(prefix, settings, deviceId) {
+    const devLabel = deviceId.includes('mopa') || deviceId.includes('base') ? 'MOPA' : 'UV';
+    let name = `${prefix}_F2_${devLabel}`;
+
+    if (devLabel === 'MOPA') {
+        name += `_S${settings.speedMin}-${settings.speedMax}_F${settings.freqMin}-${settings.freqMax}`;
+    } else {
+        const lpiUnit = settings.highLpiMode ? 'LPC' : 'LPI';
+        name += `_${lpiUnit}${settings.lpiMin}-${settings.lpiMax}_F${settings.freqMin}-${settings.freqMax}`;
+    }
+    return name;
+}
+
 function generateStandardGridXCS() {
+    const currentSettings = SettingsStorage.load();
+    const deviceId = currentSettings.activeDevice || 'f2_ultra_uv';
+    const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
+
+    const filename = isMopa ? 'default_test_grid_MOPA.xcs' : 'default_test_grid_UV.xcs';
+    const encodedFilename = encodeURIComponent(filename);
+
     const a = document.createElement('a');
-    a.href = '/default_test_grid.xcs';
-    a.download = 'default_test_grid.xcs';
+    a.href = `/${encodedFilename}`; // Public root
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    showToast('Default grid downloaded.', 'success');
+
+    showToast(`Downloaded standard grid for ${isMopa ? 'MOPA' : 'UV'}`, 'success');
 }
 
 function generateCustomGridXCS() {
-    if (!activeGridGenerator) activeGridGenerator = new TestGridGenerator(getCustomGridSettings());
-    const { xcs } = activeGridGenerator.generateBusinessCardGrid();
-    downloadTestGridXCS(xcs, 'custom_grid');
+    const customSettings = getCustomGridSettings();
+    if (!activeGridGenerator) activeGridGenerator = new TestGridGenerator(customSettings);
+
+    // Always regenerate to capture latest settings if reused
+    const generator = new TestGridGenerator(customSettings);
+    const { xcs } = generator.generateBusinessCardGrid();
+
+    const deviceId = state.settings.activeDevice || 'f2_ultra_uv';
+    const filename = getSmartGridFilename('CustomGrid', customSettings, deviceId);
+
+    downloadTestGridXCS(xcs, filename);
 }
 
 function drawGridToCanvas(canvasId, settings) {
@@ -1792,17 +1906,23 @@ function updateStandardPreview() {
     drawGridToCanvas('standardPreviewCanvas', {});
 }
 
-function downloadTestGridXCS(xcsContent, prefix) {
+function downloadTestGridXCS(xcsContent, filename) {
     const blob = new Blob([xcsContent], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${prefix}_${Date.now()}.xcs`;
+
+    // Ensure extension
+    if (!filename.endsWith('.xcs')) {
+        filename += '.xcs';
+    }
+
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    showToast('Grid XCS downloaded successfully!', 'success');
+    showToast(`Downloaded: ${filename}`, 'success');
 }
 
 // Analyzer Functions
@@ -1860,6 +1980,7 @@ async function analyzeGridImage(img) {
             <div class="detected-value"><span>LPI Range</span> <span>${s.lpi[0]} - ${s.lpi[1]} LPI</span></div>
             <div class="detected-value"><span>Grid Size</span> <span>${s.lpi[2]} × ${s.freq[2]}</span></div>
             <div class="detected-value"><span>Power / Speed</span> <span>${s.pwr}% / ${s.spd} mm/s</span></div>
+            <div class="detected-value"><span>Laser Type</span> <span>${(s.type || 'UV').toUpperCase()}</span></div>
         `;
 
         showToast('QR Code detected! Now click the 4 corners of the card to align the grid.', 'success');

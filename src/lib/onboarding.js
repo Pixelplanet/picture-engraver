@@ -14,6 +14,14 @@ export class OnboardingManager {
     }
 
     init() {
+        // Check for mobile device first
+        if (this.isMobile()) {
+            this.showMobileWarning();
+            // Ensure process button is visible for mobile users since they skip tour
+            this.toggleProcessButton(true);
+            return;
+        }
+
         // Always check completion status
         if (this.hasCompletedOnboarding()) return;
 
@@ -22,6 +30,33 @@ export class OnboardingManager {
 
         // Show welcome/consent modal
         setTimeout(() => this.showWelcomeModal(), 500);
+    }
+
+    isMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    }
+
+    showMobileWarning() {
+        const modalHtml = `
+            <div class="modal active" id="mobileWarningModal" style="z-index: 10000; background: rgba(0,0,0,0.9);">
+                <div class="modal-content welcome-content" style="max-width: 400px; border: 1px solid #ff4444;">
+                    <div class="welcome-icon">📱</div>
+                    <h2 style="margin-bottom: 15px; color: #ff4444;">Desktop Required</h2>
+                    
+                    <p style="margin-bottom: 20px; line-height: 1.6;">
+                        Picture Engraver is a powerful image processing tool designed for <strong>desktop computers</strong>.
+                    </p>
+                     <p style="margin-bottom: 25px; line-height: 1.6; font-size: 0.9em; color: #aaa;">
+                        The interface and canvas controls are not optimized for touch screens or small displays.
+                    </p>
+
+                    <div class="modal-actions" style="justify-content: center;">
+                        <button class="btn btn-secondary" onclick="document.getElementById('mobileWarningModal').remove();">I Understand, Continue Anyway</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
     }
 
     toggleProcessButton(visible) {
@@ -54,13 +89,12 @@ export class OnboardingManager {
 
         const modalHtml = `
             <div class="modal active" id="welcomeModal" style="z-index: 10000;">
-                <div class="modal-content welcome-content" style="max-width: 550px;">
-                    <div class="welcome-icon">👋</div>
-                    <h2 style="margin-bottom: 20px;">Welcome to Picture Engraver!</h2>
+                    <div class="welcome-content" style="max-width: 550px;">
+                        <h2 style="margin-bottom: 20px;">Welcome to Picture Engraver!</h2>
                     
-                    <div class="app-info-notice" style="text-align: left; background: rgba(88, 166, 255, 0.05); border: 1px solid var(--border-primary); padding: 20px; border-radius: 8px; margin-bottom: 15px;">
-                        <h4 style="margin-top: 0; color: var(--accent-primary); margin-bottom: 8px;">🚀 About this App</h4>
-                        <p style="margin-bottom: 15px; font-size: 0.95rem; line-height: 1.5;">
+                        <div class="app-info-notice" style="text-align: left; background: rgba(88, 166, 255, 0.05); border: 1px solid var(--border-primary); padding: 20px; border-radius: 8px; margin-bottom: 15px;">
+                            <h4 style="margin-top: 0; color: var(--accent-primary); margin-bottom: 8px;">🚀 About this App</h4>
+                            <p style="margin-bottom: 15px; font-size: 0.95rem; line-height: 1.5;">
                             This tool automates the creation of multi-colored laser engravings by converting images into calibrated vector layers. 
                             By using your own test-grid results, it perfectly tunes Frequency and LPI settings for every color in your photo.
                         </p>
@@ -168,6 +202,11 @@ export class OnboardingManager {
     }
 
     startMainTour() {
+        if (this.isMobile()) {
+            this.showMobileWarning();
+            return;
+        }
+
         const modal = document.getElementById('welcomeModal');
         if (modal) modal.remove();
 

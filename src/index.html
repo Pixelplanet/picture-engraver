@@ -9,9 +9,6 @@
   <link rel="icon" type="image/png" href="./logo.png">
   <link rel="stylesheet" href="./style.css">
   <link rel="stylesheet" href="./onboarding.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 
 <body>
@@ -105,7 +102,7 @@
             <span>🔄</span> Process Image
           </button>
           <div style="margin-top: 15px; font-size: 0.75em; color: #888; text-align: center;">
-            v1.6.2
+            v1.7.1
           </div>
         </div>
       </section>
@@ -187,6 +184,10 @@
               <label>Cross Hatch</label>
               <input type="checkbox" class="checkbox" id="settingCrossHatch" checked>
             </div>
+            <div class="setting-row" id="rowPulseWidth">
+              <label>Pulse Width (ns)</label>
+              <input type="number" class="input" id="settingPulseWidth" value="80" min="1">
+            </div>
           </div>
 
 
@@ -204,7 +205,7 @@
           </div>
 
           <div class="setting-group">
-            <h3>LPI Range (Lines Per Inch)</h3>
+            <h3>Lines/cm Range (LPC)</h3>
             <div class="setting-row">
               <label>Min</label>
               <input type="number" class="input" id="settingLpiMin" value="300" min="100" max="1000">
@@ -225,7 +226,7 @@
               <input type="number" class="input" id="settingBlackFreq" value="40" min="20" max="150">
             </div>
             <div class="setting-row">
-              <label>LPI</label>
+              <label>Lines/cm</label>
               <input type="number" class="input" id="settingBlackLpi" value="300" min="10" max="1000">
             </div>
             <div class="setting-row">
@@ -245,7 +246,7 @@
               <input type="number" class="input" id="settingWhiteFreq" value="40" min="20" max="150">
             </div>
             <div class="setting-row">
-              <label>LPI</label>
+              <label>Lines/cm</label>
               <input type="number" class="input" id="settingWhiteLpi" value="300" min="10" max="1000">
             </div>
             <div class="setting-row">
@@ -314,7 +315,7 @@
                   <li><strong>Format:</strong> 85mm × 55mm (Business Card)</li>
                   <li><strong>Density:</strong> 122 Test Points (14 × 9 Grid)</li>
                   <li><strong>Frequency:</strong> 40kHz - 90kHz (Optimized range)</li>
-                  <li><strong>LPI:</strong> 800 - 300 (High to Low)</li>
+                  <li><strong>Lines/cm:</strong> 800 - 300 (High to Low)</li>
                   <li><strong>Passes:</strong> 2 (Crosshatch enabled)</li>
                   <li><strong>Smart QR:</strong> Located at bottom-right, scanned for auto-settings.</li>
                 </ul>
@@ -326,8 +327,7 @@
                 </div>
 
                 <div class="action-row" style="text-align: right; margin-top: auto;">
-                  <a href="/default_test_grid.xcs" download="default_test_grid.xcs" class="btn btn-primary btn-lg"
-                    id="btnGenerateStandard" style="width: 100%;">
+                  <a href="#" class="btn btn-primary btn-lg" id="btnGenerateStandard" style="width: 100%;">
                     <span>💾</span> Download Standard XCS
                   </a>
                 </div>
@@ -367,7 +367,7 @@
 
                 <!-- LPI Settings -->
                 <div class="setting-group">
-                  <h3>Lines Per Inch</h3>
+                  <h3>Lines/cm (LPC)</h3>
                   <div class="setting-row">
                     <label>Min</label>
                     <input type="number" class="input" id="gridLpiMin" value="300" min="100" max="800">
@@ -377,7 +377,7 @@
                     <input type="number" class="input" id="gridLpiMax" value="800" min="100" max="4000">
                   </div>
                   <div class="setting-row">
-                    <label>Enable High LPI (up to 4000)</label>
+                    <label>Enable High Density (up to 5000)</label>
                     <input type="checkbox" class="checkbox" id="gridHighLpiMode">
                   </div>
                 </div>
@@ -525,7 +525,7 @@
 
                       <!-- LPI Range -->
                       <div class="setting-group">
-                        <h3>LPI</h3>
+                        <h3>Lines/cm</h3>
                         <div class="setting-row">
                           <label>Min</label>
                           <input type="number" class="input" id="manualLpiMin" value="200">
@@ -561,7 +561,7 @@
                     style="font-size: 0.8em; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
                     Selected Settings</div>
                   <div id="activeSelectionText"
-                    style="font-weight: 600; font-size: 1.1em; color: var(--primary-color);">40kHz / 800 LPI</div>
+                    style="font-weight: 600; font-size: 1.1em; color: var(--primary-color);">40kHz / 800 Lines/cm</div>
                 </div>
               </div>
 
@@ -617,7 +617,7 @@
               <input type="number" class="input" id="layerEditFreq" min="20" max="150">
             </div>
             <div class="setting-row">
-              <label>LPI (Lines/Inch)</label>
+              <label>Lines/cm</label>
               <input type="number" class="input" id="layerEditLpi" min="10" max="1000">
             </div>
             <div class="setting-row">
@@ -653,7 +653,9 @@
     <footer class="footer">
       <div class="footer-left">
         &copy; 2026 Thomas Winnerl
-        <a href="https://github.com/Pixelplanet/picture-engraver" target="_blank">GitHub</a>
+        <a href="https://github.com/Pixelplanet/picture-engraver" target="_blank" rel="noopener">GitHub</a>
+        <a href="./privacy.html">Datenschutz</a>
+        <a href="./privacy-en.html">Privacy Policy</a>
       </div>
       <div class="footer-right">
         <span class="donate-label">Help keep this website running:</span>
@@ -681,6 +683,12 @@
         <div id="progressFill" style="width: 0%; height: 100%; background: #4a90e2; transition: width 0.3s;"></div>
       </div>
     </div>
+  </div>
+
+  <!-- Device Selection Overlay -->
+  <div id="deviceSelectionOverlay"
+    style="position: fixed; inset: 0; background: #1a1a1a; z-index: 20000; display: none; align-items: center; justify-content: center; flex-direction: column;">
+    <!-- Content injected by JS -->
   </div>
 
   <script type="module" src="./main.js"></script>
