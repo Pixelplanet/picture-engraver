@@ -67,7 +67,7 @@ test.describe('Main Flow', () => {
         await expect(page).toHaveTitle(/Picture Engraver/);
         await expect(page.locator('.header .title')).toHaveText('Picture Engraver');
         // Version is present in the UI
-        await expect(page.locator('text=v1.7.2')).toBeAttached();
+        await expect(page.locator('text=v1.7.3')).toBeAttached();
     });
 
     test('should upload image, process, and handle validation', async ({ page }) => {

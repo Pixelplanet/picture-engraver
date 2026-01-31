@@ -643,7 +643,13 @@ function displayLayers() {
                 <button class="btn btn-icon btn-sm" title="Edit" data-action="edit" data-layer-id="${layer.id}">✏️</button>
             `;
             const hasSettings = layer.frequency !== null && layer.lpi !== null;
-            settingsHtml = `<div class="layer-settings ${hasSettings ? '' : 'pending'}">${hasSettings ? `${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)} LPI` : '⚠️ Settings Pending'}</div>`;
+            let settingsText = '⚠️ Settings Pending';
+            if (hasSettings) {
+                settingsText = `${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)}LPI`;
+                if (layer.speed) settingsText += ` / ${layer.speed}mm/s`;
+                if (layer.power) settingsText += ` / ${layer.power}%`;
+            }
+            settingsHtml = `<div class="layer-settings ${hasSettings ? '' : 'pending'}">${settingsText}</div>`;
         }
 
         let colorHtml = '';
@@ -912,13 +918,31 @@ function autoAssignColors() {
     // Allow UI to update before processing
     setTimeout(() => {
         try {
-            // For each layer, find the closest matching color from the calibration data
+            // Pool for matching: Standard Colors + Calibrated Map
+            const s = state.settings;
+            const standardColors = [
+                {
+                    color: { r: 0, g: 0, b: 0 },
+                    frequency: s.blackFreq, lpi: s.blackLpi,
+                    speed: s.blackSpeed, power: s.blackPower
+                },
+                {
+                    color: { r: 255, g: 255, b: 255 },
+                    frequency: s.whiteFreq, lpi: s.whiteLpi,
+                    speed: s.whiteSpeed, power: s.whitePower
+                }
+            ];
+            const matchPool = [...standardColors, ...colorMap.entries];
+
+            // For each layer, find the closest matching color from the pool
             state.layers.forEach(layer => {
-                const bestMatch = findClosestCalibrationColor(layer.originalColor, colorMap.entries);
+                const bestMatch = findClosestCalibrationColor(layer.originalColor, matchPool);
 
                 if (bestMatch) {
                     layer.frequency = bestMatch.frequency;
                     layer.lpi = bestMatch.lpi;
+                    layer.speed = bestMatch.speed;
+                    layer.power = bestMatch.power;
                     // Use the actual calibrated color as requested
                     layer.color = { ...bestMatch.color };
                 }
@@ -1015,23 +1039,24 @@ function renderLayerColorGrid() {
 
     // Always add Black and White as standard colors
     // Standard colors from settings
-    const { blackFreq, blackLpi, blackSpeed, blackPower, whiteFreq, whiteLpi, whiteSpeed, whitePower } = state.settings;
+    const s = state.settings;
+    if (!s) return;
 
     const standardColors = [
         {
             color: { r: 0, g: 0, b: 0 },
-            frequency: blackFreq || 40,
-            lpi: blackLpi || 300,
-            speed: blackSpeed || 425,
-            power: blackPower || 70,
+            frequency: s.blackFreq,
+            lpi: s.blackLpi,
+            speed: s.blackSpeed,
+            power: s.blackPower,
             name: 'Standard Black'
         },
         {
             color: { r: 255, g: 255, b: 255 },
-            frequency: whiteFreq || 40,
-            lpi: whiteLpi || 300,
-            speed: whiteSpeed || 425,
-            power: whitePower || 70,
+            frequency: s.whiteFreq,
+            lpi: s.whiteLpi,
+            speed: s.whiteSpeed,
+            power: s.whitePower,
             name: 'Standard White'
         }
     ];
@@ -1328,11 +1353,16 @@ function applySettingsToUI() {
         }
     }
 
-    // Standard Colors
-    document.getElementById('settingBlackFreq').value = s.blackFreq || 40;
-    document.getElementById('settingBlackLpi').value = s.blackLpi || 300;
-    document.getElementById('settingWhiteFreq').value = s.whiteFreq || 40;
-    document.getElementById('settingWhiteLpi').value = s.whiteLpi || 300;
+    // Standard Colors (Black & White)
+    document.getElementById('settingBlackFreq').value = s.blackFreq;
+    document.getElementById('settingBlackLpi').value = s.blackLpi;
+    document.getElementById('settingBlackSpeed').value = s.blackSpeed;
+    document.getElementById('settingBlackPower').value = s.blackPower;
+
+    document.getElementById('settingWhiteFreq').value = s.whiteFreq;
+    document.getElementById('settingWhiteLpi').value = s.whiteLpi;
+    document.getElementById('settingWhiteSpeed').value = s.whiteSpeed;
+    document.getElementById('settingWhitePower').value = s.whitePower;
 }
 
 function saveSettings() {
@@ -1351,8 +1381,13 @@ function saveSettings() {
         // Standard Colors
         blackFreq: parseInt(document.getElementById('settingBlackFreq').value),
         blackLpi: parseInt(document.getElementById('settingBlackLpi').value),
+        blackSpeed: parseInt(document.getElementById('settingBlackSpeed').value),
+        blackPower: parseInt(document.getElementById('settingBlackPower').value),
+
         whiteFreq: parseInt(document.getElementById('settingWhiteFreq').value),
-        whiteLpi: parseInt(document.getElementById('settingWhiteLpi').value)
+        whiteLpi: parseInt(document.getElementById('settingWhiteLpi').value),
+        whiteSpeed: parseInt(document.getElementById('settingWhiteSpeed').value),
+        whitePower: parseInt(document.getElementById('settingWhitePower').value)
     };
 
     SettingsStorage.save(state.settings);

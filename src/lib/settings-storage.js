@@ -78,7 +78,8 @@ const COMMON_DEFAULTS = {
     // Size defaults (mm)
     defaultWidth: 200,
     defaultHeight: 200,
-    activeDevice: null // Will be set by user
+    activeDevice: null, // Will be set by user
+    _version: 2.0 // Increment this when defaults change to force update
 };
 
 export const SettingsStorage = {
@@ -111,12 +112,24 @@ export const SettingsStorage = {
                 const parsed = JSON.parse(stored);
 
                 // If we have an active device, ensure we merge with THAT device's defaults
-                // to get correct ranges (in case they changed in code)
                 const deviceId = parsed.activeDevice || DEFAULT_PROFILE_ID;
                 const baseDefaults = this.getDefaults(deviceId);
 
+                // Version Check & Migration
+                if (!parsed._version || parsed._version < COMMON_DEFAULTS._version) {
+                    console.info(`Migrating settings from version ${parsed._version || 'none'} to ${COMMON_DEFAULTS._version}`);
+                    const standardKeys = [
+                        'blackFreq', 'blackLpi', 'blackSpeed', 'blackPower',
+                        'whiteFreq', 'whiteLpi', 'whiteSpeed', 'whitePower'
+                    ];
+                    standardKeys.forEach(key => {
+                        parsed[key] = baseDefaults[key];
+                    });
+                    parsed._version = COMMON_DEFAULTS._version;
+                    this.save(parsed);
+                }
+
                 // We overlay parsed settings on top of defaults
-                // But we must be careful: if the user switched devices, we might want to respect that
                 return { ...baseDefaults, ...parsed };
             }
         } catch (error) {
