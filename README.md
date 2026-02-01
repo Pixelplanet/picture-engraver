@@ -36,7 +36,7 @@ The Docker image supports **both AMD64 (x86) and ARM64** architectures, making i
 Run the application using Docker:
 
 ```bash
-docker run -d --name picture-engraver --restart always -p 3002:80 pixelplanet5/picture-engraver:latest
+docker run -d --name picture-engraver --restart always -p 3002:80 pixelplanet/picture-engraver:latest
 ```
 
 Or using Docker Compose:

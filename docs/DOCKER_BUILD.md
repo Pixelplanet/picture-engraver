@@ -35,7 +35,7 @@ Use the following command to build for both architectures and push to Docker Hub
 ```bash
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t pixelplanet5/picture-engraver:latest \
+  -t pixelplanet/picture-engraver:latest \
   --push \
   .
 ```
@@ -63,7 +63,7 @@ For convenience, use the provided `build_multiarch.ps1` (Windows) or `build_mult
 ### Quick Start (Any Architecture)
 
 ```bash
-docker run -d --name picture-engraver --restart always -p 3002:80 pixelplanet5/picture-engraver:latest
+docker run -d --name picture-engraver --restart always -p 3002:80 pixelplanet/picture-engraver:latest
 ```
 
 Docker will automatically pull the correct architecture version.
@@ -90,14 +90,14 @@ When making changes:
 2. Run `npm run build` locally to verify
 3. Build and push the multi-arch image:
    ```bash
-   docker buildx build --platform linux/amd64,linux/arm64 -t pixelplanet5/picture-engraver:latest --push .
+   docker buildx build --platform linux/amd64,linux/arm64 -t pixelplanet/picture-engraver:latest --push .
    ```
 4. On the server, update with:
    ```bash
-   docker pull pixelplanet5/picture-engraver:latest
+   docker pull pixelplanet/picture-engraver:latest
    docker stop picture-engraver
    docker rm picture-engraver
-   docker run -d --name picture-engraver --restart always -p 3002:80 pixelplanet5/picture-engraver:latest
+   docker run -d --name picture-engraver --restart always -p 3002:80 pixelplanet/picture-engraver:latest
    ```
 
 ---
