@@ -47,14 +47,34 @@ docker-compose up -d
 
 > 📖 **For developers:** See [docs/DOCKER_BUILD.md](docs/DOCKER_BUILD.md) for multi-arch build instructions.
 
-## 🏗️ Development
+## 🏗️ Local Development
 
-This project is built with **Vite** and **Vanilla JS**.
+For fast development cycles, we run the app directly on the host without Docker.
 
-```bash
-npm install
-npm run dev
-```
+1. **Install Dependencies**:
+   ```bash
+   npm install
+   ```
+
+2. **Run Frontend (Vite)**:
+   This supports Hot Module Replacement (HMR) for the UI.
+   ```bash
+   npm run dev
+   ```
+
+3. **Run Backend (Node.js)**:
+   This provides the API (logging, health) and serves the production build.
+   ```bash
+   node server.js
+   ```
+
+4. **Prepare for Deployment**:
+   ```bash
+   npm run build
+   ```
+
+---
+Built for the maker community. 🛠️✨
 
 ---
 Built for the maker community. 🛠️✨
