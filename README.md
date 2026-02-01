@@ -45,7 +45,7 @@ Or using Docker Compose:
 docker-compose up -d
 ```
 
-> 📖 **For developers:** See [docs/DOCKER_BUILD.md](docs/DOCKER_BUILD.md) for multi-arch build instructions.
+> 📖 **For developers:** See [docs/RELEASE_PROCEDURE.md](docs/RELEASE_PROCEDURE.md) for the modern deployment workflow and [docs/DOCKER_BUILD.md](docs/DOCKER_BUILD.md) for manual multi-arch build instructions.
 
 ## 🏗️ Local Development
 

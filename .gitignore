@@ -29,3 +29,6 @@ cleanup_log.txt
 
 # Test Artifacts
 tests/*.png
+
+# Shortcuts
+DEPLOY.bat
