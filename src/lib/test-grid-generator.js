@@ -16,7 +16,7 @@ export class TestGridGenerator {
             // Grid parameters
             lpiMin: 500,
             lpiMax: 2000,
-            highLpiMode: false,
+
 
             freqMin: 40,
             freqMax: 90,

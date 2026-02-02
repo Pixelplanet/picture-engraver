@@ -1782,7 +1782,7 @@ function setupTestGrid() {
     // Generator Tab Controls (Custom)
     const generatorInputs = [
         'gridFreqMin', 'gridFreqMax', 'gridLpiMin', 'gridLpiMax',
-        'gridHighLpiMode', 'gridCellSize', 'gridCellGap', 'gridPower', 'gridSpeed',
+        'gridCellSize', 'gridCellGap', 'gridPower', 'gridSpeed',
         'gridPasses', 'gridCrossHatch'
     ];
 
@@ -1792,18 +1792,7 @@ function setupTestGrid() {
         if (el) el.addEventListener('change', updateGridPreview);
     });
 
-    // High LPI Mode Toggle
-    document.getElementById('gridHighLpiMode').addEventListener('change', (e) => {
-        const maxInput = document.getElementById('gridLpiMax');
-        if (e.target.checked) {
-            maxInput.max = 4000;
-            if (maxInput.value > 800) maxInput.value = 800;
-        } else {
-            maxInput.max = 800;
-            if (maxInput.value > 800) maxInput.value = 800;
-        }
-        updateGridPreview();
-    });
+
 
     // Buttons
     document.getElementById('btnPreviewGrid').addEventListener('click', updateGridPreview);
@@ -3014,7 +3003,6 @@ function getCustomGridSettings() {
         freqMax: parseInt(document.getElementById('gridFreqMax').value),
         lpiMin: parseInt(document.getElementById('gridLpiMin').value),
         lpiMax: parseInt(document.getElementById('gridLpiMax').value),
-        highLpiMode: document.getElementById('gridHighLpiMode').checked,
         cellSize: parseInt(document.getElementById('gridCellSize').value),
         cellGap: parseFloat(document.getElementById('gridCellGap').value),
         power: parseInt(document.getElementById('gridPower').value),
