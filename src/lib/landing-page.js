@@ -11,14 +11,16 @@ export class LandingPage {
      * @param {boolean} force - Force show even if device is already selected
      */
     show(force = false) {
-        const currentSettings = this.settingsStorage.load();
+        // Check if user has explicitly saved settings (with a device selection)
+        const hasExplicitDevice = this.settingsStorage.hasExplicitSettings();
 
         // precise logic:
-        // 1. If no activeDevice is set, SHOW.
+        // 1. If no explicit device is set, SHOW the selection.
         // 2. If force is TRUE, SHOW.
         // 3. Otherwise, do NOT show, just trigger callback with existing device.
 
-        if (!force && currentSettings.activeDevice) {
+        if (!force && hasExplicitDevice) {
+            const currentSettings = this.settingsStorage.load();
             this.onDeviceSelected(currentSettings.activeDevice);
             return;
         }
@@ -93,11 +95,7 @@ export class LandingPage {
                     </button>
                 </div>
 
-                ${!isDevMode ? `
-                    <div style="margin-top: 20px; font-size: 0.8em; color: #555;">
-                        Laser calibration is only available for F2 Ultra UV.
-                    </div>
-                ` : ''}
+                ${!isDevMode ? '' : ''}
             </div>
         `;
 
