@@ -19,6 +19,7 @@ import { showToast } from './lib/toast.js';
 import { Logger } from './lib/logger.js';
 import { LandingPage } from './lib/landing-page.js';
 import { OnboardingManager } from './lib/onboarding.js';
+import { GridDetector } from './lib/grid-detector.js';
 
 
 // Application State
@@ -45,7 +46,16 @@ const analyzerState = {
     numRows: 0,
     isActive: false,
     selectedCell: null,
-    extractedColors: [] // RGB colors from the test grid photo
+    extractedColors: [], // RGB colors from the test grid photo
+    originalImg: null,
+    // Auto-detection results
+    autoDetected: false,
+    detectedCells: null, // Array of cell objects with centers
+    qrRegion: null, // Excluded QR code region
+    gridDetector: new GridDetector(),
+    // Corner adjustment
+    selectedCornerIndex: null, // Index of currently selected corner (0-3)
+    isDraggingCorner: false
 };
 
 // ===================================
@@ -149,6 +159,42 @@ const elements = {
 };
 
 // ===================================
+// geometric Utils
+// ===================================
+function interpolate(p1, p2, t) {
+    return {
+        x: p1.x + (p2.x - p1.x) * t,
+        y: p1.y + (p2.y - p1.y) * t
+    };
+}
+
+function interpolateCorner(corners, tx, ty) {
+    const pTop = interpolate(corners[0], corners[1], tx);
+    const pBottom = interpolate(corners[3], corners[2], tx);
+    return interpolate(pTop, pBottom, ty);
+}
+
+/**
+ * Calculate intersection of two line segments (p1-p2 and p3-p4)
+ * Returns point {x,y} or null if no intersection
+ */
+function getLineIntersection(p1, p2, p3, p4) {
+    const d = (p2.x - p1.x) * (p4.y - p3.y) - (p2.y - p1.y) * (p4.x - p3.x);
+    if (d === 0) return null; // Parallel
+
+    const u = ((p3.x - p1.x) * (p4.y - p3.y) - (p3.y - p1.y) * (p4.x - p3.x)) / d;
+    const v = ((p3.x - p1.x) * (p2.y - p1.y) - (p3.y - p1.y) * (p2.x - p1.x)) / d;
+
+    if (u >= 0 && u <= 1 && v >= 0 && v <= 1) {
+        return {
+            x: p1.x + u * (p2.x - p1.x),
+            y: p1.y + u * (p2.y - p1.y)
+        };
+    }
+    return null;
+}
+
+// ===================================
 // Initialization
 // ===================================
 function init() {
@@ -182,6 +228,7 @@ function init() {
     setupExport();
     setupTestGrid();
     setupAnalyzer();
+    setupAdvancedAnalyzer();
     setupLightbox();
 
     Logger.info('Picture Engraver initialized', { appVersion: '1.6.2' });
@@ -1506,8 +1553,32 @@ function setupTestGrid() {
 }
 
 function setupAnalyzer() {
+    // Small canvas is preview-only - click to open fullscreen alignment
     const canvas = document.getElementById('analyzerCanvas');
-    canvas.addEventListener('click', handleAnalyzerCanvasClick);
+    canvas.addEventListener('click', openFullscreenAlignment);
+
+    // Fullscreen alignment modal events
+    const alignCanvas = document.getElementById('alignmentCanvas');
+    if (alignCanvas) {
+        alignCanvas.addEventListener('click', handleAlignmentCanvasClick);
+        alignCanvas.addEventListener('mousedown', handleAlignmentCanvasMouseDown);
+        alignCanvas.addEventListener('mousemove', handleAlignmentCanvasMouseMove);
+        alignCanvas.addEventListener('mouseup', handleAlignmentCanvasMouseUp);
+        alignCanvas.addEventListener('mouseleave', handleAlignmentCanvasMouseUp);
+    }
+
+    // Keyboard events for corner adjustment
+    document.addEventListener('keydown', handleAlignmentKeyDown);
+
+    // Alignment modal buttons
+    const btnReset = document.getElementById('btnResetCorners');
+    if (btnReset) btnReset.addEventListener('click', resetAlignmentCorners);
+
+    const btnApply = document.getElementById('btnApplyAlignment');
+    if (btnApply) btnApply.addEventListener('click', applyAlignmentAndClose);
+
+    const btnClose = document.getElementById('btnCloseAlignment');
+    if (btnClose) btnClose.addEventListener('click', closeAlignmentModal);
 
     // Clear Button
     const btnClear = document.getElementById('btnClearAnalyzer');
@@ -1521,12 +1592,320 @@ function setupAnalyzer() {
     const btnToggle = document.getElementById('btnToggleManualSettings');
     if (btnToggle) btnToggle.addEventListener('click', toggleManualSettings);
 
-    const btnApply = document.getElementById('btnApplyManualSettings');
-    if (btnApply) btnApply.addEventListener('click', applyManualSettings);
+    const btnApplyManual = document.getElementById('btnApplyManualSettings');
+    if (btnApplyManual) btnApplyManual.addEventListener('click', applyManualSettings);
 
     // Initialize Map Management UI
     setupMapManagement();
 }
+
+/**
+ * Open fullscreen alignment modal
+ */
+function openFullscreenAlignment() {
+    const img = analyzerState.originalImg;
+    if (!img) {
+        showToast('Please upload an image first', 'warning');
+        return;
+    }
+
+    const modal = document.getElementById('alignmentModal');
+    const canvas = document.getElementById('alignmentCanvas');
+    if (!modal || !canvas) return;
+
+    // Size canvas to fit screen while maintaining aspect ratio
+    const maxWidth = window.innerWidth - 80;
+    const maxHeight = window.innerHeight - 180;
+    const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
+
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+
+    // Store scale for coordinate conversion
+    analyzerState.alignmentScale = scale;
+
+    // Draw image
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Draw existing corners if any
+    if (analyzerState.corners.length > 0) {
+        drawAlignmentUI();
+    }
+
+    // Show modal
+    modal.style.display = 'flex';
+
+    // Update status
+    updateAlignmentStatus();
+
+    // Focus canvas for keyboard events
+    canvas.focus();
+    canvas.setAttribute('tabindex', '0');
+}
+
+/**
+ * Close fullscreen alignment modal
+ */
+function closeAlignmentModal() {
+    const modal = document.getElementById('alignmentModal');
+    if (modal) modal.style.display = 'none';
+}
+
+/**
+ * Reset corners in alignment modal
+ */
+function resetAlignmentCorners() {
+    analyzerState.corners = [];
+    analyzerState.selectedCornerIndex = null;
+    drawAlignmentUI();
+    updateAlignmentStatus();
+    showToast('Corners reset. Click the 4 corners of the color grid.', 'info');
+}
+
+/**
+ * Apply alignment and close modal
+ */
+function applyAlignmentAndClose() {
+    if (analyzerState.corners.length !== 4) {
+        showToast('Please place all 4 corners first.', 'warning');
+        return;
+    }
+
+    // Scale corners back to small canvas coordinates
+    const smallCanvas = document.getElementById('analyzerCanvas');
+    const scale = analyzerState.alignmentScale || 1;
+    const smallScale = smallCanvas.width / analyzerState.originalImg.width;
+
+    // Convert corners from alignment canvas to small canvas coordinates
+    analyzerState.corners = analyzerState.corners.map(c => ({
+        x: (c.x / scale) * smallScale,
+        y: (c.y / scale) * smallScale
+    }));
+
+    // Update small canvas display
+    drawAnalyzerUI();
+
+    // Extract colors
+    updateExtractedColors();
+
+    // Hide click overlay or update to show "re-align" option
+    const overlay = document.getElementById('analyzerClickOverlay');
+    if (overlay) {
+        overlay.innerHTML = `
+            <div style="text-align: center; color: #fff;">
+                <div style="font-size: 24px; margin-bottom: 8px;">✅</div>
+                <div style="font-size: 12px; font-weight: 500;">Aligned</div>
+                <div style="font-size: 11px; opacity: 0.7; margin-top: 4px;">Click to re-adjust</div>
+            </div>
+        `;
+        overlay.style.background = 'rgba(0,0,0,0.3)';
+    }
+
+    // Close modal
+    closeAlignmentModal();
+
+    showToast('Grid aligned! Opening color editor...', 'success');
+
+    // Auto-open advanced analyzer
+    setTimeout(() => {
+        openAdvancedAnalyzer();
+    }, 300);
+}
+
+/**
+ * Update alignment status text and button visibility
+ */
+function updateAlignmentStatus() {
+    const status = document.getElementById('alignmentStatus');
+    const footer = document.getElementById('alignmentFooter');
+    const btnApply = document.getElementById('btnApplyAlignment');
+    const cornerLabel = document.getElementById('selectedCornerLabel');
+
+    const count = analyzerState.corners.length;
+
+    if (count < 4) {
+        status.textContent = `Click corner ${count + 1} of 4 on the COLOR GRID`;
+        status.style.color = '#ffd700';
+        if (footer) footer.style.display = 'none';
+        if (btnApply) btnApply.style.display = 'none';
+    } else {
+        status.textContent = '✅ All corners placed! Click a corner to adjust, or Apply to finish.';
+        status.style.color = '#4ade80';
+        if (footer) footer.style.display = 'block';
+        if (btnApply) btnApply.style.display = 'inline-flex';
+    }
+
+    if (cornerLabel) {
+        cornerLabel.textContent = analyzerState.selectedCornerIndex !== null
+            ? ['Top-Left', 'Top-Right', 'Bottom-Right', 'Bottom-Left'][analyzerState.selectedCornerIndex]
+            : '-';
+    }
+}
+
+/**
+ * Handle click on alignment canvas
+ */
+function handleAlignmentCanvasClick(e) {
+    const rect = e.target.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * e.target.width;
+    const y = ((e.clientY - rect.top) / rect.height) * e.target.height;
+
+    // If we have 4 corners, check if clicking on a corner to select it
+    if (analyzerState.corners.length === 4) {
+        const clickRadius = 20; // Larger radius for easier selection
+        for (let i = 0; i < analyzerState.corners.length; i++) {
+            const corner = analyzerState.corners[i];
+            const dist = Math.sqrt(Math.pow(x - corner.x, 2) + Math.pow(y - corner.y, 2));
+            if (dist < clickRadius) {
+                analyzerState.selectedCornerIndex = i;
+                drawAlignmentUI();
+                updateAlignmentStatus();
+                return;
+            }
+        }
+
+        // Clicked away from corners - deselect
+        if (analyzerState.selectedCornerIndex !== null) {
+            analyzerState.selectedCornerIndex = null;
+            drawAlignmentUI();
+            updateAlignmentStatus();
+        }
+        return;
+    }
+
+    // Add new corner
+    analyzerState.corners.push({ x, y });
+
+    if (analyzerState.corners.length === 4) {
+        // Sort corners into correct order
+        sortCornersToQuadrilateral();
+        analyzerState.selectedCornerIndex = null;
+
+        // Auto-apply manual settings if grid settings are missing (e.g. QR failed)
+        if (!analyzerState.numCols || analyzerState.numCols === 0) {
+            applyManualSettings();
+        }
+    } else {
+        analyzerState.selectedCornerIndex = analyzerState.corners.length - 1;
+    }
+
+    drawAlignmentUI();
+    updateAlignmentStatus();
+}
+
+/**
+ * Handle mouse down for dragging corners
+ */
+function handleAlignmentCanvasMouseDown(e) {
+    if (analyzerState.corners.length !== 4) return;
+
+    const rect = e.target.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * e.target.width;
+    const y = ((e.clientY - rect.top) / rect.height) * e.target.height;
+
+    const clickRadius = 20;
+    for (let i = 0; i < analyzerState.corners.length; i++) {
+        const corner = analyzerState.corners[i];
+        const dist = Math.sqrt(Math.pow(x - corner.x, 2) + Math.pow(y - corner.y, 2));
+        if (dist < clickRadius) {
+            analyzerState.selectedCornerIndex = i;
+            analyzerState.isDraggingCorner = true;
+            e.target.style.cursor = 'grabbing';
+            drawAlignmentUI();
+            updateAlignmentStatus();
+            return;
+        }
+    }
+}
+
+/**
+ * Handle mouse move for dragging corners
+ */
+function handleAlignmentCanvasMouseMove(e) {
+    if (!analyzerState.isDraggingCorner || analyzerState.selectedCornerIndex === null) return;
+
+    const rect = e.target.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * e.target.width;
+    const y = ((e.clientY - rect.top) / rect.height) * e.target.height;
+
+    analyzerState.corners[analyzerState.selectedCornerIndex] = { x, y };
+    drawAlignmentUI();
+}
+
+/**
+ * Handle mouse up for dragging corners
+ */
+function handleAlignmentCanvasMouseUp(e) {
+    if (analyzerState.isDraggingCorner) {
+        analyzerState.isDraggingCorner = false;
+        e.target.style.cursor = 'crosshair';
+    }
+}
+
+/**
+ * Handle keyboard events in alignment modal
+ */
+function handleAlignmentKeyDown(e) {
+    const modal = document.getElementById('alignmentModal');
+    if (!modal || modal.style.display !== 'flex') return;
+
+    // Escape to close
+    if (e.key === 'Escape') {
+        if (analyzerState.selectedCornerIndex !== null) {
+            analyzerState.selectedCornerIndex = null;
+            drawAlignmentUI();
+            updateAlignmentStatus();
+        } else {
+            closeAlignmentModal();
+        }
+        e.preventDefault();
+        return;
+    }
+
+    // Enter to apply
+    if (e.key === 'Enter' && analyzerState.corners.length === 4) {
+        applyAlignmentAndClose();
+        e.preventDefault();
+        return;
+    }
+
+    // Arrow keys to move selected corner
+    if (analyzerState.selectedCornerIndex === null || analyzerState.corners.length !== 4) return;
+
+    const step = e.shiftKey ? 10 : 2; // Larger steps for fullscreen
+    const corner = analyzerState.corners[analyzerState.selectedCornerIndex];
+
+    switch (e.key) {
+        case 'ArrowUp':
+            corner.y -= step;
+            e.preventDefault();
+            break;
+        case 'ArrowDown':
+            corner.y += step;
+            e.preventDefault();
+            break;
+        case 'ArrowLeft':
+            corner.x -= step;
+            e.preventDefault();
+            break;
+        case 'ArrowRight':
+            corner.x += step;
+            e.preventDefault();
+            break;
+        case 'Tab':
+            analyzerState.selectedCornerIndex = (analyzerState.selectedCornerIndex + (e.shiftKey ? 3 : 1)) % 4;
+            e.preventDefault();
+            break;
+        default:
+            return;
+    }
+
+    drawAlignmentUI();
+    updateAlignmentStatus();
+}
+
+
 
 function resetAnalyzer() {
     analyzerState.corners = [];
@@ -1534,6 +1913,8 @@ function resetAnalyzer() {
     analyzerState.extractedColors = [];
     analyzerState.isActive = false;
     analyzerState.selectedCell = null;
+    analyzerState.selectedCornerIndex = null;
+    analyzerState.isDraggingCorner = false;
 
     // Clear canvas
     const canvas = document.getElementById('analyzerCanvas');
@@ -1625,62 +2006,344 @@ function applyManualSettings() {
 }
 
 function handleAnalyzerCanvasClick(e) {
-    if (analyzerState.corners.length >= 4) {
-        analyzerState.corners = []; // Reset if already 4
+    const rect = e.target.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * e.target.width;
+    const y = ((e.clientY - rect.top) / rect.height) * e.target.height;
+
+    // If we have 4 corners, check if user clicked near an existing corner to select it
+    if (analyzerState.corners.length === 4) {
+        const clickRadius = 15; // pixels
+        for (let i = 0; i < analyzerState.corners.length; i++) {
+            const corner = analyzerState.corners[i];
+            const dist = Math.sqrt(Math.pow(x - corner.x, 2) + Math.pow(y - corner.y, 2));
+            if (dist < clickRadius) {
+                // Select this corner for adjustment
+                analyzerState.selectedCornerIndex = i;
+                drawAnalyzerUI();
+                showToast(`Corner ${['TL', 'TR', 'BR', 'BL'][i]} selected. Drag or use arrow keys to adjust.`, 'info');
+                return;
+            }
+        }
+
+        // Clicked away from corners - deselect
+        if (analyzerState.selectedCornerIndex !== null) {
+            analyzerState.selectedCornerIndex = null;
+            drawAnalyzerUI();
+            return;
+        }
+
+        // Double-click to reset corners
+        analyzerState.corners = [];
+        analyzerState.selectedCornerIndex = null;
+        showToast('Corners reset. Click 4 new corners.', 'info');
     }
+
+    // Add new corner
+    analyzerState.corners.push({ x, y });
+    analyzerState.selectedCornerIndex = analyzerState.corners.length - 1;
+    drawAnalyzerUI();
+
+    if (analyzerState.corners.length === 4) {
+        // Sort corners into correct order: TL, TR, BR, BL
+        sortCornersToQuadrilateral();
+        drawAnalyzerUI();
+        showToast('Grid aligned! Click a corner to adjust, or drag to reposition.', 'success');
+        updateExtractedColors();
+    } else {
+        showToast(`Corner ${analyzerState.corners.length}/4 placed. Click the next corner.`, 'info');
+    }
+}
+/**
+ * Sort 4 corners into proper quadrilateral order: TL, TR, BR, BL
+ * This ensures the grid is never twisted regardless of click order
+ */
+
+function sortCornersToQuadrilateral() {
+    const corners = analyzerState.corners;
+    if (corners.length !== 4) return;
+
+    // Find center point
+    const centerX = corners.reduce((sum, p) => sum + p.x, 0) / 4;
+    const centerY = corners.reduce((sum, p) => sum + p.y, 0) / 4;
+
+    // Calculate angle from center for each corner
+    const withAngles = corners.map(p => ({
+        ...p,
+        angle: Math.atan2(p.y - centerY, p.x - centerX)
+    }));
+
+    // Sort by angle (counter-clockwise from right)
+    withAngles.sort((a, b) => a.angle - b.angle);
+
+    // Now we have corners sorted counter-clockwise
+    // Find the top-left corner (smallest sum of x+y)
+    let minSum = Infinity;
+    let tlIndex = 0;
+    withAngles.forEach((p, i) => {
+        const sum = p.x + p.y;
+        if (sum < minSum) {
+            minSum = sum;
+            tlIndex = i;
+        }
+    });
+
+    // Rotate array so TL is first, then order is TL, TR, BR, BL (clockwise)
+    // Since withAngles is counter-clockwise, we need to reverse after rotation
+    const rotated = [];
+    for (let i = 0; i < 4; i++) {
+        rotated.push(withAngles[(tlIndex + i) % 4]);
+    }
+
+    // Check if order is clockwise or counter-clockwise
+    // If we're going TL -> next and y increases, it's going down (toward BL), so reverse
+    const nextCorner = rotated[1];
+    const tlCorner = rotated[0];
+
+    // Determine if next corner is to the right (TR) or below (BL)
+    if (nextCorner.x < tlCorner.x || (nextCorner.x === tlCorner.x && nextCorner.y > tlCorner.y)) {
+        // Going counter-clockwise (TL -> BL), need to reverse to get TL -> TR -> BR -> BL
+        analyzerState.corners = [rotated[0], rotated[3], rotated[2], rotated[1]];
+    } else {
+        // Already clockwise
+        analyzerState.corners = rotated.map(p => ({ x: p.x, y: p.y }));
+    }
+}
+
+function handleAnalyzerCanvasMouseDown(e) {
+    if (analyzerState.corners.length !== 4) return;
 
     const rect = e.target.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * e.target.width;
     const y = ((e.clientY - rect.top) / rect.height) * e.target.height;
 
-    analyzerState.corners.push({ x, y });
-    drawAnalyzerUI();
-
-    if (analyzerState.corners.length === 4) {
-        showToast('Grid aligned! Extracting colors...', 'success');
-        updateExtractedColors();
+    // Check if clicking on a corner
+    const clickRadius = 15;
+    for (let i = 0; i < analyzerState.corners.length; i++) {
+        const corner = analyzerState.corners[i];
+        const dist = Math.sqrt(Math.pow(x - corner.x, 2) + Math.pow(y - corner.y, 2));
+        if (dist < clickRadius) {
+            analyzerState.selectedCornerIndex = i;
+            analyzerState.isDraggingCorner = true;
+            e.target.style.cursor = 'grabbing';
+            return;
+        }
     }
+}
+
+function handleAnalyzerCanvasMouseMove(e) {
+    if (!analyzerState.isDraggingCorner || analyzerState.selectedCornerIndex === null) return;
+
+    const rect = e.target.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * e.target.width;
+    const y = ((e.clientY - rect.top) / rect.height) * e.target.height;
+
+    // Update corner position
+    analyzerState.corners[analyzerState.selectedCornerIndex] = { x, y };
+    drawAlignmentUI();
+}
+
+function handleAnalyzerCanvasMouseUp(e) {
+    if (analyzerState.isDraggingCorner) {
+        analyzerState.isDraggingCorner = false;
+        e.target.style.cursor = 'crosshair';
+
+        // Recalculate colors after drag
+        if (analyzerState.corners.length === 4) {
+            updateExtractedColors();
+        }
+    }
+}
+
+
+
+/**
+ * Draw the alignment UI (corners, grid, centers) on the fullscreen canvas
+ */
+function drawAlignmentUI() {
+    const canvas = document.getElementById('alignmentCanvas');
+    const img = analyzerState.originalImg;
+    if (!canvas || !img) return;
+
+    const ctx = canvas.getContext('2d');
+
+    // Redraw image
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Draw grid if 4 corners
+    if (analyzerState.corners.length === 4) {
+        drawAlignmentGrid(ctx, analyzerState.corners, analyzerState.numCols, analyzerState.numRows);
+
+        // Draw centers and sampling points for visual verification
+        const corners = analyzerState.corners;
+        const cols = analyzerState.numCols;
+        const rows = analyzerState.numRows;
+
+        // QR region
+        const qrStartCol = cols - 3;
+        const qrStartRow = rows - 3;
+
+        ctx.fillStyle = '#00d4ff'; // Cyan for centers
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                // Skip QR region for sampling dots
+                if (c >= qrStartCol && r >= qrStartRow) continue;
+
+                // Calculate cell bounds
+                const cellTL = interpolateCorner(corners, c / cols, r / rows);
+                const cellTR = interpolateCorner(corners, (c + 1) / cols, r / rows);
+                const cellBL = interpolateCorner(corners, c / cols, (r + 1) / rows);
+                const cellBR = interpolateCorner(corners, (c + 1) / cols, (r + 1) / rows);
+
+                // Find center
+                let center = getLineIntersection(cellTL, cellBR, cellTR, cellBL);
+                if (!center) {
+                    center = {
+                        x: (cellTL.x + cellTR.x + cellBL.x + cellBR.x) / 4,
+                        y: (cellTL.y + cellTR.y + cellBL.y + cellBR.y) / 4
+                    };
+                }
+
+                // Draw center dot
+                ctx.beginPath();
+                ctx.arc(center.x, center.y, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+
+    // Draw corners (existing code)
+    analyzerState.corners.forEach((p, i) => {
+        const isSelected = i === analyzerState.selectedCornerIndex;
+        const labels = ['TL', 'TR', 'BR', 'BL'];
+        const fullLabels = ['Top-Left', 'Top-Right', 'Bottom-Right', 'Bottom-Left'];
+
+        // ... (rest of corner drawing remains same) ...
+        if (isSelected) {
+            ctx.shadowColor = '#00d4ff';
+            ctx.shadowBlur = 20;
+            ctx.fillStyle = '#00d4ff';
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
+            ctx.stroke();
+        } else {
+            ctx.fillStyle = '#ff3b30';
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        const label = isSelected ? fullLabels[i] : labels[i];
+        ctx.font = isSelected ? 'bold 16px Inter, sans-serif' : '14px Inter, sans-serif';
+        const textWidth = ctx.measureText(label).width;
+        const labelX = p.x + 20;
+        const labelY = p.y + 5;
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(labelX - 4, labelY - 14, textWidth + 8, 20);
+
+        ctx.fillStyle = isSelected ? '#00d4ff' : '#fff';
+        ctx.fillText(label, labelX, labelY);
+    });
 }
 
 function drawAnalyzerUI() {
     const canvas = document.getElementById('analyzerCanvas');
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
-    // We can't easily clear just the UI without redrawing the image
-    // In a real app we'd use a layered canvas, but let's just redraw for now
-    // Actually, we'll redraw the image and then the points
     const img = analyzerState.originalImg;
     if (!img) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    // Draw corners
-    ctx.fillStyle = '#ff3b30';
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-
-    analyzerState.corners.forEach((p, i) => {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = '#fff';
-        ctx.font = '10px Inter';
-        ctx.fillText(['TL', 'TR', 'BR', 'BL'][i], p.x + 8, p.y + 4);
-        ctx.fillStyle = '#ff3b30';
-    });
-
     // Draw grid if 4 corners
     if (analyzerState.corners.length === 4) {
-        drawProjectedGrid(ctx, analyzerState.corners, analyzerState.numCols, analyzerState.numRows);
+        drawAlignmentGrid(ctx, analyzerState.corners, analyzerState.numCols, analyzerState.numRows);
     }
+
+    // Draw simple corners for preview (without labels/interaction hints)
+    analyzerState.corners.forEach((p, i) => {
+        ctx.fillStyle = '#ff3b30'; // Red
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+    });
 }
 
-function drawProjectedGrid(ctx, corners, cols, rows) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 1;
+function drawAlignmentGrid(ctx, corners, cols, rows) {
+    // Draw cell backgrounds for better visibility
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+
+    // QR region is bottom-right 3×3
+    const qrCells = 3;
+    const qrStartCol = cols - qrCells;
+    const qrStartRow = rows - qrCells;
+
+    // Draw each cell with subtle fill
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const t1x = c / cols;
+            const t2x = (c + 1) / cols;
+            const t1y = r / rows;
+            const t2y = (r + 1) / rows;
+
+            const topLeft = interpolate(
+                interpolate(corners[0], corners[1], t1x),
+                interpolate(corners[3], corners[2], t1x),
+                t1y
+            );
+            const topRight = interpolate(
+                interpolate(corners[0], corners[1], t2x),
+                interpolate(corners[3], corners[2], t2x),
+                t1y
+            );
+            const bottomRight = interpolate(
+                interpolate(corners[0], corners[1], t2x),
+                interpolate(corners[3], corners[2], t2x),
+                t2y
+            );
+            const bottomLeft = interpolate(
+                interpolate(corners[0], corners[1], t1x),
+                interpolate(corners[3], corners[2], t1x),
+                t2y
+            );
+
+            // Fill QR region with red, others with white
+            if (c >= qrStartCol && r >= qrStartRow) {
+                ctx.fillStyle = 'rgba(255, 59, 48, 0.3)'; // Red for QR
+            } else {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'; // Subtle white for cells
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(topLeft.x, topLeft.y);
+            ctx.lineTo(topRight.x, topRight.y);
+            ctx.lineTo(bottomRight.x, bottomRight.y);
+            ctx.lineTo(bottomLeft.x, bottomLeft.y);
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+
+    // Draw horizontal lines
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.lineWidth = 1.5;
 
     for (let r = 0; r <= rows; r++) {
         const t = r / rows;
@@ -1692,6 +2355,7 @@ function drawProjectedGrid(ctx, corners, cols, rows) {
         ctx.stroke();
     }
 
+    // Draw vertical lines
     for (let c = 0; c <= cols; c++) {
         const t = c / cols;
         const pTop = interpolate(corners[0], corners[1], t);
@@ -1701,41 +2365,258 @@ function drawProjectedGrid(ctx, corners, cols, rows) {
         ctx.lineTo(pBottom.x, pBottom.y);
         ctx.stroke();
     }
+
+    // Draw thicker border around QR region
+    ctx.strokeStyle = 'rgba(255, 59, 48, 0.9)';
+    ctx.lineWidth = 2;
+
+    const qrTL = interpolate(
+        interpolate(corners[0], corners[1], qrStartCol / cols),
+        interpolate(corners[3], corners[2], qrStartCol / cols),
+        qrStartRow / rows
+    );
+    const qrTR = interpolate(
+        interpolate(corners[0], corners[1], 1),
+        interpolate(corners[3], corners[2], 1),
+        qrStartRow / rows
+    );
+    const qrBR = interpolate(
+        interpolate(corners[0], corners[1], 1),
+        interpolate(corners[3], corners[2], 1),
+        1
+    );
+    const qrBL = interpolate(
+        interpolate(corners[0], corners[1], qrStartCol / cols),
+        interpolate(corners[3], corners[2], qrStartCol / cols),
+        1
+    );
+
+    ctx.beginPath();
+    ctx.moveTo(qrTL.x, qrTL.y);
+    ctx.lineTo(qrTR.x, qrTR.y);
+    ctx.lineTo(qrBR.x, qrBR.y);
+    ctx.lineTo(qrBL.x, qrBL.y);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Add "QR" label
+    const qrCenter = {
+        x: (qrTL.x + qrBR.x) / 2,
+        y: (qrTL.y + qrBR.y) / 2
+    };
+    ctx.fillStyle = 'rgba(255, 59, 48, 0.9)';
+    ctx.font = 'bold 14px Inter';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('QR', qrCenter.x, qrCenter.y);
+    ctx.textAlign = 'start';
+    ctx.textBaseline = 'alphabetic';
 }
 
-function interpolate(p1, p2, t) {
-    return {
-        x: p1.x + (p2.x - p1.x) * t,
-        y: p1.y + (p2.y - p1.y) * t
-    };
-}
+
 
 function updateExtractedColors() {
-    const canvas = document.getElementById('analyzerCanvas');
+    console.log("[DEBUG] updateExtractedColors started");
+    console.log("[DEBUG] Check interpolators:", typeof interpolateCorner, typeof getLineIntersection);
+
+    try {
+        const { originalImg, corners, numCols, numRows, qrRegion } = analyzerState;
+
+        console.log("[DEBUG] State:", {
+            corners: corners ? corners.length : 'null',
+            cols: numCols,
+            rows: numRows
+        });
+
+        if (!originalImg || !corners || corners.length !== 4) {
+            console.warn("[DEBUG] Missing image or corners");
+            return;
+        }
+
+        // Use a temporary canvas to extract pixel data
+        const canvas = document.createElement('canvas');
+        canvas.width = originalImg.width;
+        canvas.height = originalImg.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(originalImg, 0, 0);
+
+        const colors = [];
+        const rgbColors = []; // Store as {r, g, b} objects
+
+        // QR region definition
+        const qrRegionInfo = qrRegion || {
+            startCol: numCols - 3,
+            startRow: numRows - 3,
+            cells: 3
+        };
+        const qrStartCol = qrRegionInfo.startCol;
+        const qrStartRow = qrRegionInfo.startRow;
+
+        for (let r = 0; r < numRows; r++) {
+            for (let c = 0; c < numCols; c++) {
+                const isQR = c >= qrStartCol && r >= qrStartRow;
+
+                // Calculate cell bounds
+                const cellTL = interpolateCorner(corners, c / numCols, r / numRows);
+                const cellTR = interpolateCorner(corners, (c + 1) / numCols, r / numRows);
+                const cellBL = interpolateCorner(corners, c / numCols, (r + 1) / numRows);
+                const cellBR = interpolateCorner(corners, (c + 1) / numCols, (r + 1) / numRows);
+
+                if (isQR) {
+                    colors.push('transparent');
+                    rgbColors.push({ r: 0, g: 0, b: 0, isQR: true });
+                    continue;
+                }
+
+                // Find visual center using diagonal intersection
+                let center = getLineIntersection(cellTL, cellBR, cellTR, cellBL);
+
+                if (!center) {
+                    center = {
+                        x: (cellTL.x + cellTR.x + cellBL.x + cellBR.x) / 4,
+                        y: (cellTL.y + cellTR.y + cellBL.y + cellBR.y) / 4
+                    };
+                }
+
+                // Sample 5x5 area
+                let rSum = 0, gSum = 0, bSum = 0, count = 0;
+                const sampleSize = 5;
+                const halfSize = Math.floor(sampleSize / 2);
+
+                for (let y = center.y - halfSize; y <= center.y + halfSize; y++) {
+                    for (let x = center.x - halfSize; x <= center.x + halfSize; x++) {
+                        const px = Math.floor(x);
+                        const py = Math.floor(y);
+                        if (px >= 0 && px < canvas.width && py >= 0 && py < canvas.height) {
+                            const pixel = ctx.getImageData(px, py, 1, 1).data;
+                            rSum += pixel[0];
+                            gSum += pixel[1];
+                            bSum += pixel[2];
+                            count++;
+                        }
+                    }
+                }
+
+                const rf = count > 0 ? Math.round(rSum / count) : 0;
+                const gf = count > 0 ? Math.round(gSum / count) : 0;
+                const bf = count > 0 ? Math.round(bSum / count) : 0;
+
+                colors.push(`rgb(${rf}, ${gf}, ${bf})`);
+                rgbColors.push({ r: rf, g: gf, b: bf, isQR: false });
+            }
+        }
+
+        analyzerState.extractedColors = rgbColors;
+        analyzerState.qrRegion = qrRegionInfo;
+
+        // safe call to draw UI
+        if (typeof drawAnalyzerUI === 'function') drawAnalyzerUI();
+
+        if (typeof generateColorMapWithData === 'function') {
+            generateColorMapWithData(analyzerState.freqValues, analyzerState.lpiValues, colors);
+        } else {
+            console.error("generateColorMapWithData is missing!");
+        }
+
+        const saveSection = document.getElementById('saveColorMapSection');
+        if (saveSection) {
+            saveSection.style.display = 'block';
+        }
+    } catch (err) {
+        console.error("[DEBUG] Error inside updateExtractedColors:", err);
+    }
+}
+
+function _old_updateExtractedColors() {
+    const { originalImg, corners, numCols, numRows, qrRegion } = analyzerState;
+    if (!originalImg || corners.length !== 4) return;
+
+    // Use a temporary canvas to extract pixel data
+    const canvas = document.createElement('canvas');
+    canvas.width = originalImg.width;
+    canvas.height = originalImg.height;
     const ctx = canvas.getContext('2d');
+    ctx.drawImage(originalImg, 0, 0);
+
     const colors = [];
     const rgbColors = []; // Store as {r, g, b} objects
 
-    const { corners, numCols, numRows } = analyzerState;
+    // QR region definition
+    // Use existing qrRegion if available, or default to bottom-right 3x3
+    const qrRegionInfo = qrRegion || {
+        startCol: numCols - 3,
+        startRow: numRows - 3,
+        cells: 3
+    };
+    const qrStartCol = qrRegionInfo.startCol;
+    const qrStartRow = qrRegionInfo.startRow;
 
-    for (let row = 0; row < numRows; row++) {
-        for (let col = 0; col < numCols; col++) {
-            // Sample center of cell
-            const tx = (col + 0.5) / numCols;
-            const ty = (row + 0.5) / numRows;
+    for (let r = 0; r < numRows; r++) {
+        for (let c = 0; c < numCols; c++) {
+            // Check if this is a QR code cell (or in excluded region)
+            const isQR = c >= qrStartCol && r >= qrStartRow;
 
-            const pTop = interpolate(corners[0], corners[1], tx);
-            const pBottom = interpolate(corners[3], corners[2], tx);
-            const p = interpolate(pTop, pBottom, ty);
+            // Calculate cell bounds
+            const cellTL = interpolateCorner(corners, c / numCols, r / numRows);
+            const cellTR = interpolateCorner(corners, (c + 1) / numCols, r / numRows);
+            const cellBL = interpolateCorner(corners, c / numCols, (r + 1) / numRows);
+            const cellBR = interpolateCorner(corners, (c + 1) / numCols, (r + 1) / numRows);
 
-            const pixel = ctx.getImageData(Math.round(p.x), Math.round(p.y), 1, 1).data;
-            colors.push(`rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`);
-            rgbColors.push({ r: pixel[0], g: pixel[1], b: pixel[2] });
+            if (isQR) {
+                // QR Cell - Mark as such and skip sampling
+                colors.push('transparent');
+                rgbColors.push({ r: 0, g: 0, b: 0, isQR: true });
+                continue;
+            }
+
+            // Find visual center using diagonal intersection (better for perspective)
+            let center = getLineIntersection(cellTL, cellBR, cellTR, cellBL);
+
+            // Fallback to average if intersection fails (rare)
+            if (!center) {
+                center = {
+                    x: (cellTL.x + cellTR.x + cellBL.x + cellBR.x) / 4,
+                    y: (cellTL.y + cellTR.y + cellBL.y + cellBR.y) / 4
+                };
+            }
+
+            // Sample 5x5 area
+            let rSum = 0, gSum = 0, bSum = 0, count = 0;
+            const sampleSize = 5;
+            const halfSize = Math.floor(sampleSize / 2);
+
+            for (let y = center.y - halfSize; y <= center.y + halfSize; y++) {
+                for (let x = center.x - halfSize; x <= center.x + halfSize; x++) {
+                    const px = Math.floor(x);
+                    const py = Math.floor(y);
+                    if (px >= 0 && px < canvas.width && py >= 0 && py < canvas.height) {
+                        const pixel = ctx.getImageData(px, py, 1, 1).data;
+                        rSum += pixel[0];
+                        gSum += pixel[1];
+                        bSum += pixel[2];
+                        count++;
+                    }
+                }
+            }
+
+            const r = Math.round(rSum / count);
+            const g = Math.round(gSum / count);
+            const b = Math.round(bSum / count);
+
+            colors.push(`rgb(${r}, ${g}, ${b})`);
+            rgbColors.push({ r, g, b, isQR: false });
         }
     }
 
-    // Store in analyzer state for saving
+    // Update state
     analyzerState.extractedColors = rgbColors;
+    analyzerState.qrRegion = qrRegionInfo;
+
+    // Update UI
+    drawAnalyzerUI();
+
+    // We don't draw sampling markers on the small preview anymore as it's too cluttered
+    // The fullscreen alignment view shows them now
 
     generateColorMapWithData(analyzerState.freqValues, analyzerState.lpiValues, colors);
 
@@ -1743,6 +2624,63 @@ function updateExtractedColors() {
     const saveSection = document.getElementById('saveColorMapSection');
     if (saveSection) {
         saveSection.style.display = 'block';
+    }
+}
+
+/**
+ * Draw visible sampling markers on the grid to show where colors are being sampled
+ */
+function drawSamplingMarkers(ctx, corners, numCols, numRows, qrStartCol, qrStartRow) {
+    for (let row = 0; row < numRows; row++) {
+        for (let col = 0; col < numCols; col++) {
+            // Skip QR region
+            if (col >= qrStartCol && row >= qrStartRow) continue;
+
+            const tx = (col + 0.5) / numCols;
+            const ty = (row + 0.5) / numRows;
+
+            const pTop = interpolate(corners[0], corners[1], tx);
+            const pBottom = interpolate(corners[3], corners[2], tx);
+            const center = interpolate(pTop, pBottom, ty);
+
+            // Draw small green dot at sampling point
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw small crosshair
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(center.x - 5, center.y);
+            ctx.lineTo(center.x + 5, center.y);
+            ctx.moveTo(center.x, center.y - 5);
+            ctx.lineTo(center.x, center.y + 5);
+            ctx.stroke();
+        }
+    }
+
+    // Draw X markers on QR region
+    for (let row = qrStartRow; row < numRows; row++) {
+        for (let col = qrStartCol; col < numCols; col++) {
+            const tx = (col + 0.5) / numCols;
+            const ty = (row + 0.5) / numRows;
+
+            const pTop = interpolate(corners[0], corners[1], tx);
+            const pBottom = interpolate(corners[3], corners[2], tx);
+            const center = interpolate(pTop, pBottom, ty);
+
+            // Draw red X to indicate excluded QR region
+            ctx.strokeStyle = 'rgba(255, 59, 48, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(center.x - 6, center.y - 6);
+            ctx.lineTo(center.x + 6, center.y + 6);
+            ctx.moveTo(center.x + 6, center.y - 6);
+            ctx.lineTo(center.x - 6, center.y + 6);
+            ctx.stroke();
+        }
     }
 }
 
@@ -1998,6 +2936,8 @@ async function analyzeGridImage(img) {
     canvas.height = h;
     ctx.drawImage(img, 0, 0, w, h);
     analyzerState.originalImg = img;
+    analyzerState.autoDetected = false;
+    analyzerState.detectedCells = null;
 
     // Show preview area
     document.getElementById('analyzerDropZone').style.display = 'none';
@@ -2005,20 +2945,19 @@ async function analyzeGridImage(img) {
     document.getElementById('colorMapSection').style.display = 'block';
     document.getElementById('alignmentHint').style.display = 'block';
 
-    // Analyze QR Code
+    // Try to detect QR Code for settings
     const imageData = ctx.getImageData(0, 0, w, h);
     const generator = new TestGridGenerator();
-    const result = await generator.analyzeImage(imageData);
+    const qrResult = await generator.analyzeImage(imageData);
 
     const settingsDiv = document.getElementById('analysisSettings');
 
-    if (result.found && !result.error) {
-        const s = result.data;
-
+    if (qrResult.found && !qrResult.error) {
+        const s = qrResult.data;
         analyzerState.numCols = s.lpi[2];
         analyzerState.numRows = s.freq[2];
-        analyzerState.freqValues = result.freqValues;
-        analyzerState.lpiValues = result.lpiValues;
+        analyzerState.freqValues = qrResult.freqValues;
+        analyzerState.lpiValues = qrResult.lpiValues;
 
         settingsDiv.innerHTML = `
             <div class="detected-value"><span>Frequency Range</span> <span>${s.freq[0]} - ${s.freq[1]} kHz</span></div>
@@ -2027,19 +2966,95 @@ async function analyzeGridImage(img) {
             <div class="detected-value"><span>Power / Speed</span> <span>${s.pwr}% / ${s.spd} mm/s</span></div>
             <div class="detected-value"><span>Laser Type</span> <span>${(s.type || 'UV').toUpperCase()}</span></div>
         `;
-
-        showToast('QR Code detected! Now click the 4 corners of the card to align the grid.', 'success');
         document.getElementById('analyzerFallback').style.display = 'none';
+        showToast('QR Code detected! Click the 4 corners of the COLOR GRID (not the whole card).', 'success');
     } else {
         settingsDiv.innerHTML = `
             <div class="text-center text-muted">
                 <p>⚠️ No QR code detected.</p>
-                <p>Use the default fallback below or try another photo.</p>
+                <p>Use the manual settings below, then click the 4 corners of the color grid.</p>
             </div>
         `;
         document.getElementById('analyzerFallback').style.display = 'block';
-        showToast('Could not detect QR code settings.', 'warning');
+        showToast('No QR detected. Enter settings manually and click the 4 corners.', 'warning');
     }
+}
+
+/**
+ * Extract colors using auto-detected cell centers
+ */
+function updateExtractedColorsFromDetection() {
+    const canvas = document.getElementById('analyzerCanvas');
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    const { detectedCells, gridDetector } = analyzerState;
+
+    if (!detectedCells || detectedCells.length === 0) {
+        return;
+    }
+
+    // Sort cells by row then column for consistent ordering
+    const sortedCells = [...detectedCells].sort((a, b) => {
+        if (a.row !== b.row) return a.row - b.row;
+        return a.col - b.col;
+    });
+
+    const colors = [];
+    const rgbColors = [];
+
+    sortedCells.forEach(cell => {
+        const color = gridDetector.sampleCellColor(imageData, cell);
+        colors.push(`rgb(${color.r}, ${color.g}, ${color.b})`);
+        rgbColors.push(color);
+    });
+
+    analyzerState.extractedColors = rgbColors;
+
+    // Update the color map grid
+    generateColorMapFromDetection(sortedCells, colors);
+
+    // Show save button
+    const saveSection = document.getElementById('saveColorMapSection');
+    if (saveSection) {
+        saveSection.style.display = 'block';
+    }
+}
+
+/**
+ * Generate color map grid from detected cells
+ */
+function generateColorMapFromDetection(cells, colors) {
+    const grid = document.getElementById('colorMapGrid');
+    grid.innerHTML = '';
+
+    const numCols = Math.max(...cells.map(c => c.col)) + 1;
+    grid.style.gridTemplateColumns = `repeat(${numCols}, 1fr)`;
+
+    cells.forEach((cell, idx) => {
+        const freq = analyzerState.freqValues[cell.row] || '??';
+        const lpi = analyzerState.lpiValues[cell.col] || '??';
+
+        const cellElem = document.createElement('div');
+        cellElem.className = 'color-cell';
+        cellElem.style.backgroundColor = colors[idx];
+        cellElem.title = `${freq}kHz / ${lpi} LPI`;
+
+        cellElem.addEventListener('click', () => {
+            document.querySelectorAll('.color-cell').forEach(c => c.classList.remove('selected'));
+            cellElem.classList.add('selected');
+
+            const box = document.getElementById('activeSelectionBox');
+            const text = document.getElementById('activeSelectionText');
+            box.style.display = 'block';
+            text.textContent = `${freq}kHz / ${lpi} LPI`;
+            box.style.borderColor = colors[idx];
+
+            showToast(`Mapped: ${freq}kHz @ ${lpi} LPI`, 'info');
+        });
+
+        grid.appendChild(cellElem);
+    });
 }
 
 function useDefaultGridSettings() {
@@ -2072,34 +3087,51 @@ function generateColorMapWithData(freqValues, lpiValues, extractedColors) {
     const grid = document.getElementById('colorMapGrid');
     grid.innerHTML = '';
 
-    grid.style.gridTemplateColumns = `repeat(${analyzerState.numCols}, 1fr)`;
+    const { numCols, numRows, qrRegion } = analyzerState;
+    grid.style.gridTemplateColumns = `repeat(${numCols}, 1fr)`;
+
+    // QR region info
+    const qrStartCol = qrRegion?.startCol ?? (numCols - 3);
+    const qrStartRow = qrRegion?.startRow ?? (numRows - 3);
 
     let colorIdx = 0;
-    freqValues.forEach(freq => {
-        lpiValues.forEach(lpi => {
+    for (let row = 0; row < numRows; row++) {
+        const freq = freqValues[row] || '??';
+        for (let col = 0; col < numCols; col++) {
+            const lpi = lpiValues[col] || '??';
+            const color = extractedColors ? extractedColors[colorIdx] : '#ddd';
+
             const cell = document.createElement('div');
             cell.className = 'color-cell';
-            const color = extractedColors ? extractedColors[colorIdx] : '#ddd';
-            cell.style.backgroundColor = color;
-            cell.title = `${freq}kHz / ${lpi} LPI`;
 
-            cell.addEventListener('click', () => {
-                document.querySelectorAll('.color-cell').forEach(c => c.classList.remove('selected'));
-                cell.classList.add('selected');
+            // Check if this is a QR cell
+            if (col >= qrStartCol && row >= qrStartRow) {
+                cell.classList.add('qr-excluded');
+                cell.style.backgroundColor = 'transparent';
+                cell.style.border = '1px dashed rgba(255, 59, 48, 0.5)';
+                cell.title = 'QR Code Region (Excluded)';
+            } else {
+                cell.style.backgroundColor = color;
+                cell.title = `${freq}kHz / ${lpi} LPI`;
 
-                const box = document.getElementById('activeSelectionBox');
-                const text = document.getElementById('activeSelectionText');
-                box.style.display = 'block';
-                text.textContent = `${freq}kHz / ${lpi} LPI`;
-                box.style.borderColor = color;
+                cell.addEventListener('click', () => {
+                    document.querySelectorAll('.color-cell').forEach(c => c.classList.remove('selected'));
+                    cell.classList.add('selected');
 
-                showToast(`Mapped: ${freq}kHz @ ${lpi} LPI`, 'info');
-            });
+                    const box = document.getElementById('activeSelectionBox');
+                    const text = document.getElementById('activeSelectionText');
+                    box.style.display = 'block';
+                    text.textContent = `${freq}kHz / ${lpi} LPI`;
+                    box.style.borderColor = color;
+
+                    showToast(`Mapped: ${freq}kHz @ ${lpi} LPI`, 'info');
+                });
+            }
 
             grid.appendChild(cell);
             colorIdx++;
-        });
-    });
+        }
+    }
 }
 
 /**
@@ -2118,9 +3150,13 @@ function saveColorMap() {
         return;
     }
 
-    // Build the color map data structure
+    // Build the color map data structure (skip QR cells)
     const colorEntries = [];
     let colorIdx = 0;
+
+    // QR region info
+    const qrStartCol = numCols - 3;
+    const qrStartRow = numRows - 3;
 
     for (let row = 0; row < numRows; row++) {
         const freq = freqValues[row];
@@ -2128,11 +3164,14 @@ function saveColorMap() {
             const lpi = lpiValues[col];
             const color = extractedColors[colorIdx];
 
-            colorEntries.push({
-                color: color,
-                frequency: freq,
-                lpi: lpi
-            });
+            // Skip QR region cells
+            if (!(col >= qrStartCol && row >= qrStartRow) && color && !color.isQR) {
+                colorEntries.push({
+                    color: color,
+                    frequency: freq,
+                    lpi: lpi
+                });
+            }
             colorIdx++;
         }
     }
@@ -2170,8 +3209,614 @@ function saveColorMap() {
 }
 
 // ===================================
+// Advanced Analyzer
+// ===================================
+
+const advancedAnalyzerState = {
+    colorMetadata: [], // Array of {excluded: boolean, name: string} per cell
+    selectedIndex: null,
+    similarGroups: [], // Groups of similar color indices
+    highlightedCell: null // {row, col} for canvas highlight
+};
+
+function setupAdvancedAnalyzer() {
+    // Open button
+    const btnOpen = document.getElementById('btnAdvancedAnalyzer');
+    if (btnOpen) {
+        btnOpen.addEventListener('click', openAdvancedAnalyzer);
+    }
+
+    // Close buttons
+    const btnClose = document.getElementById('closeAdvancedAnalyzer');
+    if (btnClose) {
+        btnClose.addEventListener('click', closeAdvancedAnalyzer);
+    }
+
+    const btnCancel = document.getElementById('btnCancelAdvanced');
+    if (btnCancel) {
+        btnCancel.addEventListener('click', closeAdvancedAnalyzer);
+    }
+
+    // Modal backdrop click
+    const modal = document.getElementById('advancedAnalyzerModal');
+    if (modal) {
+        modal.querySelector('.modal-backdrop').addEventListener('click', closeAdvancedAnalyzer);
+    }
+
+    // Save button
+    const btnSave = document.getElementById('btnSaveAdvanced');
+    if (btnSave) {
+        btnSave.addEventListener('click', saveAdvancedColorMap);
+    }
+
+    // Delete/Restore buttons
+    const btnDelete = document.getElementById('btnDeleteColor');
+    if (btnDelete) {
+        btnDelete.addEventListener('click', () => toggleColorExclusion(advancedAnalyzerState.selectedIndex));
+    }
+
+    const btnRestore = document.getElementById('btnRestoreColor');
+    if (btnRestore) {
+        btnRestore.addEventListener('click', () => toggleColorExclusion(advancedAnalyzerState.selectedIndex));
+    }
+
+    // Name input
+    const nameInput = document.getElementById('colorNameInput');
+    if (nameInput) {
+        nameInput.addEventListener('input', (e) => {
+            if (advancedAnalyzerState.selectedIndex !== null) {
+                advancedAnalyzerState.colorMetadata[advancedAnalyzerState.selectedIndex].name = e.target.value;
+                updateAdvancedGrid();
+            }
+        });
+    }
+
+    // Similar colors toggle
+    const btnShowSimilar = document.getElementById('btnShowSimilar');
+    if (btnShowSimilar) {
+        btnShowSimilar.addEventListener('click', () => {
+            const list = document.getElementById('similarColorsList');
+            if (list) {
+                const isHidden = list.style.display === 'none';
+                list.style.display = isHidden ? 'block' : 'none';
+                btnShowSimilar.textContent = isHidden ? 'Hide Details' : 'Show Details';
+            }
+        });
+    }
+}
+
+function openAdvancedAnalyzer() {
+    const { extractedColors, numCols, numRows, freqValues, lpiValues, corners, originalImg, qrRegion } = analyzerState;
+
+    if (!extractedColors || extractedColors.length === 0) {
+        showToast('No colors detected. Please align the grid first.', 'error');
+        return;
+    }
+
+    // QR region info
+    const qrStartCol = qrRegion?.startCol ?? (numCols - 3);
+    const qrStartRow = qrRegion?.startRow ?? (numRows - 3);
+
+    // Initialize metadata for each color, marking QR cells as excluded
+    advancedAnalyzerState.colorMetadata = extractedColors.map((color, idx) => {
+        const row = Math.floor(idx / numCols);
+        const col = idx % numCols;
+        const isQR = col >= qrStartCol && row >= qrStartRow;
+        return {
+            excluded: isQR || (color && color.isQR),
+            name: isQR ? 'QR Code' : ''
+        };
+    });
+    advancedAnalyzerState.selectedIndex = null;
+    advancedAnalyzerState.similarGroups = [];
+
+    // Copy source image to advanced canvas - use SAME dimensions as simple analyzer canvas
+    // The corners were recorded relative to that canvas size
+    const simpleCanvas = document.getElementById('analyzerCanvas');
+    const advancedCanvas = document.getElementById('advancedAnalyzerCanvas');
+
+    if (advancedCanvas && originalImg && simpleCanvas) {
+        // Use same dimensions as the simple analyzer canvas to match corner coordinates
+        advancedCanvas.width = simpleCanvas.width;
+        advancedCanvas.height = simpleCanvas.height;
+        const ctx = advancedCanvas.getContext('2d');
+        ctx.drawImage(originalImg, 0, 0, advancedCanvas.width, advancedCanvas.height);
+
+        // Draw corner markers and grid if corners exist
+        if (corners && corners.length === 4) {
+            drawAdvancedGridOverlay(ctx, corners, numCols, numRows);
+        }
+    }
+
+    // Find similar colors
+    findSimilarColors(25); // threshold = 25
+
+    // Render the grid
+    renderAdvancedGrid();
+
+    // Update stats
+    updateAdvancedStats();
+
+    // Hide detail panel initially
+    document.getElementById('colorDetailPanel').style.display = 'none';
+
+    // Open modal
+    const modal = document.getElementById('advancedAnalyzerModal');
+    if (modal) {
+        modal.classList.add('active');
+    }
+}
+
+function closeAdvancedAnalyzer() {
+    const modal = document.getElementById('advancedAnalyzerModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+
+    // Clear highlight
+    clearSourceHighlight();
+}
+
+function drawAdvancedGridOverlay(ctx, corners, numCols, numRows) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1;
+
+    // Draw grid lines
+    for (let r = 0; r <= numRows; r++) {
+        const t = r / numRows;
+        const pLeft = interpolate(corners[0], corners[3], t);
+        const pRight = interpolate(corners[1], corners[2], t);
+        ctx.beginPath();
+        ctx.moveTo(pLeft.x, pLeft.y);
+        ctx.lineTo(pRight.x, pRight.y);
+        ctx.stroke();
+    }
+
+    for (let c = 0; c <= numCols; c++) {
+        const t = c / numCols;
+        const pTop = interpolate(corners[0], corners[1], t);
+        const pBottom = interpolate(corners[3], corners[2], t);
+        ctx.beginPath();
+        ctx.moveTo(pTop.x, pTop.y);
+        ctx.lineTo(pBottom.x, pBottom.y);
+        ctx.stroke();
+    }
+}
+
+function renderAdvancedGrid() {
+    const grid = document.getElementById('advancedColorGrid');
+    if (!grid) return;
+
+    const { extractedColors, numCols, freqValues, lpiValues, numRows } = analyzerState;
+    const { colorMetadata, selectedIndex, similarGroups } = advancedAnalyzerState;
+
+    grid.innerHTML = '';
+    grid.style.gridTemplateColumns = `repeat(${numCols}, 1fr)`;
+
+    // Build set of similar indices for quick lookup
+    const similarIndices = new Set();
+    similarGroups.forEach(group => {
+        group.forEach(idx => similarIndices.add(idx));
+    });
+
+    extractedColors.forEach((color, idx) => {
+        const row = Math.floor(idx / numCols);
+        const col = idx % numCols;
+        const freq = freqValues[row];
+        const lpi = lpiValues[col];
+        const meta = colorMetadata[idx];
+
+        const cell = document.createElement('div');
+        cell.className = 'color-cell';
+        cell.style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
+        cell.title = `${freq}kHz / ${lpi} LPI${meta.name ? ` - ${meta.name}` : ''}`;
+        cell.dataset.index = idx;
+
+        // Apply state classes
+        if (meta.excluded) cell.classList.add('deleted');
+        if (idx === selectedIndex) cell.classList.add('selected');
+        if (similarIndices.has(idx) && !meta.excluded) cell.classList.add('similar');
+        if (meta.name) cell.classList.add('has-name');
+
+        cell.addEventListener('click', () => selectAdvancedColor(idx));
+
+        grid.appendChild(cell);
+    });
+}
+
+function updateAdvancedGrid() {
+    // Re-render just updates classes without full rebuild
+    const grid = document.getElementById('advancedColorGrid');
+    if (!grid) return;
+
+    const { colorMetadata, selectedIndex, similarGroups } = advancedAnalyzerState;
+
+    const similarIndices = new Set();
+    similarGroups.forEach(group => {
+        group.forEach(idx => similarIndices.add(idx));
+    });
+
+    grid.querySelectorAll('.color-cell').forEach((cell, idx) => {
+        const meta = colorMetadata[idx];
+
+        cell.classList.toggle('deleted', meta.excluded);
+        cell.classList.toggle('selected', idx === selectedIndex);
+        cell.classList.toggle('similar', similarIndices.has(idx) && !meta.excluded);
+        cell.classList.toggle('has-name', !!meta.name);
+    });
+
+    updateAdvancedStats();
+}
+
+function selectAdvancedColor(index) {
+    const { extractedColors, numCols, freqValues, lpiValues } = analyzerState;
+    const { colorMetadata } = advancedAnalyzerState;
+
+    advancedAnalyzerState.selectedIndex = index;
+
+    const row = Math.floor(index / numCols);
+    const col = index % numCols;
+    const color = extractedColors[index];
+    const freq = freqValues[row];
+    const lpi = lpiValues[col];
+    const meta = colorMetadata[index];
+
+    // Update detail panel
+    const panel = document.getElementById('colorDetailPanel');
+    panel.style.display = 'block';
+
+    document.getElementById('colorDetailSwatch').style.backgroundColor =
+        `rgb(${color.r}, ${color.g}, ${color.b})`;
+    document.getElementById('colorDetailSettings').textContent = `${freq} kHz / ${lpi} LPI`;
+    document.getElementById('colorDetailPosition').textContent = `Row ${row + 1}, Col ${col + 1}`;
+    document.getElementById('colorNameInput').value = meta.name || '';
+
+    // Toggle delete/restore buttons
+    document.getElementById('btnDeleteColor').style.display = meta.excluded ? 'none' : 'inline-flex';
+    document.getElementById('btnRestoreColor').style.display = meta.excluded ? 'inline-flex' : 'none';
+
+    // Highlight on source
+    highlightSourceCell(row, col);
+
+    // Update grid selection
+    renderAdvancedGrid();
+}
+
+function highlightSourceCell(row, col) {
+    const { corners, numCols, numRows, originalImg, autoDetected, detectedCells } = analyzerState;
+
+    // For auto-detected mode, we don't require corners
+    if (!autoDetected && (!corners || corners.length !== 4)) return;
+
+    const canvas = document.getElementById('advancedAnalyzerCanvas');
+    if (!canvas) return;
+
+    // Store the currently highlighted cell for redraw
+    advancedAnalyzerState.highlightedCell = { row, col };
+
+    // Redraw the canvas with the highlight
+    redrawAdvancedCanvas();
+}
+
+function redrawAdvancedCanvas() {
+    const { corners, numCols, numRows, originalImg, autoDetected, detectedCells } = analyzerState;
+    const { highlightedCell } = advancedAnalyzerState;
+
+    const simpleCanvas = document.getElementById('analyzerCanvas');
+    const canvas = document.getElementById('advancedAnalyzerCanvas');
+    if (!canvas || !originalImg || !simpleCanvas) return;
+
+    const ctx = canvas.getContext('2d');
+
+    // Redraw base image at same size as simple analyzer
+    canvas.width = simpleCanvas.width;
+    canvas.height = simpleCanvas.height;
+    ctx.drawImage(originalImg, 0, 0, canvas.width, canvas.height);
+
+    // Draw grid overlay based on detection method
+    if (autoDetected && detectedCells && detectedCells.length > 0) {
+        // Draw detected cell boundaries
+        drawDetectedCellsOverlay(ctx, detectedCells);
+    } else if (corners && corners.length === 4) {
+        // Use manual corner-based grid
+        drawAdvancedGridOverlay(ctx, corners, numCols, numRows);
+    }
+
+    // Draw highlight for selected cell if any
+    if (highlightedCell) {
+        const { row, col } = highlightedCell;
+
+        if (autoDetected && detectedCells) {
+            // Find the detected cell matching this row/col
+            const cell = detectedCells.find(c => c.row === row && c.col === col);
+            if (cell && cell.bounds) {
+                drawCellHighlight(ctx, cell.bounds);
+            }
+        } else if (corners && corners.length === 4) {
+            // Calculate cell corner positions using manual corner interpolation
+            const t1x = col / numCols;
+            const t2x = (col + 1) / numCols;
+            const t1y = row / numRows;
+            const t2y = (row + 1) / numRows;
+
+            const topLeft = getCellCorner(corners, t1x, t1y);
+            const topRight = getCellCorner(corners, t2x, t1y);
+            const bottomRight = getCellCorner(corners, t2x, t2y);
+            const bottomLeft = getCellCorner(corners, t1x, t2y);
+
+            drawCellHighlightQuad(ctx, topLeft, topRight, bottomRight, bottomLeft);
+        }
+    }
+}
+
+/**
+ * Draw overlay for auto-detected cells
+ */
+function drawDetectedCellsOverlay(ctx, cells) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1;
+
+    cells.forEach(cell => {
+        if (!cell.bounds) return;
+        const { top, bottom, left, right } = cell.bounds;
+        ctx.strokeRect(left, top, right - left, bottom - top);
+    });
+}
+
+/**
+ * Draw highlight for a cell using detected bounds
+ */
+function drawCellHighlight(ctx, bounds) {
+    const { top, bottom, left, right } = bounds;
+    const margin = 2;
+
+    // Draw filled rectangle with semi-transparent red
+    ctx.fillStyle = 'rgba(255, 59, 48, 0.3)';
+    ctx.fillRect(left + margin, top + margin, right - left - margin * 2, bottom - top - margin * 2);
+
+    // Draw solid red border
+    ctx.strokeStyle = '#ff3b30';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(left + margin, top + margin, right - left - margin * 2, bottom - top - margin * 2);
+
+    // Draw corner markers
+    ctx.fillStyle = '#ff3b30';
+    [[left, top], [right, top], [right, bottom], [left, bottom]].forEach(([x, y]) => {
+        ctx.beginPath();
+        ctx.arc(x, y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+/**
+ * Draw highlight for a cell using interpolated quadrilateral corners
+ */
+function drawCellHighlightQuad(ctx, topLeft, topRight, bottomRight, bottomLeft) {
+    // Draw filled quadrilateral with semi-transparent red
+    ctx.fillStyle = 'rgba(255, 59, 48, 0.3)';
+    ctx.beginPath();
+    ctx.moveTo(topLeft.x, topLeft.y);
+    ctx.lineTo(topRight.x, topRight.y);
+    ctx.lineTo(bottomRight.x, bottomRight.y);
+    ctx.lineTo(bottomLeft.x, bottomLeft.y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw solid red border
+    ctx.strokeStyle = '#ff3b30';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(topLeft.x, topLeft.y);
+    ctx.lineTo(topRight.x, topRight.y);
+    ctx.lineTo(bottomRight.x, bottomRight.y);
+    ctx.lineTo(bottomLeft.x, bottomLeft.y);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Draw corner markers
+    ctx.fillStyle = '#ff3b30';
+    [topLeft, topRight, bottomRight, bottomLeft].forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+function getCellCorner(corners, tx, ty) {
+    // Same interpolation as updateExtractedColors uses
+    const pTop = interpolate(corners[0], corners[1], tx);
+    const pBottom = interpolate(corners[3], corners[2], tx);
+    return interpolate(pTop, pBottom, ty);
+}
+
+function clearSourceHighlight() {
+    advancedAnalyzerState.highlightedCell = null;
+    redrawAdvancedCanvas();
+}
+
+function toggleColorExclusion(index) {
+    if (index === null) return;
+
+    const meta = advancedAnalyzerState.colorMetadata[index];
+    meta.excluded = !meta.excluded;
+
+    // Update buttons
+    document.getElementById('btnDeleteColor').style.display = meta.excluded ? 'none' : 'inline-flex';
+    document.getElementById('btnRestoreColor').style.display = meta.excluded ? 'inline-flex' : 'none';
+
+    updateAdvancedGrid();
+    showToast(meta.excluded ? 'Color removed from map' : 'Color restored', 'info');
+}
+
+function findSimilarColors(threshold = 25) {
+    const { extractedColors } = analyzerState;
+    const { colorMetadata } = advancedAnalyzerState;
+    const groups = [];
+    const visited = new Set();
+
+    for (let i = 0; i < extractedColors.length; i++) {
+        if (visited.has(i)) continue;
+
+        const group = [i];
+        for (let j = i + 1; j < extractedColors.length; j++) {
+            if (visited.has(j)) continue;
+
+            const dist = colorDistance(extractedColors[i], extractedColors[j]);
+            if (dist <= threshold) {
+                group.push(j);
+                visited.add(j);
+            }
+        }
+
+        if (group.length > 1) {
+            groups.push(group);
+            group.forEach(idx => visited.add(idx));
+        }
+    }
+
+    advancedAnalyzerState.similarGroups = groups;
+
+    // Show/hide similar colors panel
+    const panel = document.getElementById('similarColorsPanel');
+    if (panel) {
+        panel.style.display = groups.length > 0 ? 'block' : 'none';
+    }
+
+    // Populate similar colors list
+    renderSimilarColorsList(groups);
+}
+
+function colorDistance(c1, c2) {
+    const dr = c1.r - c2.r;
+    const dg = c1.g - c2.g;
+    const db = c1.b - c2.b;
+    return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+function renderSimilarColorsList(groups) {
+    const list = document.getElementById('similarColorsList');
+    if (!list) return;
+
+    const { extractedColors, numCols, freqValues, lpiValues } = analyzerState;
+
+    list.innerHTML = '';
+
+    groups.forEach((group, gIdx) => {
+        const groupEl = document.createElement('div');
+        groupEl.className = 'similar-color-group';
+        groupEl.innerHTML = `<strong style="color: var(--accent-warning); margin-right: 8px;">Group ${gIdx + 1}:</strong>`;
+
+        group.forEach(idx => {
+            const color = extractedColors[idx];
+            const row = Math.floor(idx / numCols);
+            const col = idx % numCols;
+            const lpi = lpiValues[col];
+
+            const swatch = document.createElement('div');
+            swatch.className = 'color-swatch';
+            swatch.style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
+            swatch.style.cursor = 'pointer';
+            swatch.title = `${freqValues[row]}kHz / ${lpi} LPI - Click to select`;
+            swatch.addEventListener('click', () => selectAdvancedColor(idx));
+            groupEl.appendChild(swatch);
+        });
+
+        // Add hint about lowest LPI
+        const lowestLpiIdx = group.reduce((minIdx, idx) => {
+            const col = idx % numCols;
+            const minCol = minIdx % numCols;
+            return lpiValues[col] < lpiValues[minCol] ? idx : minIdx;
+        }, group[0]);
+
+        const hint = document.createElement('span');
+        hint.className = 'color-info';
+        hint.innerHTML = `<em>💡 Keep lowest LPI for faster engraving</em>`;
+        groupEl.appendChild(hint);
+
+        list.appendChild(groupEl);
+    });
+}
+
+function updateAdvancedStats() {
+    const { extractedColors } = analyzerState;
+    const { colorMetadata } = advancedAnalyzerState;
+
+    const total = extractedColors.length;
+    const excluded = colorMetadata.filter(m => m.excluded).length;
+
+    document.getElementById('advancedColorCount').textContent = `${total - excluded} colors`;
+    document.getElementById('advancedExcludedCount').textContent = excluded > 0 ? `${excluded} excluded` : '';
+}
+
+function saveAdvancedColorMap() {
+    const { extractedColors, freqValues, lpiValues, numCols, numRows } = analyzerState;
+    const { colorMetadata } = advancedAnalyzerState;
+
+    // Build entries, excluding deleted ones
+    const colorEntries = [];
+    let idx = 0;
+
+    for (let row = 0; row < numRows; row++) {
+        const freq = freqValues[row];
+        for (let col = 0; col < numCols; col++) {
+            const lpi = lpiValues[col];
+            const color = extractedColors[idx];
+            const meta = colorMetadata[idx];
+
+            if (!meta.excluded) {
+                const entry = {
+                    color: color,
+                    frequency: freq,
+                    lpi: lpi
+                };
+                if (meta.name) {
+                    entry.name = meta.name;
+                }
+                colorEntries.push(entry);
+            }
+            idx++;
+        }
+    }
+
+    if (colorEntries.length === 0) {
+        showToast('No colors to save. All colors have been excluded.', 'error');
+        return;
+    }
+
+    const colorMapData = {
+        entries: colorEntries,
+        numCols,
+        numRows,
+        freqRange: [freqValues[0], freqValues[freqValues.length - 1]],
+        lpiRange: [lpiValues[0], lpiValues[lpiValues.length - 1]],
+        savedAt: new Date().toISOString()
+    };
+
+    // Prompt for name
+    const defaultName = `Grid ${new Date().toLocaleDateString()} (${colorEntries.length} colors)`;
+    const name = prompt("Enter a name for this color map:", defaultName);
+
+    if (name === null) return;
+
+    if (SettingsStorage.saveColorMap(colorMapData, name)) {
+        showToast(`Color map "${name}" saved with ${colorEntries.length} colors!`, 'success');
+        closeAdvancedAnalyzer();
+        renderManageMapsUI();
+
+        // Also update the simple view status
+        const statusDiv = document.getElementById('savedColorMapStatus');
+        if (statusDiv) {
+            statusDiv.style.display = 'block';
+        }
+    } else {
+        showToast('Failed to save color map.', 'error');
+    }
+}
+
+// ===================================
 // Map Management UI (Injected)
 // ===================================
+
 
 function setupMapManagement() {
     // Locate where to inject the management panel. 

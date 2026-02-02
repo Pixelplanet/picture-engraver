@@ -1,1023 +1,1076 @@
 /**
  * Default System Color Map
- * Manually analyzed and exported by user 2026-01-26
+ * Updated from _new_default_color_grid.json on 2026-02-02
  */
 
 export const DEFAULT_COLOR_MAP_DATA = {
     "entries": [
         {
             "color": {
-                "r": 99,
-                "g": 74,
-                "b": 30
-            },
-            "frequency": 40,
-            "lpi": 2000
-        },
-        {
-            "color": {
-                "r": 249,
-                "g": 248,
-                "b": 237
-            },
-            "frequency": 40,
-            "lpi": 1885
-        },
-        {
-            "color": {
-                "r": 92,
-                "g": 107,
-                "b": 65
-            },
-            "frequency": 40,
-            "lpi": 1769
-        },
-        {
-            "color": {
-                "r": 127,
-                "g": 127,
-                "b": 105
-            },
-            "frequency": 40,
-            "lpi": 1654
-        },
-        {
-            "color": {
-                "r": 168,
-                "g": 144,
-                "b": 131
-            },
-            "frequency": 40,
-            "lpi": 1538
-        },
-        {
-            "color": {
-                "r": 172,
-                "g": 146,
-                "b": 135
-            },
-            "frequency": 40,
-            "lpi": 1423
-        },
-        {
-            "color": {
-                "r": 151,
-                "g": 145,
-                "b": 121
-            },
-            "frequency": 40,
-            "lpi": 1308
-        },
-        {
-            "color": {
-                "r": 136,
-                "g": 143,
-                "b": 126
-            },
-            "frequency": 40,
-            "lpi": 1192
-        },
-        {
-            "color": {
-                "r": 133,
-                "g": 150,
-                "b": 132
-            },
-            "frequency": 40,
-            "lpi": 1077
-        },
-        {
-            "color": {
-                "r": 139,
-                "g": 161,
-                "b": 136
-            },
-            "frequency": 40,
-            "lpi": 962
-        },
-        {
-            "color": {
-                "r": 92,
-                "g": 127,
-                "b": 115
-            },
-            "frequency": 40,
-            "lpi": 846
-        },
-        {
-            "color": {
-                "r": 131,
-                "g": 146,
-                "b": 144
-            },
-            "frequency": 40,
-            "lpi": 731
-        },
-        {
-            "color": {
-                "r": 32,
-                "g": 84,
-                "b": 91
-            },
-            "frequency": 40,
-            "lpi": 615
-        },
-        {
-            "color": {
-                "r": 18,
-                "g": 62,
-                "b": 85
-            },
-            "frequency": 40,
-            "lpi": 500
-        },
-        {
-            "color": {
-                "r": 80,
-                "g": 69,
-                "b": 51
-            },
-            "frequency": 45,
-            "lpi": 2000
-        },
-        {
-            "color": {
-                "r": 255,
-                "g": 255,
-                "b": 254
-            },
-            "frequency": 45,
-            "lpi": 1885
-        },
-        {
-            "color": {
-                "r": 142,
-                "g": 123,
-                "b": 112
-            },
-            "frequency": 45,
-            "lpi": 1769
-        },
-        {
-            "color": {
-                "r": 184,
-                "g": 142,
-                "b": 117
-            },
-            "frequency": 45,
-            "lpi": 1654
-        },
-        {
-            "color": {
-                "r": 182,
-                "g": 167,
-                "b": 142
-            },
-            "frequency": 45,
-            "lpi": 1538
-        },
-        {
-            "color": {
-                "r": 142,
-                "g": 156,
-                "b": 140
-            },
-            "frequency": 45,
-            "lpi": 1423
-        },
-        {
-            "color": {
-                "r": 133,
-                "g": 160,
-                "b": 151
-            },
-            "frequency": 45,
-            "lpi": 1308
-        },
-        {
-            "color": {
-                "r": 127,
-                "g": 159,
-                "b": 150
-            },
-            "frequency": 45,
-            "lpi": 1192
-        },
-        {
-            "color": {
-                "r": 118,
-                "g": 156,
-                "b": 142
-            },
-            "frequency": 45,
-            "lpi": 1077
-        },
-        {
-            "color": {
-                "r": 102,
-                "g": 150,
-                "b": 146
-            },
-            "frequency": 45,
-            "lpi": 962
-        },
-        {
-            "color": {
-                "r": 62,
-                "g": 122,
-                "b": 140
-            },
-            "frequency": 45,
-            "lpi": 846
-        },
-        {
-            "color": {
-                "r": 121,
-                "g": 131,
-                "b": 146
-            },
-            "frequency": 45,
-            "lpi": 731
-        },
-        {
-            "color": {
-                "r": 37,
-                "g": 88,
-                "b": 124
-            },
-            "frequency": 45,
-            "lpi": 615
-        },
-        {
-            "color": {
-                "r": 54,
-                "g": 53,
-                "b": 93
-            },
-            "frequency": 45,
-            "lpi": 500
-        },
-        {
-            "color": {
-                "r": 119,
-                "g": 99,
-                "b": 62
-            },
-            "frequency": 50,
-            "lpi": 2000
-        },
-        {
-            "color": {
-                "r": 255,
-                "g": 255,
-                "b": 247
-            },
-            "frequency": 50,
-            "lpi": 1885
-        },
-        {
-            "color": {
-                "r": 204,
-                "g": 166,
-                "b": 129
-            },
-            "frequency": 50,
-            "lpi": 1769
-        },
-        {
-            "color": {
-                "r": 198,
-                "g": 199,
-                "b": 171
-            },
-            "frequency": 50,
-            "lpi": 1654
-        },
-        {
-            "color": {
-                "r": 154,
-                "g": 175,
-                "b": 156
-            },
-            "frequency": 50,
-            "lpi": 1538
-        },
-        {
-            "color": {
-                "r": 170,
-                "g": 190,
-                "b": 163
-            },
-            "frequency": 50,
-            "lpi": 1423
-        },
-        {
-            "color": {
-                "r": 149,
-                "g": 188,
-                "b": 170
-            },
-            "frequency": 50,
-            "lpi": 1308
-        },
-        {
-            "color": {
-                "r": 153,
-                "g": 204,
-                "b": 187
-            },
-            "frequency": 50,
-            "lpi": 1192
-        },
-        {
-            "color": {
-                "r": 101,
-                "g": 166,
-                "b": 178
-            },
-            "frequency": 50,
-            "lpi": 1077
-        },
-        {
-            "color": {
                 "r": 63,
-                "g": 132,
-                "b": 167
+                "g": 34,
+                "b": 16,
+                "isQR": false
             },
-            "frequency": 50,
-            "lpi": 962
-        },
-        {
-            "color": {
-                "r": 66,
-                "g": 119,
-                "b": 167
-            },
-            "frequency": 50,
-            "lpi": 846
-        },
-        {
-            "color": {
-                "r": 81,
-                "g": 75,
-                "b": 113
-            },
-            "frequency": 50,
-            "lpi": 731
-        },
-        {
-            "color": {
-                "r": 67,
-                "g": 74,
-                "b": 128
-            },
-            "frequency": 50,
-            "lpi": 615
-        },
-        {
-            "color": {
-                "r": 112,
-                "g": 63,
-                "b": 92
-            },
-            "frequency": 50,
-            "lpi": 500
-        },
-        {
-            "color": {
-                "r": 129,
-                "g": 111,
-                "b": 89
-            },
-            "frequency": 55,
+            "frequency": 40,
             "lpi": 2000
         },
         {
             "color": {
-                "r": 227,
-                "g": 218,
-                "b": 201
+                "r": 15,
+                "g": 14,
+                "b": 9,
+                "isQR": false
             },
-            "frequency": 55,
+            "frequency": 40,
             "lpi": 1885
         },
         {
             "color": {
-                "r": 195,
-                "g": 145,
-                "b": 108
+                "r": 41,
+                "g": 33,
+                "b": 18,
+                "isQR": false
             },
-            "frequency": 55,
+            "frequency": 40,
             "lpi": 1769
         },
         {
             "color": {
-                "r": 156,
-                "g": 191,
-                "b": 187
+                "r": 56,
+                "g": 61,
+                "b": 29,
+                "isQR": false
             },
-            "frequency": 55,
+            "frequency": 40,
             "lpi": 1654
         },
         {
             "color": {
-                "r": 183,
-                "g": 213,
-                "b": 189
+                "r": 73,
+                "g": 66,
+                "b": 48,
+                "isQR": false
             },
-            "frequency": 55,
+            "frequency": 40,
             "lpi": 1538
-        },
-        {
-            "color": {
-                "r": 174,
-                "g": 218,
-                "b": 201
-            },
-            "frequency": 55,
-            "lpi": 1423
-        },
-        {
-            "color": {
-                "r": 149,
-                "g": 208,
-                "b": 203
-            },
-            "frequency": 55,
-            "lpi": 1308
-        },
-        {
-            "color": {
-                "r": 110,
-                "g": 182,
-                "b": 206
-            },
-            "frequency": 55,
-            "lpi": 1192
-        },
-        {
-            "color": {
-                "r": 107,
-                "g": 196,
-                "b": 231
-            },
-            "frequency": 55,
-            "lpi": 1077
-        },
-        {
-            "color": {
-                "r": 78,
-                "g": 155,
-                "b": 211
-            },
-            "frequency": 55,
-            "lpi": 962
-        },
-        {
-            "color": {
-                "r": 112,
-                "g": 132,
-                "b": 193
-            },
-            "frequency": 55,
-            "lpi": 846
-        },
-        {
-            "color": {
-                "r": 152,
-                "g": 105,
-                "b": 130
-            },
-            "frequency": 55,
-            "lpi": 731
-        },
-        {
-            "color": {
-                "r": 152,
-                "g": 105,
-                "b": 137
-            },
-            "frequency": 55,
-            "lpi": 615
-        },
-        {
-            "color": {
-                "r": 170,
-                "g": 125,
-                "b": 72
-            },
-            "frequency": 55,
-            "lpi": 500
         },
         {
             "color": {
                 "r": 139,
-                "g": 102,
-                "b": 90
+                "g": 90,
+                "b": 76,
+                "isQR": false
             },
-            "frequency": 60,
-            "lpi": 2000
-        },
-        {
-            "color": {
-                "r": 155,
-                "g": 165,
-                "b": 161
-            },
-            "frequency": 60,
-            "lpi": 1885
-        },
-        {
-            "color": {
-                "r": 132,
-                "g": 166,
-                "b": 180
-            },
-            "frequency": 60,
-            "lpi": 1769
-        },
-        {
-            "color": {
-                "r": 169,
-                "g": 147,
-                "b": 86
-            },
-            "frequency": 60,
-            "lpi": 1654
-        },
-        {
-            "color": {
-                "r": 134,
-                "g": 181,
-                "b": 185
-            },
-            "frequency": 60,
-            "lpi": 1538
-        },
-        {
-            "color": {
-                "r": 138,
-                "g": 198,
-                "b": 209
-            },
-            "frequency": 60,
+            "frequency": 40,
             "lpi": 1423
-        },
-        {
-            "color": {
-                "r": 118,
-                "g": 186,
-                "b": 213
-            },
-            "frequency": 60,
-            "lpi": 1308
-        },
-        {
-            "color": {
-                "r": 100,
-                "g": 170,
-                "b": 211
-            },
-            "frequency": 60,
-            "lpi": 1192
-        },
-        {
-            "color": {
-                "r": 108,
-                "g": 171,
-                "b": 229
-            },
-            "frequency": 60,
-            "lpi": 1077
-        },
-        {
-            "color": {
-                "r": 137,
-                "g": 143,
-                "b": 204
-            },
-            "frequency": 60,
-            "lpi": 962
-        },
-        {
-            "color": {
-                "r": 177,
-                "g": 127,
-                "b": 166
-            },
-            "frequency": 60,
-            "lpi": 846
-        },
-        {
-            "color": {
-                "r": 197,
-                "g": 147,
-                "b": 106
-            },
-            "frequency": 60,
-            "lpi": 731
-        },
-        {
-            "color": {
-                "r": 188,
-                "g": 144,
-                "b": 102
-            },
-            "frequency": 60,
-            "lpi": 615
-        },
-        {
-            "color": {
-                "r": 181,
-                "g": 167,
-                "b": 116
-            },
-            "frequency": 60,
-            "lpi": 500
-        },
-        {
-            "color": {
-                "r": 132,
-                "g": 156,
-                "b": 156
-            },
-            "frequency": 65,
-            "lpi": 2000
-        },
-        {
-            "color": {
-                "r": 121,
-                "g": 141,
-                "b": 151
-            },
-            "frequency": 65,
-            "lpi": 1885
-        },
-        {
-            "color": {
-                "r": 114,
-                "g": 131,
-                "b": 148
-            },
-            "frequency": 65,
-            "lpi": 1769
-        },
-        {
-            "color": {
-                "r": 109,
-                "g": 137,
-                "b": 161
-            },
-            "frequency": 65,
-            "lpi": 1654
-        },
-        {
-            "color": {
-                "r": 143,
-                "g": 155,
-                "b": 106
-            },
-            "frequency": 65,
-            "lpi": 1538
-        },
-        {
-            "color": {
-                "r": 89,
-                "g": 129,
-                "b": 166
-            },
-            "frequency": 65,
-            "lpi": 1423
-        },
-        {
-            "color": {
-                "r": 110,
-                "g": 133,
-                "b": 173
-            },
-            "frequency": 65,
-            "lpi": 1308
-        },
-        {
-            "color": {
-                "r": 110,
-                "g": 111,
-                "b": 150
-            },
-            "frequency": 65,
-            "lpi": 1192
-        },
-        {
-            "color": {
-                "r": 138,
-                "g": 108,
-                "b": 132
-            },
-            "frequency": 65,
-            "lpi": 1077
-        },
-        {
-            "color": {
-                "r": 191,
-                "g": 139,
-                "b": 132
-            },
-            "frequency": 65,
-            "lpi": 962
-        },
-        {
-            "color": {
-                "r": 199,
-                "g": 154,
-                "b": 111
-            },
-            "frequency": 65,
-            "lpi": 846
-        },
-        {
-            "color": {
-                "r": 187,
-                "g": 173,
-                "b": 129
-            },
-            "frequency": 65,
-            "lpi": 731
         },
         {
             "color": {
                 "r": 176,
-                "g": 167,
-                "b": 125
+                "g": 112,
+                "b": 100,
+                "isQR": false
             },
-            "frequency": 65,
-            "lpi": 615
-        },
-        {
-            "color": {
-                "r": 141,
-                "g": 156,
-                "b": 151
-            },
-            "frequency": 65,
-            "lpi": 500
-        },
-        {
-            "color": {
-                "r": 119,
-                "g": 145,
-                "b": 164
-            },
-            "frequency": 70,
-            "lpi": 2000
-        },
-        {
-            "color": {
-                "r": 118,
-                "g": 130,
-                "b": 142
-            },
-            "frequency": 70,
-            "lpi": 1885
-        },
-        {
-            "color": {
-                "r": 118,
-                "g": 120,
-                "b": 125
-            },
-            "frequency": 70,
-            "lpi": 1769
-        },
-        {
-            "color": {
-                "r": 127,
-                "g": 124,
-                "b": 139
-            },
-            "frequency": 70,
-            "lpi": 1654
-        },
-        {
-            "color": {
-                "r": 122,
-                "g": 113,
-                "b": 130
-            },
-            "frequency": 70,
-            "lpi": 1538
-        },
-        {
-            "color": {
-                "r": 83,
-                "g": 142,
-                "b": 158
-            },
-            "frequency": 70,
-            "lpi": 1423
-        },
-        {
-            "color": {
-                "r": 137,
-                "g": 114,
-                "b": 132
-            },
-            "frequency": 70,
+            "frequency": 40,
             "lpi": 1308
         },
         {
             "color": {
-                "r": 143,
-                "g": 114,
-                "b": 108
+                "r": 184,
+                "g": 147,
+                "b": 125,
+                "isQR": false
             },
-            "frequency": 70,
+            "frequency": 40,
             "lpi": 1192
         },
         {
             "color": {
-                "r": 160,
-                "g": 130,
-                "b": 102
+                "r": 168,
+                "g": 160,
+                "b": 137,
+                "isQR": false
             },
-            "frequency": 70,
+            "frequency": 40,
             "lpi": 1077
         },
         {
             "color": {
-                "r": 163,
-                "g": 140,
-                "b": 99
+                "r": 152,
+                "g": 155,
+                "b": 128,
+                "isQR": false
             },
-            "frequency": 70,
+            "frequency": 40,
             "lpi": 962
-        },
-        {
-            "color": {
-                "r": 187,
-                "g": 172,
-                "b": 153
-            },
-            "frequency": 70,
-            "lpi": 846
-        },
-        {
-            "color": {
-                "r": 151,
-                "g": 131,
-                "b": 103
-            },
-            "frequency": 70,
-            "lpi": 731
-        },
-        {
-            "color": {
-                "r": 122,
-                "g": 116,
-                "b": 97
-            },
-            "frequency": 70,
-            "lpi": 615
         },
         {
             "color": {
                 "r": 139,
-                "g": 130,
-                "b": 111
+                "g": 149,
+                "b": 114,
+                "isQR": false
             },
-            "frequency": 70,
+            "frequency": 40,
+            "lpi": 846
+        },
+        {
+            "color": {
+                "r": 107,
+                "g": 149,
+                "b": 114,
+                "isQR": false
+            },
+            "frequency": 40,
+            "lpi": 731
+        },
+        {
+            "color": {
+                "r": 25,
+                "g": 135,
+                "b": 130,
+                "isQR": false
+            },
+            "frequency": 40,
+            "lpi": 615
+        },
+        {
+            "color": {
+                "r": 1,
+                "g": 101,
+                "b": 124,
+                "isQR": false
+            },
+            "frequency": 40,
             "lpi": 500
         },
         {
             "color": {
-                "r": 129,
-                "g": 140,
-                "b": 148
+                "r": 20,
+                "g": 17,
+                "b": 8,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 2000
+        },
+        {
+            "color": {
+                "r": 46,
+                "g": 39,
+                "b": 20,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 1885
+        },
+        {
+            "color": {
+                "r": 50,
+                "g": 48,
+                "b": 26,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 1769
+        },
+        {
+            "color": {
+                "r": 91,
+                "g": 63,
+                "b": 57,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 1654
+        },
+        {
+            "color": {
+                "r": 153,
+                "g": 87,
+                "b": 75,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 1538
+        },
+        {
+            "color": {
+                "r": 178,
+                "g": 135,
+                "b": 116,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 1423
+        },
+        {
+            "color": {
+                "r": 164,
+                "g": 157,
+                "b": 139,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 1308
+        },
+        {
+            "color": {
+                "r": 141,
+                "g": 158,
+                "b": 145,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 1192
+        },
+        {
+            "color": {
+                "r": 133,
+                "g": 159,
+                "b": 138,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 1077
+        },
+        {
+            "color": {
+                "r": 131,
+                "g": 159,
+                "b": 126,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 962
+        },
+        {
+            "color": {
+                "r": 105,
+                "g": 156,
+                "b": 123,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 846
+        },
+        {
+            "color": {
+                "r": 45,
+                "g": 145,
+                "b": 134,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 731
+        },
+        {
+            "color": {
+                "r": 21,
+                "g": 116,
+                "b": 138,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 615
+        },
+        {
+            "color": {
+                "r": 92,
+                "g": 72,
+                "b": 135,
+                "isQR": false
+            },
+            "frequency": 45,
+            "lpi": 500
+        },
+        {
+            "color": {
+                "r": 30,
+                "g": 26,
+                "b": 15,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 2000
+        },
+        {
+            "color": {
+                "r": 59,
+                "g": 52,
+                "b": 36,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 1885
+        },
+        {
+            "color": {
+                "r": 73,
+                "g": 52,
+                "b": 39,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 1769
+        },
+        {
+            "color": {
+                "r": 163,
+                "g": 114,
+                "b": 100,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 1654
+        },
+        {
+            "color": {
+                "r": 156,
+                "g": 144,
+                "b": 130,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 1538
+        },
+        {
+            "color": {
+                "r": 145,
+                "g": 152,
+                "b": 136,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 1423
+        },
+        {
+            "color": {
+                "r": 152,
+                "g": 151,
+                "b": 125,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 1308
+        },
+        {
+            "color": {
+                "r": 140,
+                "g": 156,
+                "b": 127,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 1192
+        },
+        {
+            "color": {
+                "r": 134,
+                "g": 162,
+                "b": 123,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 1077
+        },
+        {
+            "color": {
+                "r": 97,
+                "g": 161,
+                "b": 135,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 962
+        },
+        {
+            "color": {
+                "r": 56,
+                "g": 145,
+                "b": 141,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 846
+        },
+        {
+            "color": {
+                "r": 52,
+                "g": 122,
+                "b": 140,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 731
+        },
+        {
+            "color": {
+                "r": 87,
+                "g": 93,
+                "b": 137,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 615
+        },
+        {
+            "color": {
+                "r": 156,
+                "g": 67,
+                "b": 111,
+                "isQR": false
+            },
+            "frequency": 50,
+            "lpi": 500
+        },
+        {
+            "color": {
+                "r": 61,
+                "g": 52,
+                "b": 35,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 2000
+        },
+        {
+            "color": {
+                "r": 114,
+                "g": 64,
+                "b": 64,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 1885
+        },
+        {
+            "color": {
+                "r": 149,
+                "g": 120,
+                "b": 109,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 1769
+        },
+        {
+            "color": {
+                "r": 115,
+                "g": 56,
+                "b": 51,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 1654
+        },
+        {
+            "color": {
+                "r": 111,
+                "g": 141,
+                "b": 141,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 1538
+        },
+        {
+            "color": {
+                "r": 118,
+                "g": 133,
+                "b": 114,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 1423
+        },
+        {
+            "color": {
+                "r": 121,
+                "g": 138,
+                "b": 112,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 1308
+        },
+        {
+            "color": {
+                "r": 101,
+                "g": 137,
+                "b": 109,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 1192
+        },
+        {
+            "color": {
+                "r": 76,
+                "g": 130,
+                "b": 116,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 1077
+        },
+        {
+            "color": {
+                "r": 55,
+                "g": 126,
+                "b": 118,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 962
+        },
+        {
+            "color": {
+                "r": 41,
+                "g": 108,
+                "b": 117,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 846
+        },
+        {
+            "color": {
+                "r": 72,
+                "g": 86,
+                "b": 112,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 731
+        },
+        {
+            "color": {
+                "r": 122,
+                "g": 61,
+                "b": 94,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 615
+        },
+        {
+            "color": {
+                "r": 163,
+                "g": 87,
+                "b": 61,
+                "isQR": false
+            },
+            "frequency": 55,
+            "lpi": 500
+        },
+        {
+            "color": {
+                "r": 85,
+                "g": 56,
+                "b": 55,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 2000
+        },
+        {
+            "color": {
+                "r": 110,
+                "g": 130,
+                "b": 135,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 1885
+        },
+        {
+            "color": {
+                "r": 93,
+                "g": 124,
+                "b": 129,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 1769
+        },
+        {
+            "color": {
+                "r": 80,
+                "g": 118,
+                "b": 129,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 1654
+        },
+        {
+            "color": {
+                "r": 82,
+                "g": 53,
+                "b": 36,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 1538
+        },
+        {
+            "color": {
+                "r": 70,
+                "g": 100,
+                "b": 100,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 1423
+        },
+        {
+            "color": {
+                "r": 57,
+                "g": 87,
+                "b": 82,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 1308
+        },
+        {
+            "color": {
+                "r": 48,
+                "g": 81,
+                "b": 80,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 1192
+        },
+        {
+            "color": {
+                "r": 42,
+                "g": 70,
+                "b": 74,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 1077
+        },
+        {
+            "color": {
+                "r": 40,
+                "g": 58,
+                "b": 69,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 962
+        },
+        {
+            "color": {
+                "r": 57,
+                "g": 46,
+                "b": 63,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 846
+        },
+        {
+            "color": {
+                "r": 71,
+                "g": 37,
+                "b": 54,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 731
+        },
+        {
+            "color": {
+                "r": 106,
+                "g": 63,
+                "b": 44,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 615
+        },
+        {
+            "color": {
+                "r": 108,
+                "g": 88,
+                "b": 57,
+                "isQR": false
+            },
+            "frequency": 60,
+            "lpi": 500
+        },
+        {
+            "color": {
+                "r": 99,
+                "g": 119,
+                "b": 120,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 2000
+        },
+        {
+            "color": {
+                "r": 75,
+                "g": 105,
+                "b": 115,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 1885
+        },
+        {
+            "color": {
+                "r": 67,
+                "g": 94,
+                "b": 111,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 1769
+        },
+        {
+            "color": {
+                "r": 64,
+                "g": 89,
+                "b": 109,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 1654
+        },
+        {
+            "color": {
+                "r": 58,
+                "g": 84,
+                "b": 106,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 1538
+        },
+        {
+            "color": {
+                "r": 35,
+                "g": 26,
+                "b": 27,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 1423
+        },
+        {
+            "color": {
+                "r": 52,
+                "g": 53,
+                "b": 71,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 1308
+        },
+        {
+            "color": {
+                "r": 46,
+                "g": 44,
+                "b": 57,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 1192
+        },
+        {
+            "color": {
+                "r": 38,
+                "g": 31,
+                "b": 44,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 1077
+        },
+        {
+            "color": {
+                "r": 65,
+                "g": 39,
+                "b": 49,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 962
+        },
+        {
+            "color": {
+                "r": 76,
+                "g": 41,
+                "b": 45,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 846
+        },
+        {
+            "color": {
+                "r": 94,
+                "g": 64,
+                "b": 48,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 731
+        },
+        {
+            "color": {
+                "r": 98,
+                "g": 82,
+                "b": 66,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 615
+        },
+        {
+            "color": {
+                "r": 74,
+                "g": 88,
+                "b": 96,
+                "isQR": false
+            },
+            "frequency": 65,
+            "lpi": 500
+        },
+        {
+            "color": {
+                "r": 60,
+                "g": 88,
+                "b": 100,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 2000
+        },
+        {
+            "color": {
+                "r": 61,
+                "g": 77,
+                "b": 93,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 1885
+        },
+        {
+            "color": {
+                "r": 69,
+                "g": 72,
+                "b": 86,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 1769
+        },
+        {
+            "color": {
+                "r": 63,
+                "g": 62,
+                "b": 76,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 1654
+        },
+        {
+            "color": {
+                "r": 59,
+                "g": 52,
+                "b": 68,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 1538
+        },
+        {
+            "color": {
+                "r": 56,
+                "g": 42,
+                "b": 60,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 1423
+        },
+        {
+            "color": {
+                "r": 59,
+                "g": 28,
+                "b": 59,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 1308
+        },
+        {
+            "color": {
+                "r": 50,
+                "g": 30,
+                "b": 42,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 1192
+        },
+        {
+            "color": {
+                "r": 63,
+                "g": 38,
+                "b": 41,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 1077
+        },
+        {
+            "color": {
+                "r": 79,
+                "g": 55,
+                "b": 47,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 962
+        },
+        {
+            "color": {
+                "r": 85,
+                "g": 68,
+                "b": 60,
+                "isQR": false
+            },
+            "frequency": 70,
+            "lpi": 846
+        },
+        {
+            "color": {
+                "r": 62,
+                "g": 69,
+                "b": 85,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 2000
         },
         {
             "color": {
-                "r": 121,
-                "g": 130,
-                "b": 139
+                "r": 61,
+                "g": 62,
+                "b": 77,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 1885
         },
         {
             "color": {
-                "r": 133,
-                "g": 135,
-                "b": 133
+                "r": 65,
+                "g": 59,
+                "b": 70,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 1769
         },
         {
             "color": {
-                "r": 127,
-                "g": 125,
-                "b": 128
+                "r": 65,
+                "g": 59,
+                "b": 73,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 1654
         },
         {
             "color": {
-                "r": 130,
-                "g": 118,
-                "b": 120
+                "r": 54,
+                "g": 42,
+                "b": 52,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 1538
         },
         {
             "color": {
-                "r": 137,
-                "g": 119,
-                "b": 115
+                "r": 63,
+                "g": 43,
+                "b": 52,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 1423
         },
         {
             "color": {
-                "r": 126,
-                "g": 111,
-                "b": 140
+                "r": 72,
+                "g": 49,
+                "b": 56,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 1308
         },
         {
             "color": {
-                "r": 154,
-                "g": 130,
-                "b": 104
+                "r": 24,
+                "g": 12,
+                "b": 21,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 1192
         },
         {
             "color": {
-                "r": 163,
-                "g": 154,
-                "b": 123
+                "r": 71,
+                "g": 56,
+                "b": 50,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 1077
         },
         {
             "color": {
-                "r": 150,
-                "g": 139,
-                "b": 107
+                "r": 70,
+                "g": 64,
+                "b": 62,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 962
         },
         {
             "color": {
-                "r": 157,
-                "g": 153,
-                "b": 140
+                "r": 65,
+                "g": 60,
+                "b": 55,
+                "isQR": false
             },
             "frequency": 75,
             "lpi": 846
         },
         {
             "color": {
-                "r": 132,
-                "g": 121,
-                "b": 98
-            },
-            "frequency": 75,
-            "lpi": 731
-        },
-        {
-            "color": {
-                "r": 126,
-                "g": 122,
-                "b": 101
-            },
-            "frequency": 75,
-            "lpi": 615
-        },
-        {
-            "color": {
-                "r": 93,
-                "g": 90,
-                "b": 76
-            },
-            "frequency": 75,
-            "lpi": 500
-        },
-        {
-            "color": {
-                "r": 5,
-                "g": 0,
-                "b": 0
+                "r": 52,
+                "g": 56,
+                "b": 68,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 2000
@@ -1025,119 +1078,102 @@ export const DEFAULT_COLOR_MAP_DATA = {
         {
             "color": {
                 "r": 53,
-                "g": 51,
-                "b": 56
+                "g": 50,
+                "b": 61,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 1885
         },
         {
             "color": {
-                "r": 145,
-                "g": 148,
-                "b": 143
+                "r": 61,
+                "g": 51,
+                "b": 60,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 1769
         },
         {
             "color": {
-                "r": 150,
-                "g": 144,
-                "b": 142
+                "r": 53,
+                "g": 46,
+                "b": 54,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 1654
         },
         {
             "color": {
-                "r": 124,
-                "g": 115,
-                "b": 112
+                "r": 51,
+                "g": 38,
+                "b": 45,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 1538
         },
         {
             "color": {
-                "r": 139,
-                "g": 122,
-                "b": 110
+                "r": 45,
+                "g": 34,
+                "b": 40,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 1423
         },
         {
             "color": {
-                "r": 147,
-                "g": 135,
-                "b": 113
+                "r": 53,
+                "g": 39,
+                "b": 39,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 1308
         },
         {
             "color": {
-                "r": 130,
-                "g": 108,
-                "b": 85
+                "r": 60,
+                "g": 54,
+                "b": 56,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 1192
         },
         {
             "color": {
-                "r": 154,
-                "g": 140,
-                "b": 107
+                "r": 45,
+                "g": 28,
+                "b": 25,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 1077
         },
         {
             "color": {
-                "r": 126,
-                "g": 133,
-                "b": 123
+                "r": 58,
+                "g": 50,
+                "b": 44,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 962
         },
         {
             "color": {
-                "r": 133,
-                "g": 122,
-                "b": 101
+                "r": 51,
+                "g": 61,
+                "b": 70,
+                "isQR": false
             },
             "frequency": 80,
             "lpi": 846
-        },
-        {
-            "color": {
-                "r": 127,
-                "g": 116,
-                "b": 95
-            },
-            "frequency": 80,
-            "lpi": 731
-        },
-        {
-            "color": {
-                "r": 86,
-                "g": 86,
-                "b": 75
-            },
-            "frequency": 80,
-            "lpi": 615
-        },
-        {
-            "color": {
-                "r": 73,
-                "g": 68,
-                "b": 59
-            },
-            "frequency": 80,
-            "lpi": 500
         }
     ],
     "numCols": 14,
@@ -1150,5 +1186,5 @@ export const DEFAULT_COLOR_MAP_DATA = {
         2000,
         500
     ],
-    "savedAt": "2026-01-26T20:11:58.060Z"
+    "savedAt": "2026-02-02T07:25:02.063Z"
 };
