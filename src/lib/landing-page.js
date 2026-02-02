@@ -74,11 +74,28 @@ export class LandingPage {
                         <span style="font-size: 0.8em; opacity: 0.8;">Diode / Fiber</span>
                     </button>
                     ` : ''}
+
+                    <!-- SVG Export Option (Always available) -->
+                    <button class="device-btn" data-id="svg_export" style="
+                        background: linear-gradient(135deg, #2d3436, #636e72);
+                        border: none;
+                        border-radius: 8px;
+                        padding: 20px;
+                        width: 200px;
+                        cursor: pointer;
+                        transition: transform 0.2s;
+                        display: flex; flex-direction: column; align-items: center; gap: 10px;
+                        color: white;
+                    ">
+                        <span style="font-size: 3em;">📁</span>
+                        <span style="font-size: 1.2em; font-weight: 600;">SVG Export</span>
+                        <span style="font-size: 0.8em; opacity: 0.8;">Vector Only (No Laser)</span>
+                    </button>
                 </div>
 
                 ${!isDevMode ? `
                     <div style="margin-top: 20px; font-size: 0.8em; color: #555;">
-                        Only F2 Ultra UV is currently supported publicly.
+                        Laser calibration is only available for F2 Ultra UV.
                     </div>
                 ` : ''}
             </div>

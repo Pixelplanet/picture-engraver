@@ -251,12 +251,14 @@ function init() {
 function updateDeviceUI(deviceId) {
     const profiles = SettingsStorage.getProfiles();
     const profile = profiles[deviceId];
+    const isVirtual = SettingsStorage.isVirtualDevice(deviceId);
 
     if (profile) {
         // Update Title or Add Badge
         const titleContainer = document.querySelector('.title-container .brand-subtitle');
         if (titleContainer) {
-            titleContainer.innerHTML = `by lasertools.org &nbsp; <span class="device-badge" style="background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; cursor:pointer;" title="Click to switch device">📍 ${profile.name}</span>`;
+            const badgeColor = isVirtual ? 'rgba(100,200,100,0.2)' : 'rgba(255,255,255,0.1)';
+            titleContainer.innerHTML = `by lasertools.org &nbsp; <span class="device-badge" style="background: ${badgeColor}; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; cursor:pointer;" title="Click to switch device">📍 ${profile.name}</span>`;
 
             // Add click listener to the badge to re-open landing page
             const badge = titleContainer.querySelector('.device-badge');
@@ -268,6 +270,59 @@ function updateDeviceUI(deviceId) {
                 // but here we just render the visual.
             });
         }
+    }
+
+    // Toggle UI elements based on virtual device mode
+    toggleVirtualModeUI(isVirtual);
+}
+
+/**
+ * Toggle UI elements visibility based on virtual device mode (SVG export)
+ * @param {boolean} isVirtual - True if current device is virtual (SVG mode)
+ */
+function toggleVirtualModeUI(isVirtual) {
+    // 1. Hide/show the "Analyze Grid" tab in the test grid modal
+    const analyzerTabBtn = document.querySelector('[data-modal-tab="analyzer"]');
+    if (analyzerTabBtn) {
+        analyzerTabBtn.style.display = isVirtual ? 'none' : '';
+    }
+
+    // 2. Hide/show laser-related settings in the settings modal
+    const laserSettingGroups = document.querySelectorAll('#settingsModal .setting-group');
+    laserSettingGroups.forEach((group, index) => {
+        // First group (index 0) is engraving settings (Power, Speed, etc.)
+        // Hide all but width/height when in virtual mode
+        // For now, hide all groups except those we might want to keep
+        if (isVirtual && index < 4) { // Hide first 4 groups (laser-specific)
+            group.style.display = 'none';
+        } else {
+            group.style.display = '';
+        }
+    });
+
+    // 3. Change export button text and behavior
+    const exportBtn = document.getElementById('btnDownloadXCS');
+    if (exportBtn) {
+        if (isVirtual) {
+            exportBtn.innerHTML = '<span>📁</span> Download SVG';
+            exportBtn.dataset.exportMode = 'svg';
+        } else {
+            exportBtn.innerHTML = '<span>💾</span> Download XCS';
+            exportBtn.dataset.exportMode = 'xcs';
+        }
+    }
+
+    // 4. Hide/show the "Auto-Assign Colors" button (not relevant for SVG mode)
+    const autoAssignBtn = document.getElementById('btnAutoAssign');
+    if (autoAssignBtn) {
+        autoAssignBtn.style.display = isVirtual ? 'none' : '';
+    }
+
+    // 5. Hide/show the Test Grid modal button if needed
+    // For SVG mode, test grids are not relevant
+    const testGridBtn = document.getElementById('btnTestGrid');
+    if (testGridBtn) {
+        testGridBtn.style.display = isVirtual ? 'none' : '';
     }
 }
 
@@ -1052,6 +1107,9 @@ function openLayerEditModal(layerId) {
 
     state.editingLayerId = layerId;
 
+    // Check if in SVG mode
+    const isVirtual = SettingsStorage.isCurrentDeviceVirtual();
+
     // Populate inputs
     elements.layerEditName.value = layer.name;
     elements.layerEditFreq.value = layer.frequency !== null ? Math.round(layer.frequency) : '';
@@ -1064,7 +1122,18 @@ function openLayerEditModal(layerId) {
     elements.layerEditSpeed.value = speed;
     elements.layerEditPower.value = power;
 
-    // Render Color Grid from Calibration
+    // Toggle visibility of laser-specific fields
+    const laserFields = [
+        elements.layerEditFreq?.closest('.setting-row'),
+        elements.layerEditLpi?.closest('.setting-row'),
+        elements.layerEditSpeed?.closest('.setting-row'),
+        elements.layerEditPower?.closest('.setting-row')
+    ];
+    laserFields.forEach(field => {
+        if (field) field.style.display = isVirtual ? 'none' : '';
+    });
+
+    // Render Color Grid from Calibration (or simple color picker for SVG mode)
     renderLayerColorGrid();
 
     openModal(elements.layerEditModal);
@@ -1076,6 +1145,13 @@ function openLayerEditModal(layerId) {
 function renderLayerColorGrid() {
     const grid = elements.layerEditColorGrid;
     grid.innerHTML = '';
+
+    // Check if in SVG mode - show simple color picker instead of calibration grid
+    const isVirtual = SettingsStorage.isCurrentDeviceVirtual();
+    if (isVirtual) {
+        renderSimpleColorPicker(grid);
+        return;
+    }
 
     const colorMap = SettingsStorage.loadColorMap();
     let entries = [];
@@ -1179,6 +1255,108 @@ function renderLayerColorGrid() {
     });
 }
 
+/**
+ * Render a simple color picker for SVG mode (no laser calibration needed)
+ * Shows an HTML5 color picker plus a palette of common colors
+ */
+function renderSimpleColorPicker(container) {
+    // Get current layer color
+    const layer = state.layers.find(l => l.id === state.editingLayerId);
+    const currentColor = layer?.color || { r: 128, g: 128, b: 128 };
+    const hexColor = rgbToHex(currentColor.r, currentColor.g, currentColor.b);
+
+    // Create wrapper
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'display: flex; flex-direction: column; gap: 15px; align-items: center;';
+
+    // HTML5 Color Picker
+    const pickerRow = document.createElement('div');
+    pickerRow.style.cssText = 'display: flex; align-items: center; gap: 10px;';
+
+    const label = document.createElement('label');
+    label.textContent = 'Custom Color:';
+    label.style.fontWeight = '500';
+
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.value = hexColor;
+    picker.style.cssText = 'width: 60px; height: 40px; cursor: pointer; border: none; padding: 0;';
+
+    picker.addEventListener('input', (e) => {
+        const hex = e.target.value;
+        const rgb = hexToRgb(hex);
+        state.pendingLayerColor = rgb;
+        // Update visual selection
+        container.querySelectorAll('.color-cell').forEach(c => c.classList.remove('selected'));
+    });
+
+    pickerRow.appendChild(label);
+    pickerRow.appendChild(picker);
+    wrapper.appendChild(pickerRow);
+
+    // Preset Palette
+    const paletteLabel = document.createElement('div');
+    paletteLabel.textContent = 'Or choose from palette:';
+    paletteLabel.style.cssText = 'font-size: 0.9em; color: #666; margin-top: 5px;';
+    wrapper.appendChild(paletteLabel);
+
+    const palette = document.createElement('div');
+    palette.style.cssText = 'display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px;';
+
+    // Common colors palette
+    const presetColors = [
+        '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF',
+        '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#800080',
+        '#008000', '#000080', '#800000', '#008080', '#808000',
+        '#C0C0C0', '#808080', '#404040', '#FF6B6B', '#4ECDC4',
+        '#45B7D1', '#96CEB4', '#FFEAA7', '#DFE6E9', '#74B9FF',
+        '#A29BFE', '#FD79A8', '#FDCB6E', '#6C5CE7', '#00B894'
+    ];
+
+    presetColors.forEach(hex => {
+        const cell = document.createElement('div');
+        cell.className = 'color-cell';
+        cell.style.cssText = `background-color: ${hex}; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; border: 1px solid #ccc;`;
+        cell.title = hex;
+
+        cell.addEventListener('click', () => {
+            const rgb = hexToRgb(hex);
+            state.pendingLayerColor = rgb;
+            picker.value = hex;
+            // Visual feedback
+            container.querySelectorAll('.color-cell').forEach(c => c.classList.remove('selected'));
+            cell.classList.add('selected');
+        });
+
+        palette.appendChild(cell);
+    });
+
+    wrapper.appendChild(palette);
+    container.appendChild(wrapper);
+}
+
+/**
+ * Convert RGB to Hex color string
+ */
+function rgbToHex(r, g, b) {
+    return '#' + [r, g, b].map(x => {
+        const hex = Math.max(0, Math.min(255, Math.round(x))).toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+    }).join('');
+}
+
+/**
+ * Convert Hex color string to RGB object
+ */
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : { r: 128, g: 128, b: 128 };
+}
+
 function saveLayerEdit() {
     if (!state.editingLayerId) return;
 
@@ -1252,6 +1430,11 @@ function setupExport() {
  * Combined for faster workflow since generation is now very fast
  */
 async function downloadXCS() {
+    // Check if we're in SVG export mode
+    if (SettingsStorage.isCurrentDeviceVirtual()) {
+        return downloadSVG();
+    }
+
     if (state.layers.length === 0) {
         showToast('Please process an image first', 'error');
         return;
@@ -1292,6 +1475,81 @@ async function downloadXCS() {
     } catch (error) {
         console.error('XCS generation error:', error);
         showToast('Error generating XCS: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+/**
+ * Generate and download SVG file (for virtual/SVG export mode)
+ * Produces a clean SVG with colored layers, no laser settings required
+ */
+async function downloadSVG() {
+    if (state.vectorizedLayers.length === 0) {
+        showToast('Please process an image first', 'error');
+        return;
+    }
+
+    const btn = elements.btnDownloadXCS;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Generating SVG...';
+
+    try {
+        const outputSize = getOutputSize();
+        const width = outputSize.width;
+        const height = outputSize.height;
+
+        // Build SVG content
+        let svgContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated by Picture Engraver - lasertools.org -->
+<!-- Date: ${new Date().toISOString()} -->
+<svg xmlns="http://www.w3.org/2000/svg" 
+     width="${width}mm" 
+     height="${height}mm" 
+     viewBox="0 0 ${width} ${height}">
+`;
+
+        // Add each visible layer
+        state.vectorizedLayers.forEach((layer, index) => {
+            if (!layer.visible) return;
+
+            const layerState = state.layers[index];
+            const color = layerState?.color || layer.color;
+            const colorStr = `rgb(${color.r}, ${color.g}, ${color.b})`;
+            const layerName = layerState?.name || `Layer ${index + 1}`;
+
+            svgContent += `  <!-- ${layerName} -->\n`;
+            svgContent += `  <g id="layer-${index}" fill="${colorStr}" stroke="none">\n`;
+
+            layer.paths.forEach(pathD => {
+                svgContent += `    <path d="${pathD}"/>\n`;
+            });
+
+            svgContent += `  </g>\n`;
+        });
+
+        svgContent += '</svg>';
+
+        // Download
+        const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `vector_${Date.now()}.svg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast('SVG file downloaded!', 'success');
+
+        // Complete Onboarding if active
+        if (window.onboarding) window.onboarding.handleAction('download');
+    } catch (error) {
+        console.error('SVG generation error:', error);
+        showToast('Error generating SVG: ' + error.message, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;

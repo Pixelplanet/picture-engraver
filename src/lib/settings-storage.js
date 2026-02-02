@@ -70,6 +70,17 @@ export const DEVICE_PROFILES = {
             whitePower: 40
         }
     },
+    'svg_export': {
+        id: 'svg_export',
+        name: 'SVG Vector Export',
+        description: 'Export clean SVG vectors without laser settings',
+        type: 'virtual', // Flag to indicate this is not a real laser device
+        settings: {
+            // Only size defaults, no laser parameters
+            defaultWidth: 200,
+            defaultHeight: 200
+        }
+    },
 };
 
 const DEFAULT_PROFILE_ID = 'f2_ultra_uv'; // Default to UV for backward compat
@@ -100,6 +111,25 @@ export const SettingsStorage = {
             ...profile.settings,
             activeDevice: profileId
         };
+    },
+
+    /**
+     * Check if a profile is a virtual device (not a real laser)
+     * @param {string} profileId - Profile ID to check
+     * @returns {boolean}
+     */
+    isVirtualDevice(profileId) {
+        const profile = DEVICE_PROFILES[profileId];
+        return profile?.type === 'virtual';
+    },
+
+    /**
+     * Check if currently active device is virtual (SVG mode)
+     * @returns {boolean}
+     */
+    isCurrentDeviceVirtual() {
+        const settings = this.load();
+        return this.isVirtualDevice(settings.activeDevice);
     },
 
     /**
