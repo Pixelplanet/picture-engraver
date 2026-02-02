@@ -231,7 +231,7 @@ function init() {
     setupAdvancedAnalyzer();
     setupLightbox();
 
-    Logger.info('Picture Engraver initialized', { appVersion: '1.6.2' });
+    Logger.info('Picture Engraver initialized', { appVersion: '1.7.5' });
 
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
@@ -306,9 +306,11 @@ function toggleVirtualModeUI(isVirtual) {
         if (isVirtual) {
             exportBtn.innerHTML = '<span>📁</span> Download SVG';
             exportBtn.dataset.exportMode = 'svg';
+            exportBtn.disabled = false; // Force enable in SVG mode to fix persistent disabled state
         } else {
             exportBtn.innerHTML = '<span>💾</span> Download XCS';
             exportBtn.dataset.exportMode = 'xcs';
+            exportBtn.disabled = false; // Force enable in XCS mode
         }
     }
 
@@ -323,6 +325,26 @@ function toggleVirtualModeUI(isVirtual) {
     const testGridBtn = document.getElementById('btnTestGrid');
     if (testGridBtn) {
         testGridBtn.style.display = isVirtual ? 'none' : '';
+    }
+
+    // 6. Hide/show focus warning messages (only relevant for laser engraving)
+    const focusWarnings = document.querySelectorAll('.focus-warning');
+    focusWarnings.forEach(el => el.style.display = isVirtual ? 'none' : '');
+
+    // 7. Hide/show Calibration Status text (not relevant for SVG mode)
+    const calStatus = document.getElementById('calibrationStatus');
+    if (calStatus) {
+        calStatus.style.display = isVirtual ? 'none' : '';
+    }
+
+    // 8. Hide/show Help and Settings buttons (SVG mode is simplified)
+    const helpBtn = document.getElementById('btnHelp');
+    if (helpBtn) {
+        helpBtn.style.display = isVirtual ? 'none' : '';
+    }
+    const settingsBtn = document.getElementById('btnSettings');
+    if (settingsBtn) {
+        settingsBtn.style.display = isVirtual ? 'none' : '';
     }
 }
 
@@ -714,6 +736,7 @@ function displayLayers() {
         }
 
         const isOutline = layer.type === 'outline';
+        const isVirtual = SettingsStorage.isCurrentDeviceVirtual();
 
         let actionsHtml = '';
         let settingsHtml = '';
@@ -740,18 +763,30 @@ function displayLayers() {
 
         } else {
             // Normal Layer: Add Outline + Edit
-            actionsHtml = `
+            const outlineBtn = isVirtual ? '' : `
                 <button class="btn btn-sm btn-primary btn-add-outline" title="Add Outline Layer" data-layer-id="${layer.id}" style="margin-right: 5px; font-size: 0.8em; display:flex; align-items:center; gap:4px;"><span>+</span> Add Outline</button>
+            `;
+
+            actionsHtml = `
+                ${outlineBtn}
                 <button class="btn btn-icon btn-sm" title="Edit" data-action="edit" data-layer-id="${layer.id}">✏️</button>
             `;
+            // isVirtual defined above
+            // const isVirtual = SettingsStorage.isCurrentDeviceVirtual();
+
             const hasSettings = layer.frequency !== null && layer.lpi !== null;
             let settingsText = '⚠️ Settings Pending';
-            if (hasSettings) {
+
+            if (isVirtual) {
+                settingsText = 'Ready for Export';
+            } else if (hasSettings) {
                 settingsText = `${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)}LPI`;
                 if (layer.speed) settingsText += ` / ${layer.speed}mm/s`;
                 if (layer.power) settingsText += ` / ${layer.power}%`;
             }
-            settingsHtml = `<div class="layer-settings ${hasSettings ? '' : 'pending'}">${settingsText}</div>`;
+
+            const isValid = hasSettings || isVirtual;
+            settingsHtml = `<div class="layer-settings ${isValid ? '' : 'pending'}" style="${isVirtual ? 'color:#4CAF50;' : ''}">${settingsText}</div>`;
         }
 
         let colorHtml = '';
@@ -966,8 +1001,18 @@ function displayLayers() {
 function updateDownloadButtonState() {
     if (!elements.btnDownloadXCS) return;
 
-    const unassignedLayers = state.layers.filter(l => l.visible && (l.frequency === null || l.lpi === null));
+    const isVirtual = SettingsStorage.isCurrentDeviceVirtual();
     const btn = elements.btnDownloadXCS;
+
+    // In virtual mode (SVG Export), we don't need color/settings assignment
+    if (isVirtual) {
+        btn.disabled = false;
+        btn.title = 'Download SVG File';
+        btn.style.opacity = '1';
+        return;
+    }
+
+    const unassignedLayers = state.layers.filter(l => l.visible && (l.frequency === null || l.lpi === null));
 
     if (unassignedLayers.length > 0 && state.layers.length > 0) {
         btn.disabled = true;
@@ -1136,6 +1181,21 @@ function openLayerEditModal(layerId) {
     // Render Color Grid from Calibration (or simple color picker for SVG mode)
     renderLayerColorGrid();
 
+    // Update Modal Title/Description for SVG mode to remove calibration text
+    const pickerContainer = elements.layerEditColorGrid?.closest('.setting-group');
+    if (pickerContainer) {
+        const title = pickerContainer.querySelector('h3');
+        const desc = pickerContainer.querySelector('.modal-description');
+
+        if (isVirtual) {
+            if (title) title.innerText = 'Pick Layer Color';
+            if (desc) desc.innerText = 'Select a color for this vector layer.';
+        } else {
+            if (title) title.innerText = 'Pick from Calibrated Colors';
+            if (desc) desc.innerText = 'Select a color from your test grid to apply its settings.';
+        }
+    }
+
     openModal(elements.layerEditModal);
 
     // Onboarding action: Edit Modal Opened
@@ -1145,6 +1205,9 @@ function openLayerEditModal(layerId) {
 function renderLayerColorGrid() {
     const grid = elements.layerEditColorGrid;
     grid.innerHTML = '';
+
+    // Reset grid display style (in case it was overridden by SVG mode)
+    grid.style.display = '';
 
     // Check if in SVG mode - show simple color picker instead of calibration grid
     const isVirtual = SettingsStorage.isCurrentDeviceVirtual();
@@ -1260,6 +1323,9 @@ function renderLayerColorGrid() {
  * Shows an HTML5 color picker plus a palette of common colors
  */
 function renderSimpleColorPicker(container) {
+    // Override grid display to block to prevent grid column constraints squashing the UI
+    container.style.display = 'block';
+
     // Get current layer color
     const layer = state.layers.find(l => l.id === state.editingLayerId);
     const currentColor = layer?.color || { r: 128, g: 128, b: 128 };
@@ -1513,9 +1579,9 @@ async function downloadSVG() {
 
         // Add each visible layer
         state.vectorizedLayers.forEach((layer, index) => {
-            if (!layer.visible) return;
-
             const layerState = state.layers[index];
+            // Check visibility from state.layers (UI state), not vectorized layer
+            if (layerState && !layerState.visible) return;
             const color = layerState?.color || layer.color;
             const colorStr = `rgb(${color.r}, ${color.g}, ${color.b})`;
             const layerName = layerState?.name || `Layer ${index + 1}`;
