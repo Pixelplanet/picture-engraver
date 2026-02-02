@@ -202,7 +202,7 @@ export const SettingsStorage = {
     ensureSystemDefaultMap() {
         try {
             const maps = this.getColorMaps();
-            const defaultId = 'system_default_v3'; // Bump version to force update
+            const defaultId = 'system_default_v4'; // Bump version to force update
 
             // If already exists, do nothing
             if (maps.some(m => m.id === defaultId)) return;
