@@ -408,6 +408,67 @@ function initMiniPicker() {
     }, { passive: false });
 }
 
+function warpGridImage(img, corners) {
+    // We want a normalized grid, so we'll use a fixed size or the img size
+    // But since we want to show it in the UI, let's keep a reasonable resolution
+    const width = 800;
+    const height = 600;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(width, height);
+    const data = imageData.data;
+
+    // Helper to interpolate between 4 points (bilinear mapping)
+    function getPoint(tx, ty) {
+        const pTop = {
+            x: corners[0].x + (corners[1].x - corners[0].x) * tx,
+            y: corners[0].y + (corners[1].y - corners[0].y) * tx
+        };
+        const pBottom = {
+            x: corners[3].x + (corners[2].x - corners[3].x) * tx,
+            y: corners[3].y + (corners[2].y - corners[3].y) * tx
+        };
+        return {
+            x: pTop.x + (pBottom.x - pTop.x) * ty,
+            y: pTop.y + (pBottom.y - pTop.y) * ty
+        };
+    }
+
+    // We need the source image data to sample from
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = img.width;
+    srcCanvas.height = img.height;
+    const srcCtx = srcCanvas.getContext('2d');
+    srcCtx.drawImage(img, 0, 0);
+    const srcData = srcCtx.getImageData(0, 0, img.width, img.height).data;
+
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const tx = x / (width - 1);
+            const ty = y / (height - 1);
+
+            const p = getPoint(tx, ty);
+            const srcX = Math.floor(p.x);
+            const srcY = Math.floor(p.y);
+
+            if (srcX >= 0 && srcX < img.width && srcY >= 0 && srcY < img.height) {
+                const srcIdx = (srcY * img.width + srcX) * 4;
+                const destIdx = (y * width + x) * 4;
+                data[destIdx] = srcData[srcIdx];
+                data[destIdx + 1] = srcData[srcIdx + 1];
+                data[destIdx + 2] = srcData[srcIdx + 2];
+                data[destIdx + 3] = 255;
+            }
+        }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+}
+
 function openMiniPicker(layerId, targetEl) {
     const layer = state.layers.find(l => l.id === layerId);
     if (!layer) return;
@@ -431,9 +492,17 @@ function openMiniPicker(layerId, targetEl) {
 
     const img = new Image();
     img.onload = () => {
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
+        // Warp the image if corners are available
+        if (gridImage.relativeCorners) {
+            const warpedCanvas = warpGridImage(img, gridImage.relativeCorners);
+            canvas.width = warpedCanvas.width;
+            canvas.height = warpedCanvas.height;
+            ctx.drawImage(warpedCanvas, 0, 0);
+        } else {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+        }
 
         // Highlight currently selected color if it exists
         if (layer.frequency !== undefined && layer.lpi !== undefined) {
@@ -445,6 +514,8 @@ function openMiniPicker(layerId, targetEl) {
             if (entry && entry.gridPos) {
                 const cw = canvas.width / numCols;
                 const ch = canvas.height / numRows;
+                // Since the image is now warped to a perfect rectangle, 
+                // we can use standard grid math for the highlight box.
                 const x = Math.floor(entry.gridPos.col * cw);
                 const y = Math.floor(entry.gridPos.row * ch);
                 const w = Math.floor(cw);
