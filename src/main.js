@@ -423,7 +423,7 @@ function openMiniPicker(layerId, targetEl) {
         return;
     }
 
-    const { gridImage } = activeMap.data;
+    const { gridImage, entries, numCols, numRows } = activeMap.data;
 
     // Setup Canvas
     const canvas = elements.miniPickerCanvas;
@@ -434,6 +434,33 @@ function openMiniPicker(layerId, targetEl) {
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
+
+        // Highlight currently selected color if it exists
+        if (layer.frequency !== undefined && layer.lpi !== undefined) {
+            const entry = entries.find(e =>
+                Math.round(e.frequency) === Math.round(layer.frequency) &&
+                Math.round(e.lpi) === Math.round(layer.lpi)
+            );
+
+            if (entry && entry.gridPos) {
+                const cw = canvas.width / numCols;
+                const ch = canvas.height / numRows;
+                const x = Math.floor(entry.gridPos.col * cw);
+                const y = Math.floor(entry.gridPos.row * ch);
+                const w = Math.floor(cw);
+                const h = Math.floor(ch);
+
+                ctx.strokeStyle = '#ff0000';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+
+                // Add a small inner white glow to make it pop on dark colors
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+                ctx.strokeRect(x + 3.5, y + 3.5, w - 7, h - 7);
+            }
+        }
 
         // Position the picker to the right of the target element
         const rect = targetEl.getBoundingClientRect();
@@ -1070,9 +1097,6 @@ function setupLayers() {
                     const targetEl = isColorClick || isEditBtn;
                     openMiniPicker(layerId, targetEl);
                 } else {
-                    // Highlight source spot in preview
-                    updateLayerCalibrationPreview(layerId);
-
                     // Visual selection of the layer item
                     document.querySelectorAll('.layer-item').forEach(el => el.classList.remove('selected'));
                     layerItem.classList.add('selected');
@@ -1164,7 +1188,7 @@ function displayLayers() {
 
             colorHtml = `
                 <div class="layer-colors-container">
-                    <div class="layer-color original" style="background-color: rgb(${layer.originalColor.r}, ${layer.originalColor.g}, ${layer.originalColor.b});" title="Original detected color"></div>
+                    <div class="layer-color original" style="background-color: rgb(${layer.originalColor.r}, ${layer.originalColor.g}, ${layer.originalColor.b}); pointer-events: none;" title="Original detected color"></div>
                     <div class="layer-color assigned" style="${assignedStyle} cursor: pointer;" data-layer-id="${layer.id}" title="${assignedColor ? 'Assigned calibrated color - Click to edit' : 'No color assigned - Click to pick'}">${assignedContent}</div>
                 </div>
             `;
