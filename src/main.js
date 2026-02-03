@@ -78,6 +78,14 @@ const elements = {
     colorSlider: document.getElementById('colorSlider'),
     colorCountDisplay: document.getElementById('colorCountDisplay'),
     btnProcess: document.getElementById('btnProcess'),
+    btnSaveMap: document.getElementById('btnSaveMap'),
+
+    // Mini Color Picker
+    miniColorPicker: document.getElementById('miniColorPicker'),
+    closeMiniPicker: document.getElementById('closeMiniPicker'),
+    miniPickerCanvas: document.getElementById('miniPickerCanvas'),
+    miniPickerCoords: document.getElementById('miniPickerCoords'),
+    miniPickerValues: document.getElementById('miniPickerValues'),
 
     // Layers
     layersPanel: document.getElementById('layersPanel'),
@@ -145,6 +153,12 @@ const elements = {
     progressContainer: document.getElementById('progressContainer'),
     progressFill: document.getElementById('progressFill'),
 
+    // Analyzer
+    analyzerCanvas: document.getElementById('analyzerCanvas'),
+    analyzerDropZone: document.getElementById('analyzerDropZone'),
+    analysisPreview: document.getElementById('analysisPreview'),
+    colorMapSection: document.getElementById('colorMapSection'),
+
     // Layer Edit Modal
     layerEditModal: document.getElementById('layerEditModal'),
     closeLayerEditModal: document.getElementById('closeLayerEditModal'),
@@ -154,8 +168,14 @@ const elements = {
     layerEditSpeed: document.getElementById('layerEditSpeed'),
     layerEditPower: document.getElementById('layerEditPower'),
     layerEditColorGrid: document.getElementById('layerEditColorGrid'),
+    btnSaveLayerEdit: document.getElementById('btnSaveLayerEdit'),
     btnCancelLayerEdit: document.getElementById('btnCancelLayerEdit'),
-    btnSaveLayerEdit: document.getElementById('btnSaveLayerEdit')
+    // Calibration Visualization
+    layerCalibrationPreview: document.getElementById('layerCalibrationPreview'),
+    layerCalibrationCanvas: document.getElementById('layerCalibrationCanvas'),
+    layerCalibrationText: document.getElementById('layerCalibrationText'),
+    layerEditSourcePreview: document.getElementById('layerEditSourcePreview'),
+    layerEditSourceCanvas: document.getElementById('layerEditSourceCanvas')
 };
 
 // ===================================
@@ -194,16 +214,331 @@ function getLineIntersection(p1, p2, p3, p4) {
     return null;
 }
 
+/**
+ * Crops a bounding box area from an image based on analyzer corners
+ */
+function cropGridImage(img, corners) {
+    try {
+        console.log('Using preview canvas for robust grid cropping...');
+        const previewCanvas = elements.analyzerCanvas;
+
+        if (!previewCanvas) {
+            console.error('Preview canvas not found for cropping');
+            return null;
+        }
+
+        console.log('DEBUG: Corners received:', JSON.stringify(corners));
+        console.log('DEBUG: Preview Canvas size:', previewCanvas.width, previewCanvas.height);
+
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        // Calculate crop in preview coordinates (no scaling needed!)
+        let minX = Math.floor(Math.min(...corners.map(c => c.x)));
+        let maxX = Math.ceil(Math.max(...corners.map(c => c.x)));
+        let minY = Math.floor(Math.min(...corners.map(c => c.y)));
+        let maxY = Math.ceil(Math.max(...corners.map(c => c.y)));
+
+        // Clamp to canvas bounds
+        minX = Math.max(0, Math.min(minX, previewCanvas.width - 1));
+        maxX = Math.max(minX + 1, Math.min(maxX, previewCanvas.width));
+        minY = Math.max(0, Math.min(minY, previewCanvas.height - 1));
+        maxY = Math.max(minY + 1, Math.min(maxY, previewCanvas.height));
+
+        let w = maxX - minX;
+        let h = maxY - minY;
+
+        console.log('DEBUG: Clamped crop:', { minX, maxX, minY, maxY, w, h });
+
+        if (w <= 0 || h <= 0) {
+            console.warn('Crop Grid Image: Invalid dimensions after clamping', { w, h });
+            return null;
+        }
+
+        // Limit maximum size to prevent excessive storage usage and performance hits
+        const maxDim = 1600;
+        let destW = w;
+        let destH = h;
+        if (w > maxDim || h > maxDim) {
+            const scale = maxDim / Math.max(w, h);
+            destW = Math.round(w * scale);
+            destH = Math.round(h * scale);
+            console.log(`DEBUG: Resizing crop from ${w}x${h} to ${destW}x${destH}`);
+        }
+
+        canvas.width = destW;
+        canvas.height = destH;
+
+        // Draw directly from the visible preview canvas
+        try {
+            ctx.drawImage(previewCanvas, minX, minY, w, h, 0, 0, destW, destH);
+            const base64 = canvas.toDataURL('image/jpeg', 0.8);
+            console.log('DEBUG: Crop Grid Image Success', { size: base64.length });
+
+            return {
+                base64: base64,
+                width: destW,
+                height: destH,
+                offsetX: minX,
+                offsetY: minY,
+                relativeCorners: corners.map(c => ({
+                    x: (c.x - minX) * (destW / w),
+                    y: (c.y - minY) * (destH / h)
+                }))
+            };
+        } catch (drawErr) {
+            console.error('DEBUG: Canvas Draw/Export Error:', drawErr.message);
+            return null;
+        }
+    } catch (e) {
+        console.error("Failed to crop grid image (Outer)", e);
+        return null;
+    }
+}
+
 // ===================================
 // Initialization
 // ===================================
-function init() {
+/**
+ * Draws the source grid image on a canvas with a red square highlight
+ */
+function drawSourceHighlightOnCanvas(canvas, gridImage, gridPos, numCols, numRows) {
+    if (!gridImage || !gridPos) return;
+
+    const ctx = canvas.getContext('2d');
+    const img = new Image();
+    img.src = gridImage.base64;
+    img.onload = () => {
+        // Force a reasonable display size
+        const maxWidth = 400;
+        let w = gridImage.width;
+        let h = gridImage.height;
+        if (w > maxWidth) {
+            h = (h * maxWidth) / w;
+            w = maxWidth;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        ctx.drawImage(img, 0, 0, w, h);
+
+        if (gridImage.relativeCorners) {
+            const scaleX = w / gridImage.width;
+            const scaleY = h / gridImage.height;
+            const corners = gridImage.relativeCorners.map(c => ({
+                x: c.x * scaleX,
+                y: c.y * scaleY
+            }));
+
+            const tx = (gridPos.col + 0.5) / (numCols || 1);
+            const ty = (gridPos.row + 0.5) / (numRows || 1);
+
+            const center = interpolateCorner(corners, tx, ty);
+
+            // Draw red highlight square
+            ctx.strokeStyle = '#ff3b30';
+            ctx.lineWidth = 2.5;
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 4;
+
+            const size = Math.max(10, Math.min(w, h) / Math.max(numCols, numRows));
+            ctx.strokeRect(center.x - size / 2, center.y - size / 2, size, size);
+
+            // Draw crosshair
+            ctx.beginPath();
+            ctx.moveTo(center.x - size, center.y);
+            ctx.lineTo(center.x + size, center.y);
+            ctx.moveTo(center.x, center.y - size);
+            ctx.lineTo(center.x, center.y + size);
+            ctx.stroke();
+        }
+    };
+}
+
+function updateLayerCalibrationPreview(layerId) {
+    const layer = state.layers.find(l => l.id === layerId);
+    if (!layer || !layer.sourceMapId || !layer.sourceGridPos) {
+        elements.layerCalibrationPreview.style.display = 'none';
+        return;
+    }
+
+    const maps = SettingsStorage.getColorMaps();
+    const map = maps.find(m => m.id === layer.sourceMapId);
+    if (!map || !map.data.gridImage) {
+        elements.layerCalibrationPreview.style.display = 'none';
+        return;
+    }
+
+    elements.layerCalibrationPreview.style.display = 'block';
+    elements.layerCalibrationText.textContent = `${map.name} | ${Math.round(layer.frequency)}kHz @ ${Math.round(layer.lpi)}LPI`;
+
+    drawSourceHighlightOnCanvas(elements.layerCalibrationCanvas, map.data.gridImage, layer.sourceGridPos, map.data.numCols, map.data.numRows);
+}
+
+// ===================================
+// Mini Color Picker
+// ===================================
+
+function initMiniPicker() {
+    if (!elements.miniColorPicker) return;
+
+    elements.closeMiniPicker.addEventListener('click', closeMiniPicker);
+
+    // Global listener to close on click outside
+    document.addEventListener('mousedown', (e) => {
+        if (!elements.miniColorPicker.classList.contains('active')) return;
+
+        const isClickInside = elements.miniColorPicker.contains(e.target);
+        const isColorSquare = e.target.closest('.layer-color.assigned');
+        const isEditBtn = e.target.closest('[data-action="edit"]');
+
+        if (!isClickInside && !isColorSquare && !isEditBtn) {
+            closeMiniPicker();
+        }
+    });
+
+    // Canvas interaction
+    elements.miniPickerCanvas.addEventListener('mousedown', handleMiniPickerClick);
+    elements.miniPickerCanvas.addEventListener('mousemove', handleMiniPickerHover);
+
+    // Touch support
+    elements.miniPickerCanvas.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.touches[0];
+        handleMiniPickerClick(touch);
+    }, { passive: false });
+}
+
+function openMiniPicker(layerId, targetEl) {
+    const layer = state.layers.find(l => l.id === layerId);
+    if (!layer) return;
+
+    state.editingLayerId = layerId;
+
+    // Get active map or system default
+    const maps = SettingsStorage.getColorMaps();
+    const activeMap = maps.find(m => m.active) || maps[0];
+
+    if (!activeMap || !activeMap.data.gridImage) {
+        showToast('No calibration grid image found. Please run a test grid analysis.', 'warning');
+        return;
+    }
+
+    const { gridImage } = activeMap.data;
+
+    // Setup Canvas
+    const canvas = elements.miniPickerCanvas;
+    const ctx = canvas.getContext('2d');
+
+    const img = new Image();
+    img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        // Position the picker to the right of the target element
+        const rect = targetEl.getBoundingClientRect();
+
+        let left = rect.right + 15;
+        let top = rect.top - 100; // Center vertically-ish
+
+        // Viewport constraints
+        if (left + 510 > window.innerWidth) {
+            left = rect.left - 520;
+        }
+        if (top + 500 > window.innerHeight) {
+            top = window.innerHeight - 520;
+        }
+        if (top < 10) top = 10;
+        if (left < 10) left = 10;
+
+        elements.miniColorPicker.style.left = `${left + window.scrollX}px`;
+        elements.miniColorPicker.style.top = `${top + window.scrollY}px`;
+        elements.miniColorPicker.classList.add('active');
+    };
+    img.src = gridImage.base64;
+}
+
+function closeMiniPicker() {
+    if (elements.miniColorPicker) {
+        elements.miniColorPicker.classList.remove('active');
+    }
+    state.editingLayerId = null;
+}
+
+function handleMiniPickerClick(e) {
+    const rect = elements.miniPickerCanvas.getBoundingClientRect();
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    const scaleX = elements.miniPickerCanvas.width / rect.width;
+    const scaleY = elements.miniPickerCanvas.height / rect.height;
+
+    const cell = getCellFromCoords(x * scaleX, y * scaleY);
+    if (cell && state.editingLayerId) {
+        const layer = state.layers.find(l => l.id === state.editingLayerId);
+        if (layer) {
+            layer.color = { ...cell.color };
+            layer.frequency = cell.frequency;
+            layer.lpi = cell.lpi;
+
+            displayLayers();
+            displayVectorPreview();
+            closeMiniPicker();
+            showToast(`Assigned ${Math.round(layer.frequency)}kHz / ${layer.lpi}LPI`, 'success');
+        }
+    }
+}
+
+function handleMiniPickerHover(e) {
+    const rect = elements.miniPickerCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const scaleX = elements.miniPickerCanvas.width / rect.width;
+    const scaleY = elements.miniPickerCanvas.height / rect.height;
+
+    const cell = getCellFromCoords(x * scaleX, y * scaleY);
+    const coordsEl = elements.miniPickerCoords;
+    const valuesEl = elements.miniPickerValues;
+
+    if (cell) {
+        if (coordsEl) coordsEl.textContent = `Col: ${cell.gridPos.col} Row: ${cell.gridPos.row}`;
+        if (valuesEl) valuesEl.textContent = `${Math.round(cell.frequency)}kHz / ${cell.lpi}LPI`;
+    } else {
+        if (coordsEl) coordsEl.textContent = `Col: - Row: -`;
+        if (valuesEl) valuesEl.textContent = `Searching grid...`;
+    }
+}
+
+function getCellFromCoords(x, y) {
+    const maps = SettingsStorage.getColorMaps();
+    const activeMap = maps.find(m => m.active) || maps[0];
+    if (!activeMap) return null;
+
+    const { entries, numCols, numRows } = activeMap.data;
+
+    // Normalize coordinates to 0..1
+    const tx = x / elements.miniPickerCanvas.width;
+    const ty = y / elements.miniPickerCanvas.height;
+
+    if (tx < 0 || tx > 1 || ty < 0 || ty > 1) return null;
+
+    const col = Math.floor(tx * numCols);
+    const row = Math.floor(ty * numRows);
+
+    return entries.find(e => e.gridPos.col === col && e.gridPos.row === row);
+}
+
+async function init() {
     // 1. Initialize Settings Storage & Defaults
     SettingsStorage.ensureSystemDefaultMap();
+    initMiniPicker();
 
     // 2. Initialize Landing Page for Device Selection
     const landingPage = new LandingPage(SettingsStorage, (deviceId) => {
-        console.log('Device selected:', deviceId);
 
         // RELOAD Settings completely to get the correct defaults for this device
         state.settings = SettingsStorage.load();
@@ -231,7 +566,7 @@ function init() {
     setupAdvancedAnalyzer();
     setupLightbox();
 
-    Logger.info('Picture Engraver initialized', { appVersion: '1.7.5' });
+    Logger.info('Picture Engraver initialized', { appVersion: '1.7.6' });
 
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
@@ -719,6 +1054,32 @@ function displayVectorPreview() {
 // ===================================
 function setupLayers() {
     elements.btnAutoAssign.addEventListener('click', autoAssignColors);
+
+    // Event delegation for layer interactions
+    elements.layersList.addEventListener('click', (e) => {
+        const layerItem = e.target.closest('.layer-item');
+        if (layerItem) {
+            const checkbox = layerItem.querySelector('.layer-checkbox');
+            const layerId = checkbox?.dataset.layerId;
+            if (layerId) {
+                // Determine if we should open edit or just highlight
+                const isColorClick = e.target.closest('.layer-color.assigned');
+                const isEditBtn = e.target.closest('[data-action="edit"]');
+
+                if (isColorClick || isEditBtn) {
+                    const targetEl = isColorClick || isEditBtn;
+                    openMiniPicker(layerId, targetEl);
+                } else {
+                    // Highlight source spot in preview
+                    updateLayerCalibrationPreview(layerId);
+
+                    // Visual selection of the layer item
+                    document.querySelectorAll('.layer-item').forEach(el => el.classList.remove('selected'));
+                    layerItem.classList.add('selected');
+                }
+            }
+        }
+    });
 }
 
 function displayLayers() {
@@ -839,7 +1200,7 @@ function displayLayers() {
     container.querySelectorAll('.layer-color.assigned').forEach(colorEl => {
         colorEl.addEventListener('click', (e) => {
             const layerId = e.target.dataset.layerId;
-            openLayerEditModal(layerId);
+            openMiniPicker(layerId, colorEl);
         });
     });
 
@@ -987,7 +1348,7 @@ function displayLayers() {
     container.querySelectorAll('button[data-action="edit"]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const layerId = e.target.dataset.layerId || e.target.closest('button').dataset.layerId;
-            openLayerEditModal(layerId);
+            openMiniPicker(layerId, btn);
         });
     });
 
@@ -1088,10 +1449,17 @@ function autoAssignColors() {
                 if (bestMatch) {
                     layer.frequency = bestMatch.frequency;
                     layer.lpi = bestMatch.lpi;
-                    layer.speed = bestMatch.speed;
-                    layer.power = bestMatch.power;
+
+                    // Only apply speed/power if they are defined in the match
+                    if (bestMatch.speed !== undefined) layer.speed = bestMatch.speed;
+                    if (bestMatch.power !== undefined) layer.power = bestMatch.power;
+
                     // Use the actual calibrated color as requested
                     layer.color = { ...bestMatch.color };
+
+                    // Store source mapping (if present)
+                    layer.sourceMapId = bestMatch._sourceMapId || null;
+                    layer.sourceGridPos = bestMatch.gridPos || null;
                 }
             });
 
@@ -1195,6 +1563,8 @@ function openLayerEditModal(layerId) {
             if (desc) desc.innerText = 'Select a color from your test grid to apply its settings.';
         }
     }
+
+    if (elements.layerEditSourcePreview) elements.layerEditSourcePreview.style.display = 'none';
 
     openModal(elements.layerEditModal);
 
@@ -1309,6 +1679,20 @@ function renderLayerColorGrid() {
             state.pendingLayerColor = color;
             // Also store the options to apply
             state.pendingLayerOptions = { speed: entry.speed, power: entry.power };
+
+            // Store source mapping for the layer save action
+            state.pendingLayerSource = {
+                sourceMapId: entry._sourceMapId,
+                gridPos: entry.gridPos
+            };
+
+            // Show source preview in modal
+            if (entry._gridImage && entry.gridPos) {
+                elements.layerEditSourcePreview.style.display = 'flex';
+                drawSourceHighlightOnCanvas(elements.layerEditSourceCanvas, entry._gridImage, entry.gridPos, entry._numCols, entry._numRows);
+            } else {
+                elements.layerEditSourcePreview.style.display = 'none';
+            }
 
             // Onboarding action: Color Picked from Grid
             if (window.onboarding) window.onboarding.handleAction('color-picked');
@@ -1443,9 +1827,15 @@ function saveLayerEdit() {
         if (state.pendingLayerColor) {
             layer.color = { ...state.pendingLayerColor };
 
-            // If the selected color had specific options (like standard colors with speed/power)
-            // But wait, the user might have edited them in the inputs after clicking.
-            // The inputs are the source of truth now.
+            if (state.pendingLayerSource) {
+                layer.sourceMapId = state.pendingLayerSource.sourceMapId;
+                layer.sourceGridPos = state.pendingLayerSource.gridPos;
+                state.pendingLayerSource = null;
+            } else {
+                // If picked a standard color or cleared the source
+                layer.sourceMapId = null;
+                layer.sourceGridPos = null;
+            }
 
             state.pendingLayerColor = null; // Reset
             state.pendingLayerOptions = null;
@@ -2729,29 +3119,23 @@ function drawAlignmentGrid(ctx, corners, cols, rows) {
 
 
 function updateExtractedColors() {
-    console.log("[DEBUG] updateExtractedColors started");
-    console.log("[DEBUG] Check interpolators:", typeof interpolateCorner, typeof getLineIntersection);
-
     try {
-        const { originalImg, corners, numCols, numRows, qrRegion } = analyzerState;
+        const { corners, numCols, numRows, qrRegion } = analyzerState;
 
-        console.log("[DEBUG] State:", {
-            corners: corners ? corners.length : 'null',
-            cols: numCols,
-            rows: numRows
-        });
-
-        if (!originalImg || !corners || corners.length !== 4) {
-            console.warn("[DEBUG] Missing image or corners");
+        if (!corners || corners.length !== 4) {
             return;
         }
 
-        // Use a temporary canvas to extract pixel data
-        const canvas = document.createElement('canvas');
-        canvas.width = originalImg.width;
-        canvas.height = originalImg.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(originalImg, 0, 0);
+        // Use the VISIBLE preview canvas for extraction. 
+        // This is much faster, uses less memory, and guarantees coordinate matching.
+        const previewCanvas = document.getElementById('analyzerCanvas');
+        if (!previewCanvas) return;
+
+        const ctx = previewCanvas.getContext('2d', { willReadFrequently: true });
+        const width = previewCanvas.width;
+        const height = previewCanvas.height;
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
 
         const colors = [];
         const rgbColors = []; // Store as {r, g, b} objects
@@ -2769,7 +3153,7 @@ function updateExtractedColors() {
             for (let c = 0; c < numCols; c++) {
                 const isQR = c >= qrStartCol && r >= qrStartRow;
 
-                // Calculate cell bounds
+                // Calculate cell bounds using corners (which are already in preview canvas coordinates)
                 const cellTL = interpolateCorner(corners, c / numCols, r / numRows);
                 const cellTR = interpolateCorner(corners, (c + 1) / numCols, r / numRows);
                 const cellBL = interpolateCorner(corners, c / numCols, (r + 1) / numRows);
@@ -2791,20 +3175,21 @@ function updateExtractedColors() {
                     };
                 }
 
-                // Sample 5x5 area
+                // Sample 5x5 area around center
                 let rSum = 0, gSum = 0, bSum = 0, count = 0;
                 const sampleSize = 5;
                 const halfSize = Math.floor(sampleSize / 2);
 
-                for (let y = center.y - halfSize; y <= center.y + halfSize; y++) {
-                    for (let x = center.x - halfSize; x <= center.x + halfSize; x++) {
-                        const px = Math.floor(x);
-                        const py = Math.floor(y);
-                        if (px >= 0 && px < canvas.width && py >= 0 && py < canvas.height) {
-                            const pixel = ctx.getImageData(px, py, 1, 1).data;
-                            rSum += pixel[0];
-                            gSum += pixel[1];
-                            bSum += pixel[2];
+                for (let sy = -halfSize; sy <= halfSize; sy++) {
+                    for (let sx = -halfSize; sx <= halfSize; sx++) {
+                        const px = Math.floor(center.x + sx);
+                        const py = Math.floor(center.y + sy);
+
+                        if (px >= 0 && px < width && py >= 0 && py < height) {
+                            const offset = (py * width + px) * 4;
+                            rSum += data[offset];
+                            gSum += data[offset + 1];
+                            bSum += data[offset + 2];
                             count++;
                         }
                     }
@@ -2827,8 +3212,6 @@ function updateExtractedColors() {
 
         if (typeof generateColorMapWithData === 'function') {
             generateColorMapWithData(analyzerState.freqValues, analyzerState.lpiValues, colors);
-        } else {
-            console.error("generateColorMapWithData is missing!");
         }
 
         const saveSection = document.getElementById('saveColorMapSection');
@@ -2836,7 +3219,7 @@ function updateExtractedColors() {
             saveSection.style.display = 'block';
         }
     } catch (err) {
-        console.error("[DEBUG] Error inside updateExtractedColors:", err);
+        console.error("Error in updateExtractedColors:", err);
     }
 }
 
@@ -3455,7 +3838,7 @@ function generateColorMapWithData(freqValues, lpiValues, extractedColors) {
  * The color map contains RGB values mapped to their frequency/LPI settings
  */
 function saveColorMap() {
-    const { extractedColors, freqValues, lpiValues, numCols, numRows } = analyzerState;
+    const { extractedColors, freqValues, lpiValues, numCols, numRows, corners, originalImg } = analyzerState;
 
     if (!extractedColors || extractedColors.length === 0) {
         showToast('No colors to save. Please align the grid first.', 'error');
@@ -3481,11 +3864,24 @@ function saveColorMap() {
                 colorEntries.push({
                     color: color,
                     frequency: freq,
-                    lpi: lpi
+                    lpi: lpi,
+                    gridPos: { col, row }
                 });
             }
             colorIdx++;
         }
+    }
+
+    // Crop the image
+    let gridImage = null;
+    if (originalImg && corners && corners.length === 4) {
+        gridImage = cropGridImage(originalImg, corners);
+        if (!gridImage) {
+            console.warn('saveColorMap: Failed to generate grid image.');
+            showToast('Warning: Could not save grid preview image.', 'warning');
+        }
+    } else {
+        console.warn('saveColorMap: Missing image or corners', { hasImg: !!originalImg, corners: corners?.length });
     }
 
     const colorMapData = {
@@ -3494,7 +3890,8 @@ function saveColorMap() {
         numRows,
         freqRange: [freqValues[0], freqValues[freqValues.length - 1]],
         lpiRange: [lpiValues[0], lpiValues[lpiValues.length - 1]],
-        savedAt: new Date().toISOString()
+        savedAt: new Date().toISOString(),
+        gridImage: gridImage
     };
 
     // Prompt for name
@@ -3640,9 +4037,6 @@ function openAdvancedAnalyzer() {
         }
     }
 
-    // Find similar colors
-    findSimilarColors(25); // threshold = 25
-
     // Render the grid
     renderAdvancedGrid();
 
@@ -3727,7 +4121,6 @@ function renderAdvancedGrid() {
         // Apply state classes
         if (meta.excluded) cell.classList.add('deleted');
         if (idx === selectedIndex) cell.classList.add('selected');
-        if (similarIndices.has(idx) && !meta.excluded) cell.classList.add('similar');
         if (meta.name) cell.classList.add('has-name');
 
         cell.addEventListener('click', () => selectAdvancedColor(idx));
@@ -3960,43 +4353,6 @@ function toggleColorExclusion(index) {
     showToast(meta.excluded ? 'Color removed from map' : 'Color restored', 'info');
 }
 
-function findSimilarColors(threshold = 25) {
-    const { extractedColors } = analyzerState;
-    const { colorMetadata } = advancedAnalyzerState;
-    const groups = [];
-    const visited = new Set();
-
-    for (let i = 0; i < extractedColors.length; i++) {
-        if (visited.has(i)) continue;
-
-        const group = [i];
-        for (let j = i + 1; j < extractedColors.length; j++) {
-            if (visited.has(j)) continue;
-
-            const dist = colorDistance(extractedColors[i], extractedColors[j]);
-            if (dist <= threshold) {
-                group.push(j);
-                visited.add(j);
-            }
-        }
-
-        if (group.length > 1) {
-            groups.push(group);
-            group.forEach(idx => visited.add(idx));
-        }
-    }
-
-    advancedAnalyzerState.similarGroups = groups;
-
-    // Show/hide similar colors panel
-    const panel = document.getElementById('similarColorsPanel');
-    if (panel) {
-        panel.style.display = groups.length > 0 ? 'block' : 'none';
-    }
-
-    // Populate similar colors list
-    renderSimilarColorsList(groups);
-}
 
 function colorDistance(c1, c2) {
     const dr = c1.r - c2.r;
@@ -4079,7 +4435,8 @@ function saveAdvancedColorMap() {
                 const entry = {
                     color: color,
                     frequency: freq,
-                    lpi: lpi
+                    lpi: lpi,
+                    gridPos: { col, row }
                 };
                 if (meta.name) {
                     entry.name = meta.name;
@@ -4095,13 +4452,21 @@ function saveAdvancedColorMap() {
         return;
     }
 
+    // Crop the image
+    let gridImage = null;
+    const { corners, originalImg } = analyzerState;
+    if (originalImg && corners && corners.length === 4) {
+        gridImage = cropGridImage(originalImg, corners);
+    }
+
     const colorMapData = {
         entries: colorEntries,
         numCols,
         numRows,
         freqRange: [freqValues[0], freqValues[freqValues.length - 1]],
         lpiRange: [lpiValues[0], lpiValues[lpiValues.length - 1]],
-        savedAt: new Date().toISOString()
+        savedAt: new Date().toISOString(),
+        gridImage: gridImage
     };
 
     // Prompt for name
@@ -4178,10 +4543,17 @@ function renderManageMapsUI() {
             const date = new Date(map.createdAt).toLocaleDateString();
             const checked = map.active ? 'checked' : '';
             const opacity = map.active ? '1' : '0.6';
+            const thumbnail = map.data.gridImage ? `
+                <div style="width: 40px; height: 40px; background: #000; border-radius: 4px; overflow: hidden; margin-right: 10px; border: 1px solid var(--border-primary); flex-shrink: 0;">
+                    <img src="${map.data.gridImage.base64}" style="width: 100%; height: 100%; object-fit: cover;">
+                </div>
+            ` : '<div style="width: 40px; height: 40px; margin-right: 10px; flex-shrink: 0;"></div>';
 
             html += `
                 <div class="map-item" style="display:flex; align-items:center; background: var(--bg-secondary); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); opacity: ${opacity};">
                     <input type="checkbox" class="map-toggle" data-id="${map.id}" ${checked} title="Enable/Disable this map" style="margin-right: 10px; cursor: pointer;">
+                    
+                    ${thumbnail}
                     
                     <div style="flex:1;">
                         <div style="font-weight: 500;">${map.name}</div>

@@ -114,6 +114,24 @@ export const SettingsStorage = {
     },
 
     /**
+     * Check if settings have been explicitly saved to storage
+     * Used by landing page to determine if device selection is needed
+     * @returns {boolean}
+     */
+    hasExplicitSettings() {
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                return !!parsed.activeDevice;
+            }
+        } catch (error) {
+            // Ignore
+        }
+        return false;
+    },
+
+    /**
      * Check if a profile is a virtual device (not a real laser)
      * @param {string} profileId - Profile ID to check
      * @returns {boolean}
@@ -232,7 +250,7 @@ export const SettingsStorage = {
     ensureSystemDefaultMap() {
         try {
             const maps = this.getColorMaps();
-            const defaultId = 'system_default_v4'; // Bump version to force update
+            const defaultId = 'system_default_v7'; // Bump version to force update
 
             // If already exists, do nothing
             if (maps.some(m => m.id === defaultId)) return;
@@ -432,14 +450,18 @@ export const SettingsStorage = {
             // Add reference to source map in entries if useful
             const entries = map.data.entries.map(e => ({
                 ...e,
-                _sourceMap: map.name
+                _sourceMap: map.name,
+                _sourceMapId: map.id,
+                _gridImage: map.data.gridImage,
+                _numCols: map.data.numCols,
+                _numRows: map.data.numRows
             }));
             mergedEntries = mergedEntries.concat(entries);
         });
 
         return {
             entries: mergedEntries,
-            // Ranges might be ambiguous if maps differ, but usually we just care about entries for matching
+            // Ranges might be ambiguous if maps differ, but we take from first
             freqRange: activeMaps[0].data.freqRange,
             lpiRange: activeMaps[0].data.lpiRange
         };
