@@ -1244,8 +1244,11 @@ function displayLayers() {
             settingsHtml = `<div class="layer-settings">Offset: ${thickness}px</div>`;
 
         } else {
+            // Check if this layer already has an outline
+            const hasOutline = state.layers.some(l => l.type === 'outline' && l.parentId === layer.id);
+
             // Normal Layer: Add Outline + Edit
-            const outlineBtn = isVirtual ? '' : `
+            const outlineBtn = (isVirtual || hasOutline) ? '' : `
                 <button class="btn btn-sm btn-primary btn-add-outline" title="Add Outline Layer" data-layer-id="${layer.id}" style="margin-right: 5px; font-size: 0.8em; display:flex; align-items:center; gap:4px;"><span>+</span> Add Outline</button>
             `;
 
@@ -1354,7 +1357,7 @@ function displayLayers() {
                             width: state.processedImage.width,
                             height: state.processedImage.height
                         },
-                        layer.color,
+                        layer.originalColor,
                         thickness,
                         pxPerMm
                     );
@@ -1364,12 +1367,14 @@ function displayLayers() {
                         name: layer.name + ' Outline',
                         type: 'outline',
                         color: { r: 0, g: 0, b: 0 }, // Default to Black
-                        sourceColor: { ...layer.color }, // Store original source color
+                        sourceColor: { ...layer.originalColor }, // Store original source color
                         paths: paths,
                         visible: true,
                         parentId: layer.id,
-                        frequency: layer.frequency,
-                        lpi: layer.lpi,
+                        frequency: state.settings.blackFreq,
+                        lpi: state.settings.blackLpi,
+                        speed: state.settings.blackSpeed,
+                        power: state.settings.blackPower,
                         bounds: layer.bounds,
                         thickness: thickness // Store thickness state
                     };
@@ -1565,6 +1570,9 @@ function autoAssignColors() {
 
             // For each layer, find the closest matching color from the pool
             state.layers.forEach(layer => {
+                // Skip outline layers - they have fixed settings/colors and shouldn't be auto-matched
+                if (layer.type === 'outline') return;
+
                 const bestMatch = findClosestCalibrationColor(layer.originalColor, matchPool);
 
                 if (bestMatch) {
