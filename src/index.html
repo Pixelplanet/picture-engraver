@@ -102,7 +102,7 @@
             <span>🔄</span> Process Image
           </button>
           <div style="margin-top: 15px; font-size: 0.75em; color: #888; text-align: center;">
-            v1.7.5
+            v1.7.6
           </div>
         </div>
       </section>
@@ -123,6 +123,18 @@
             style="margin-top: 10px; font-size: 0.85em; color: var(--text-tertiary); text-align: center;">
             <!-- Will be populated dynamically -->
           </div>
+        </div>
+
+        <!-- Calibration Preview -->
+        <div id="layerCalibrationPreview"
+          style="display: none; border-top: 1px solid var(--border-primary); padding-top: 15px;">
+          <h3 class="preview-label" style="font-size: 0.75em; margin-bottom: 8px;">Source Calibration</h3>
+          <div
+            style="position: relative; background: #000; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-primary); max-height: 200px;">
+            <canvas id="layerCalibrationCanvas" style="width: 100%; height: auto; display: block;"></canvas>
+          </div>
+          <div id="layerCalibrationText"
+            style="font-size: 0.8em; color: var(--text-secondary); margin-top: 5px; text-align: center;"></div>
         </div>
       </section>
 
@@ -316,7 +328,7 @@
                   <li><strong>Density:</strong> 122 Test Points (14 × 9 Grid)</li>
                   <li><strong>Frequency:</strong> 40kHz - 90kHz (Optimized range)</li>
                   <li><strong>Lines/cm:</strong> 800 - 300 (High to Low)</li>
-                  <li><strong>Passes:</strong> 2 (Crosshatch enabled)</li>
+                  <li><strong>Passes:</strong> 1</li>
                   <li><strong>Smart QR:</strong> Located at bottom-right, scanned for auto-settings.</li>
                 </ul>
               </div>
@@ -405,7 +417,7 @@
                   </div>
                   <div class="setting-row">
                     <label>Passes</label>
-                    <input type="number" class="input" id="gridPasses" value="2" min="1" max="10">
+                    <input type="number" class="input" id="gridPasses" value="1" min="1" max="10">
                   </div>
                   <div class="setting-row">
                     <label>Cross Hatch</label>
@@ -629,7 +641,7 @@
               <h4>🎨 Detected Colors</h4>
 
               <!-- Similar colors warning -->
-              <div id="similarColorsPanel" class="similar-colors-panel" style="display: none;">
+              <div id="similarColorsPanel" class="similar-colors-panel" style="display: none !important;">
                 <div class="similar-colors-header">
                   <span>⚠️ Similar Colors Detected</span>
                   <button class="btn btn-sm btn-secondary" id="btnShowSimilar">Show Details</button>
@@ -651,7 +663,7 @@
                 </div>
                 <div class="color-detail-actions">
                   <input type="text" id="colorNameInput" class="input" placeholder="Custom name (optional)">
-                  <button class="btn btn-danger btn-sm" id="btnDeleteColor">🗑️ Remove</button>
+                  <button class="btn btn-danger btn-sm" id="btnDeleteColor" style="display: none;">🗑️ Remove</button>
                   <button class="btn btn-secondary btn-sm" id="btnRestoreColor" style="display: none;">↩️
                     Restore</button>
                 </div>
@@ -712,9 +724,18 @@
             <p class="modal-description" style="margin-top: 0; margin-bottom: 10px;">
               Select a color from your test grid to apply its settings.
             </p>
-            <div id="layerEditColorGrid" class="color-map-grid" style="max-height: 200px; overflow-y: auto;">
-              <!-- Populated dynamically -->
-              <p class="text-muted" style="text-align: center; padding: 20px;">No calibration data available.</p>
+            <div class="layer-edit-calibration-container" style="display: flex; gap: 15px; margin-top: 10px;">
+              <div id="layerEditColorGrid" class="color-map-grid" style="flex: 1; max-height: 250px; overflow-y: auto;">
+                <!-- Populated dynamically -->
+                <p class="text-muted" style="text-align: center; padding: 20px;">No calibration data available.</p>
+              </div>
+              <div id="layerEditSourcePreview" style="flex: 1; display: none; flex-direction: column; gap: 5px;">
+                <span class="preview-label" style="font-size: 0.75em;">Source Grid Spot</span>
+                <div
+                  style="position: relative; background: #000; border-radius: 4px; overflow: hidden; border: 1px solid var(--border-primary);">
+                  <canvas id="layerEditSourceCanvas" style="width: 100%; height: auto; display: block;"></canvas>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -781,6 +802,35 @@
           <strong>Enter</strong> Apply &nbsp;|&nbsp;
           <strong>Esc</strong> Done
         </span>
+      </div>
+    </div>
+
+    <!-- Mini Color Picker Popup -->
+    <div id="miniColorPicker" class="mini-picker">
+      <div class="mini-picker-header">
+        <h4>Pick Color from Grid</h4>
+        <span class="mini-picker-close" id="closeMiniPicker">&times;</span>
+      </div>
+      <div class="mini-picker-content">
+        <div class="mini-picker-canvas-container">
+          <canvas id="miniPickerCanvas" class="mini-picker-canvas"></canvas>
+        </div>
+      </div>
+      <div id="miniPickerFooter" class="mini-picker-footer" style="flex-direction: column; gap: 8px;">
+        <div class="picker-navigation"
+          style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <button id="btnPrevGrid" class="btn btn-sm btn-secondary" title="Previous Saved Grid"
+            style="padding: 2px 8px;">◀</button>
+          <span id="miniPickerGridName"
+            style="font-weight: 500; font-size: 0.9em; flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; color: var(--text-secondary);">Grid
+            Name</span>
+          <button id="btnNextGrid" class="btn btn-sm btn-secondary" title="Next Saved Grid"
+            style="padding: 2px 8px;">▶</button>
+        </div>
+        <div style="display: flex; justify-content: space-between; width: 100%;">
+          <span id="miniPickerCoords">Col: - Row: -</span>
+          <span id="miniPickerValues">F: - LPI: -</span>
+        </div>
       </div>
     </div>
 

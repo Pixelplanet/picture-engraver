@@ -217,84 +217,7 @@ function getLineIntersection(p1, p2, p3, p4) {
 /**
  * Crops a bounding box area from an image based on analyzer corners
  */
-function cropGridImage(img, corners) {
-    try {
-        console.log('Using preview canvas for robust grid cropping...');
-        const previewCanvas = elements.analyzerCanvas;
 
-        if (!previewCanvas) {
-            console.error('Preview canvas not found for cropping');
-            return null;
-        }
-
-        console.log('DEBUG: Corners received:', JSON.stringify(corners));
-        console.log('DEBUG: Preview Canvas size:', previewCanvas.width, previewCanvas.height);
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-        // Calculate crop in preview coordinates (no scaling needed!)
-        let minX = Math.floor(Math.min(...corners.map(c => c.x)));
-        let maxX = Math.ceil(Math.max(...corners.map(c => c.x)));
-        let minY = Math.floor(Math.min(...corners.map(c => c.y)));
-        let maxY = Math.ceil(Math.max(...corners.map(c => c.y)));
-
-        // Clamp to canvas bounds
-        minX = Math.max(0, Math.min(minX, previewCanvas.width - 1));
-        maxX = Math.max(minX + 1, Math.min(maxX, previewCanvas.width));
-        minY = Math.max(0, Math.min(minY, previewCanvas.height - 1));
-        maxY = Math.max(minY + 1, Math.min(maxY, previewCanvas.height));
-
-        let w = maxX - minX;
-        let h = maxY - minY;
-
-        console.log('DEBUG: Clamped crop:', { minX, maxX, minY, maxY, w, h });
-
-        if (w <= 0 || h <= 0) {
-            console.warn('Crop Grid Image: Invalid dimensions after clamping', { w, h });
-            return null;
-        }
-
-        // Limit maximum size to prevent excessive storage usage and performance hits
-        const maxDim = 1600;
-        let destW = w;
-        let destH = h;
-        if (w > maxDim || h > maxDim) {
-            const scale = maxDim / Math.max(w, h);
-            destW = Math.round(w * scale);
-            destH = Math.round(h * scale);
-            console.log(`DEBUG: Resizing crop from ${w}x${h} to ${destW}x${destH}`);
-        }
-
-        canvas.width = destW;
-        canvas.height = destH;
-
-        // Draw directly from the visible preview canvas
-        try {
-            ctx.drawImage(previewCanvas, minX, minY, w, h, 0, 0, destW, destH);
-            const base64 = canvas.toDataURL('image/jpeg', 0.8);
-            console.log('DEBUG: Crop Grid Image Success', { size: base64.length });
-
-            return {
-                base64: base64,
-                width: destW,
-                height: destH,
-                offsetX: minX,
-                offsetY: minY,
-                relativeCorners: corners.map(c => ({
-                    x: (c.x - minX) * (destW / w),
-                    y: (c.y - minY) * (destH / h)
-                }))
-            };
-        } catch (drawErr) {
-            console.error('DEBUG: Canvas Draw/Export Error:', drawErr.message);
-            return null;
-        }
-    } catch (e) {
-        console.error("Failed to crop grid image (Outer)", e);
-        return null;
-    }
-}
 
 // ===================================
 // Initialization
@@ -408,76 +331,81 @@ function initMiniPicker() {
     }, { passive: false });
 }
 
-function warpGridImage(img, corners) {
-    // We want a normalized grid, so we'll use a fixed size or the img size
-    // But since we want to show it in the UI, let's keep a reasonable resolution
-    const width = 800;
-    const height = 600;
+function cropGridImage(img, corners) {
+    try {
+        console.log('Generating rectified grid image (Source: Analyzer Canvas)...');
 
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    const imageData = ctx.createImageData(width, height);
-    const data = imageData.data;
-
-    // Helper to interpolate between 4 points (bilinear mapping)
-    function getPoint(tx, ty) {
-        const pTop = {
-            x: corners[0].x + (corners[1].x - corners[0].x) * tx,
-            y: corners[0].y + (corners[1].y - corners[0].y) * tx
-        };
-        const pBottom = {
-            x: corners[3].x + (corners[2].x - corners[3].x) * tx,
-            y: corners[3].y + (corners[2].y - corners[3].y) * tx
-        };
-        return {
-            x: pTop.x + (pBottom.x - pTop.x) * ty,
-            y: pTop.y + (pBottom.y - pTop.y) * ty
-        };
-    }
-
-    // We need the source image data to sample from
-    const srcCanvas = document.createElement('canvas');
-    srcCanvas.width = img.width;
-    srcCanvas.height = img.height;
-    const srcCtx = srcCanvas.getContext('2d');
-    srcCtx.drawImage(img, 0, 0);
-    const srcData = srcCtx.getImageData(0, 0, img.width, img.height).data;
-
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const tx = x / (width - 1);
-            const ty = y / (height - 1);
-
-            const p = getPoint(tx, ty);
-            const srcX = Math.floor(p.x);
-            const srcY = Math.floor(p.y);
-
-            if (srcX >= 0 && srcX < img.width && srcY >= 0 && srcY < img.height) {
-                const srcIdx = (srcY * img.width + srcX) * 4;
-                const destIdx = (y * width + x) * 4;
-                data[destIdx] = srcData[srcIdx];
-                data[destIdx + 1] = srcData[srcIdx + 1];
-                data[destIdx + 2] = srcData[srcIdx + 2];
-                data[destIdx + 3] = 255;
-            }
+        // Use the analyzer canvas as source because 'corners' coordinates are relative to it.
+        const sourceCanvas = elements.analyzerCanvas;
+        if (!sourceCanvas) {
+            console.error('Analyzer canvas not found');
+            return null;
         }
-    }
 
-    ctx.putImageData(imageData, 0, 0);
-    return canvas;
+        const width = sourceCanvas.width;
+        const height = sourceCanvas.height;
+        const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+        const imageData = ctx.getImageData(0, 0, width, height);
+
+        // 2. Warp using GridDetector
+        if (!analyzerState.gridDetector) {
+            analyzerState.gridDetector = new GridDetector();
+        }
+
+        const warpedResult = analyzerState.gridDetector.warpImage(imageData, corners);
+
+        // 3. Convert warped ImageData back to Base64
+        const resCanvas = document.createElement('canvas');
+        resCanvas.width = warpedResult.width;
+        resCanvas.height = warpedResult.height;
+        const resCtx = resCanvas.getContext('2d');
+        resCtx.putImageData(warpedResult.imageData, 0, 0);
+
+        // Compress slightly to save space
+        const base64 = resCanvas.toDataURL('image/jpeg', 0.85);
+        console.log('rectified grid image generated', { w: warpedResult.width, h: warpedResult.height, len: base64.length });
+
+        return {
+            base64: base64,
+            width: warpedResult.width,
+            height: warpedResult.height,
+            offsetX: 0,
+            offsetY: 0,
+            relativeCorners: null
+        };
+
+    } catch (e) {
+        console.error("Failed to crop/warp grid image", e);
+        return null;
+    }
 }
 
-function openMiniPicker(layerId, targetEl) {
+
+function openMiniPicker(layerId, targetEl, mapId = null) {
     const layer = state.layers.find(l => l.id === layerId);
     if (!layer) return;
 
     state.editingLayerId = layerId;
 
-    // Get active map or system default
+    // Get all maps
     const maps = SettingsStorage.getColorMaps();
-    const activeMap = maps.find(m => m.active) || maps[0];
+
+    // Determine which map to show
+    let activeMap;
+    if (mapId) {
+        activeMap = maps.find(m => m.id === mapId);
+    }
+
+    // Fallback if ID invalid or not provided: state.currentMiniPickerMapId -> Active -> First
+    if (!activeMap && state.currentMiniPickerMapId) {
+        activeMap = maps.find(m => m.id === state.currentMiniPickerMapId);
+    }
+    if (!activeMap) {
+        activeMap = maps.find(m => m.active) || maps[0];
+    }
+
+    // Persist current selection
+    state.currentMiniPickerMapId = activeMap ? activeMap.id : null;
 
     if (!activeMap || !activeMap.data.gridImage) {
         showToast('No calibration grid image found. Please run a test grid analysis.', 'warning');
@@ -486,19 +414,81 @@ function openMiniPicker(layerId, targetEl) {
 
     const { gridImage, entries, numCols, numRows } = activeMap.data;
 
+    // Update Footer Info
+    const gridNameEl = document.getElementById('miniPickerGridName');
+    if (gridNameEl) gridNameEl.textContent = activeMap.name || 'Untitled Grid';
+
+    // Setup Buttons
+    const btnPrev = document.getElementById('btnPrevGrid');
+    const btnNext = document.getElementById('btnNextGrid');
+
+    if (maps.length <= 1) {
+        if (btnPrev) btnPrev.style.display = 'none';
+        if (btnNext) btnNext.style.display = 'none';
+    } else {
+        if (btnPrev) {
+            btnPrev.style.display = 'inline-block';
+            const newPrev = btnPrev.cloneNode(true);
+            btnPrev.parentNode.replaceChild(newPrev, btnPrev);
+            newPrev.addEventListener('click', (e) => {
+                e.stopPropagation();
+                navigateMiniPickerGrid(-1);
+            });
+        }
+
+        if (btnNext) {
+            btnNext.style.display = 'inline-block';
+            const newNext = btnNext.cloneNode(true);
+            btnNext.parentNode.replaceChild(newNext, btnNext);
+            newNext.addEventListener('click', (e) => {
+                e.stopPropagation();
+                navigateMiniPickerGrid(1);
+            });
+        }
+    }
+
+
     // Setup Canvas
     const canvas = elements.miniPickerCanvas;
     const ctx = canvas.getContext('2d');
 
     const img = new Image();
     img.onload = () => {
-        // Warp the image if corners are available
-        if (gridImage.relativeCorners) {
-            const warpedCanvas = warpGridImage(img, gridImage.relativeCorners);
-            canvas.width = warpedCanvas.width;
-            canvas.height = warpedCanvas.height;
-            ctx.drawImage(warpedCanvas, 0, 0);
+        // Handle Legacy Maps: If relativeCorners exist, we must warp the image on the fly
+        if (gridImage.relativeCorners && gridImage.relativeCorners.length === 4) {
+            // We need to warp it. Use GridDetector logic if available, or fall back to drawing unwarped
+            if (analyzerState.gridDetector) {
+                try {
+                    // Convert image to ImageData
+                    const tmpCanvas = document.createElement('canvas');
+                    tmpCanvas.width = img.width;
+                    tmpCanvas.height = img.height;
+                    const tmpCtx = tmpCanvas.getContext('2d');
+                    tmpCtx.drawImage(img, 0, 0);
+                    const imgData = tmpCtx.getImageData(0, 0, img.width, img.height);
+
+                    // Warp
+                    const result = analyzerState.gridDetector.warpImage(imgData, gridImage.relativeCorners);
+
+                    // Draw warped
+                    canvas.width = result.width;
+                    canvas.height = result.height;
+                    const resCtx = canvas.getContext('2d');
+                    resCtx.putImageData(result.imageData, 0, 0);
+                } catch (e) {
+                    console.error("Legacy Warp Failed", e);
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                }
+            } else {
+                // No detector available? Just draw raw
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+            }
         } else {
+            // New Maps: Image is already rectified
             canvas.width = img.width;
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
@@ -506,7 +496,7 @@ function openMiniPicker(layerId, targetEl) {
 
         // Highlight currently selected color if it exists
         if (layer.frequency !== undefined && layer.lpi !== undefined) {
-            const entry = entries.find(e =>
+            const entry = activeMap.data.entries.find(e =>
                 Math.round(e.frequency) === Math.round(layer.frequency) &&
                 Math.round(e.lpi) === Math.round(layer.lpi)
             );
@@ -514,8 +504,8 @@ function openMiniPicker(layerId, targetEl) {
             if (entry && entry.gridPos) {
                 const cw = canvas.width / numCols;
                 const ch = canvas.height / numRows;
-                // Since the image is now warped to a perfect rectangle, 
-                // we can use standard grid math for the highlight box.
+
+                // Simple grid coordinates
                 const x = Math.floor(entry.gridPos.col * cw);
                 const y = Math.floor(entry.gridPos.row * ch);
                 const w = Math.floor(cw);
@@ -611,9 +601,45 @@ function handleMiniPickerHover(e) {
     }
 }
 
+// Navigation Helper
+function navigateMiniPickerGrid(direction) {
+    const maps = SettingsStorage.getColorMaps();
+    if (!maps || maps.length === 0) return;
+
+    // Use current ID, or fallback to active, or first
+    const currentId = state.currentMiniPickerMapId || (maps.find(m => m.active) || maps[0]).id;
+    const currentIndex = maps.findIndex(m => m.id === currentId);
+
+    if (currentIndex === -1) {
+        // Should not happen, but safe fallback
+        openMiniPicker(state.editingLayerId, null, maps[0].id);
+        return;
+    }
+
+    // Calculate new index wrapping around
+    let newIndex = (currentIndex + direction) % maps.length;
+    if (newIndex < 0) newIndex = maps.length - 1;
+
+    const newMapId = maps[newIndex].id;
+
+    // Refresh Picker
+    openMiniPicker(state.editingLayerId, null, newMapId);
+}
+
 function getCellFromCoords(x, y) {
     const maps = SettingsStorage.getColorMaps();
-    const activeMap = maps.find(m => m.active) || maps[0];
+
+    // Use current picker map if set, otherwise active
+    const mapId = state.currentMiniPickerMapId;
+    let activeMap;
+    if (mapId) {
+        activeMap = maps.find(m => m.id === mapId);
+    }
+
+    if (!activeMap) {
+        activeMap = maps.find(m => m.active) || maps[0];
+    }
+
     if (!activeMap) return null;
 
     const { entries, numCols, numRows } = activeMap.data;

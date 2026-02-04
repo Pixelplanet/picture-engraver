@@ -1509,7 +1509,10 @@ body {
 .advanced-grid {
   flex: 1;
   overflow-y: auto;
-  max-height: 400px;
+  overflow-x: auto;
+  min-height: 0;
+  min-width: 0;
+  padding: 2px;
 }
 
 .advanced-grid .color-cell {
