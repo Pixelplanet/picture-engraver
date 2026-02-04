@@ -591,3 +591,46 @@ When generating XCS files programmatically:
 | Date | Changes |
 |------|---------|
 | 2026-01-21 | Initial documentation with verified working examples |
+ 
+ # #   S p e c i a l   C a s e s :   D i s a b l i n g   O u t p u t  
+  
+ T h e r e   a r e   c a s e s   w h e r e   y o u   m a y   w a n t   t o   i n c l u d e   a n   e l e m e n t   i n   t h e   X C S   f i l e   ( e . g . ,   i n s t r u c t i o n s ,   w a r n i n g s )   b u t   h a v e   i t s   o u t p u t   d i s a b l e d   b y   d e f a u l t   s o   t h e   l a s e r   d o e s   n o t   p r o c e s s   i t .  
+  
+ # # #   H o w   t o   D i s a b l e   P r o c e s s i n g   f o r   a n   E l e m e n t  
+  
+ T o   c o r r e c t l y   d i s a b l e   p r o c e s s i n g   f o r   a n   e l e m e n t ,   t h e   ` d e v i c e . d a t a `   e n t r y   m u s t   b e   c o n f i g u r e d   a s   f o l l o w s :  
+  
+ 1 .     * * ` p r o c e s s i n g T y p e ` * * :   S e t   t o   ` " F I L L _ V E C T O R _ E N G R A V I N G " `   ( o r   a n o t h e r   v a l i d   t y p e ) .   * * D o   N O T   u s e   ` " I G N O R E " ` * * ,   a s   X C S   m a y   r e s e t   t h i s   i f   t h e   d a t a   s t r u c t u r e   i s   i n c o m p l e t e .  
+ 2 .     * * ` p r o c e s s I g n o r e ` * * :   S e t   t o   ` t r u e ` .   T h i s   i s   t h e   p r i m a r y   f l a g   t h a t   t o g g l e s   t h e   " O u t p u t "   s w i t c h   t o   O F F .  
+ 3 .     * * ` d a t a `   O b j e c t * * :   M u s t   b e   f u l l y   p o p u l a t e d   w i t h   v a l i d   p a r a m e t e r s .   I f   t h i s   o b j e c t   i s   e m p t y ,   X C S   m a y   t r e a t   t h e   e l e m e n t   a s   i n v a l i d   o r   r e s e t   i t s   s t a t u s   t o   e n a b l e d .  
+  
+ # # # #   J S O N   E x a m p l e   f o r   D i s a b l e d   E l e m e n t  
+  
+ ` ` ` j s o n  
+ [ " e l e m e n t - u u i d " ,   {  
+     " i s F i l l " :   t r u e ,  
+     " t y p e " :   " T E X T " ,  
+     " p r o c e s s i n g T y p e " :   " F I L L _ V E C T O R _ E N G R A V I N G " ,  
+     " d a t a " :   {  
+         " F I L L _ V E C T O R _ E N G R A V I N G " :   {  
+             " m a t e r i a l T y p e " :   " c u s t o m i z e " ,  
+             " p l a n T y p e " :   " d o t _ c l o u d " ,  
+             " p a r a m e t e r " :   {  
+                 " c u s t o m i z e " :   {  
+                     " s p e e d " :   1 0 0 ,  
+                     " p o w e r " :   1 ,  
+                     " r e p e a t " :   1 ,  
+                     " f r e q u e n c y " :   6 0 ,  
+                     " d e n s i t y " :   3 0 0 ,  
+                     " e n a b l e K e r f " :   f a l s e ,  
+                     " k e r f D i s t a n c e " :   0  
+                 }  
+             }  
+         }  
+     } ,  
+     " p r o c e s s I g n o r e " :   t r u e  
+ } ]  
+ ` ` `  
+  
+ - - -  
+ 
