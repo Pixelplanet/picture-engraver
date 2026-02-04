@@ -690,6 +690,8 @@ body {
 
 .export-actions .btn {
   flex: 1;
+  padding: 10px 24px;
+  /* Reduced vertical padding to match warning box */
 }
 
 /* ===================================
