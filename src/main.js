@@ -292,7 +292,7 @@ function updateLayerCalibrationPreview(layerId) {
     }
 
     elements.layerCalibrationPreview.style.display = 'block';
-    elements.layerCalibrationText.textContent = `${map.name} | ${Math.round(layer.frequency)}kHz @ ${Math.round(layer.lpi)}LPI`;
+    elements.layerCalibrationText.textContent = `${map.name} | ${Math.round(layer.frequency)}kHz @ ${Math.round(layer.lpi)}LPC`;
 
     drawSourceHighlightOnCanvas(elements.layerCalibrationCanvas, map.data.gridImage, layer.sourceGridPos, map.data.numCols, map.data.numRows);
 }
@@ -382,6 +382,12 @@ function cropGridImage(img, corners) {
 
 
 function openMiniPicker(layerId, targetEl, mapId = null) {
+    // Redirect to standard modal for virtual/SVG devices (to provide simple color picker)
+    if (SettingsStorage.isCurrentDeviceVirtual()) {
+        openLayerEditModal(layerId);
+        return;
+    }
+
     const layer = state.layers.find(l => l.id === layerId);
     if (!layer) return;
 
@@ -542,6 +548,11 @@ function openMiniPicker(layerId, targetEl, mapId = null) {
         elements.miniColorPicker.style.left = `${left + window.scrollX}px`;
         elements.miniColorPicker.style.top = `${top + window.scrollY}px`;
         elements.miniColorPicker.classList.add('active');
+
+        // Onboarding action: Mini Picker Opened (with delay to ensure rendering)
+        setTimeout(() => {
+            if (window.onboarding) window.onboarding.handleAction('edit-modal-open');
+        }, 100);
     };
     img.src = gridImage.base64;
 }
@@ -575,7 +586,17 @@ function handleMiniPickerClick(e) {
             displayLayers();
             displayVectorPreview();
             closeMiniPicker();
-            showToast(`Assigned ${Math.round(layer.frequency)}kHz / ${layer.lpi}LPI`, 'success');
+
+            // Onboarding action: Color Picked
+            if (window.onboarding) {
+                window.onboarding.handleAction('color-picked');
+                // Trigger save-edit immediately since mini picker is instant
+                setTimeout(() => {
+                    if (window.onboarding) window.onboarding.handleAction('save-edit');
+                }, 100);
+            }
+
+            showToast(`Assigned ${Math.round(layer.frequency)}kHz / ${layer.lpi}LPC`, 'success');
         }
     }
 }
@@ -594,7 +615,7 @@ function handleMiniPickerHover(e) {
 
     if (cell) {
         if (coordsEl) coordsEl.textContent = `Col: ${cell.gridPos.col} Row: ${cell.gridPos.row}`;
-        if (valuesEl) valuesEl.textContent = `${Math.round(cell.frequency)}kHz / ${cell.lpi}LPI`;
+        if (valuesEl) valuesEl.textContent = `${Math.round(cell.frequency)}kHz / ${cell.lpi}LPC`;
     } else {
         if (coordsEl) coordsEl.textContent = `Col: - Row: -`;
         if (valuesEl) valuesEl.textContent = `Searching grid...`;
@@ -690,7 +711,7 @@ async function init() {
     setupAdvancedAnalyzer();
     setupLightbox();
 
-    Logger.info('Picture Engraver initialized', { appVersion: '1.7.6' });
+    Logger.info('Picture Engraver initialized', { appVersion: '2.0.0' });
 
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
@@ -1227,7 +1248,7 @@ function displayLayers() {
             // Outline Layer: Show Thickness Input + Apply + Delete
             const thickness = layer.thickness || 5;
 
-            // Adjust settings display just for outline? Or keep frequency/LPI?
+            // Adjust settings display just for outline? Or keep frequency/LPC?
             // Usually outlines share settings with parent or have their own. 
             // For now, let's keep the settings info but maybe smaller.
             // And add the controls in the actions area or settings area.
@@ -1265,7 +1286,7 @@ function displayLayers() {
             if (isVirtual) {
                 settingsText = 'Ready for Export';
             } else if (hasSettings) {
-                settingsText = `${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)}LPI`;
+                settingsText = `${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)}LPC`;
                 if (layer.speed) settingsText += ` / ${layer.speed}mm/s`;
                 if (layer.power) settingsText += ` / ${layer.power}%`;
             }
@@ -1779,7 +1800,7 @@ function renderLayerColorGrid() {
         div.className = 'color-cell';
         div.style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
 
-        let title = `R:${color.r} G:${color.g} B:${color.b}\nFreq: ${frequency}kHz, LPI: ${lpi}`;
+        let title = `R:${color.r} G:${color.g} B:${color.b}\nFreq: ${frequency}kHz, LPC: ${lpi}`;
         if (_sourceMap) title += `\nSource: ${_sourceMap}`;
 
         div.title = title;
@@ -2822,7 +2843,7 @@ function applyManualSettings() {
     const settingsDiv = document.getElementById('analysisSettings');
     settingsDiv.innerHTML = `
         <div class="detected-value"><span>Frequency (Manual)</span> <span>${freqMin}-${freqMax}kHz</span></div>
-        <div class="detected-value"><span>LPI (Manual)</span> <span>${lpiMax}-${lpiMin}</span></div>
+        <div class="detected-value"><span>LPC (Manual)</span> <span>${lpiMax}-${lpiMin}</span></div>
         <div class="detected-value"><span>Grid Size</span> <span>${cols}×${rows}</span></div>
     `;
 
@@ -3579,7 +3600,7 @@ function unused_updateGridPreview() {
             const size = cellSize * scale;
 
             // Color gradient visualization
-            // Hue based on LPI (cols), Lightness based on Freq (rows)
+            // Hue based on LPC (cols), Lightness based on Freq (rows)
             const hue = (col / gridInfo.numCols) * 240;
             const sat = 70;
             const light = 40 + (row / gridInfo.numRows) * 40;
@@ -3607,7 +3628,7 @@ function getSmartGridFilename(prefix, settings, deviceId) {
     if (devLabel === 'MOPA') {
         name += `_S${settings.speedMin}-${settings.speedMax}_F${settings.freqMin}-${settings.freqMax}`;
     } else {
-        const lpiUnit = settings.highLpiMode ? 'LPC' : 'LPI';
+        const lpiUnit = settings.highLpiMode ? 'LPC' : 'LPC';
         name += `_${lpiUnit}${settings.lpiMin}-${settings.lpiMax}_F${settings.freqMin}-${settings.freqMax}`;
     }
     return name;
@@ -3678,7 +3699,7 @@ function drawGridToCanvas(canvasId, settings) {
             const y = (margin + row * (cellSize + gap)) * scale;
             const size = cellSize * scale;
 
-            // Hue based on LPI (cols), Lightness based on Freq (rows)
+            // Hue based on LPC (cols), Lightness based on Freq (rows)
             const hue = (col / gridInfo.numCols) * 240;
             const sat = 70;
             const light = 40 + (row / gridInfo.numRows) * 40;
@@ -3785,7 +3806,7 @@ async function analyzeGridImage(img) {
 
         settingsDiv.innerHTML = `
             <div class="detected-value"><span>Frequency Range</span> <span>${s.freq[0]} - ${s.freq[1]} kHz</span></div>
-            <div class="detected-value"><span>LPI Range</span> <span>${s.lpi[0]} - ${s.lpi[1]} LPI</span></div>
+            <div class="detected-value"><span>LPC Range</span> <span>${s.lpi[0]} - ${s.lpi[1]} LPC</span></div>
             <div class="detected-value"><span>Grid Size</span> <span>${s.lpi[2]} × ${s.freq[2]}</span></div>
             <div class="detected-value"><span>Power / Speed</span> <span>${s.pwr}% / ${s.spd} mm/s</span></div>
             <div class="detected-value"><span>Laser Type</span> <span>${(s.type || 'UV').toUpperCase()}</span></div>
@@ -3862,7 +3883,7 @@ function generateColorMapFromDetection(cells, colors) {
         const cellElem = document.createElement('div');
         cellElem.className = 'color-cell';
         cellElem.style.backgroundColor = colors[idx];
-        cellElem.title = `${freq}kHz / ${lpi} LPI`;
+        cellElem.title = `${freq}kHz / ${lpi} LPC`;
 
         cellElem.addEventListener('click', () => {
             document.querySelectorAll('.color-cell').forEach(c => c.classList.remove('selected'));
@@ -3871,10 +3892,10 @@ function generateColorMapFromDetection(cells, colors) {
             const box = document.getElementById('activeSelectionBox');
             const text = document.getElementById('activeSelectionText');
             box.style.display = 'block';
-            text.textContent = `${freq}kHz / ${lpi} LPI`;
+            text.textContent = `${freq}kHz / ${lpi} LPC`;
             box.style.borderColor = colors[idx];
 
-            showToast(`Mapped: ${freq}kHz @ ${lpi} LPI`, 'info');
+            showToast(`Mapped: ${freq}kHz @ ${lpi} LPC`, 'info');
         });
 
         grid.appendChild(cellElem);
@@ -3899,7 +3920,7 @@ function useDefaultGridSettings() {
     const settingsDiv = document.getElementById('analysisSettings');
     settingsDiv.innerHTML = `
         <div class="detected-value"><span>Frequency (Default)</span> <span>${s.freqMin}-${s.freqMax}kHz</span></div>
-        <div class="detected-value"><span>LPI (Default)</span> <span>${s.lpiMax}-${s.lpiMin}</span></div>
+        <div class="detected-value"><span>LPC (Default)</span> <span>${s.lpiMax}-${s.lpiMin}</span></div>
         <div class="detected-value"><span>Grid Size</span> <span>${numCols}×${numRows}</span></div>
     `;
 
@@ -3936,7 +3957,7 @@ function generateColorMapWithData(freqValues, lpiValues, extractedColors) {
                 cell.title = 'QR Code Region (Excluded)';
             } else {
                 cell.style.backgroundColor = color;
-                cell.title = `${freq}kHz / ${lpi} LPI`;
+                cell.title = `${freq}kHz / ${lpi} LPC`;
 
                 cell.addEventListener('click', () => {
                     document.querySelectorAll('.color-cell').forEach(c => c.classList.remove('selected'));
@@ -3945,10 +3966,10 @@ function generateColorMapWithData(freqValues, lpiValues, extractedColors) {
                     const box = document.getElementById('activeSelectionBox');
                     const text = document.getElementById('activeSelectionText');
                     box.style.display = 'block';
-                    text.textContent = `${freq}kHz / ${lpi} LPI`;
+                    text.textContent = `${freq}kHz / ${lpi} LPC`;
                     box.style.borderColor = color;
 
-                    showToast(`Mapped: ${freq}kHz @ ${lpi} LPI`, 'info');
+                    showToast(`Mapped: ${freq}kHz @ ${lpi} LPC`, 'info');
                 });
             }
 
@@ -4244,7 +4265,7 @@ function renderAdvancedGrid() {
         const cell = document.createElement('div');
         cell.className = 'color-cell';
         cell.style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
-        cell.title = `${freq}kHz / ${lpi} LPI${meta.name ? ` - ${meta.name}` : ''}`;
+        cell.title = `${freq}kHz / ${lpi} LPC${meta.name ? ` - ${meta.name}` : ''}`;
         cell.dataset.index = idx;
 
         // Apply state classes
@@ -4301,7 +4322,7 @@ function selectAdvancedColor(index) {
 
     document.getElementById('colorDetailSwatch').style.backgroundColor =
         `rgb(${color.r}, ${color.g}, ${color.b})`;
-    document.getElementById('colorDetailSettings').textContent = `${freq} kHz / ${lpi} LPI`;
+    document.getElementById('colorDetailSettings').textContent = `${freq} kHz / ${lpi} LPC`;
     document.getElementById('colorDetailPosition').textContent = `Row ${row + 1}, Col ${col + 1}`;
     document.getElementById('colorNameInput').value = meta.name || '';
 
@@ -4513,12 +4534,12 @@ function renderSimilarColorsList(groups) {
             swatch.className = 'color-swatch';
             swatch.style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
             swatch.style.cursor = 'pointer';
-            swatch.title = `${freqValues[row]}kHz / ${lpi} LPI - Click to select`;
+            swatch.title = `${freqValues[row]}kHz / ${lpi} LPC - Click to select`;
             swatch.addEventListener('click', () => selectAdvancedColor(idx));
             groupEl.appendChild(swatch);
         });
 
-        // Add hint about lowest LPI
+        // Add hint about lowest LPC
         const lowestLpiIdx = group.reduce((minIdx, idx) => {
             const col = idx % numCols;
             const minCol = minIdx % numCols;
@@ -4527,7 +4548,7 @@ function renderSimilarColorsList(groups) {
 
         const hint = document.createElement('span');
         hint.className = 'color-info';
-        hint.innerHTML = `<em>💡 Keep lowest LPI for faster engraving</em>`;
+        hint.innerHTML = `<em>💡 Keep lowest LPC for faster engraving</em>`;
         groupEl.appendChild(hint);
 
         list.appendChild(groupEl);

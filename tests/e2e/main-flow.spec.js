@@ -20,8 +20,8 @@ test.describe('Main Flow', () => {
     test('should show correct title and version', async ({ page }) => {
         await expect(page).toHaveTitle(/Picture Engraver/);
         await expect(page.locator('.header .title')).toHaveText('Picture Engraver');
-        // Version is present in the UI - Update to match 1.7.5
-        await expect(page.locator('text=v1.7.5')).toBeAttached();
+        // Version is present in the UI - Update to match 2.0.0
+        await expect(page.locator('text=v2.0.0')).toBeAttached();
     });
 
     test('should upload image, process, and handle validation', async ({ page }) => {

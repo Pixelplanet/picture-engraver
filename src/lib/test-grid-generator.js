@@ -250,7 +250,7 @@ export class TestGridGenerator {
         const numRows = Math.floor((availableHeight + s.cellGap) / totalCellSize);
 
         // Generate values
-        // LPI: High to Low (left to right)
+        // LPC: High to Low (left to right)
         const lpiValues = this.linspace(s.lpiMax, s.lpiMin, numCols);
         // Frequency: Low to High (top to bottom)
         const freqValues = this.linspace(s.freqMin, s.freqMax, numRows);
@@ -312,7 +312,7 @@ export class TestGridGenerator {
 
                 displays.push(display);
                 displaySettings.push([displayId, this.createDisplaySettings(frequency, lpi, s.power, s.speed, s.passes)]);
-                layerData[colorHex] = { name: `${frequency}kHz/${lpi}LPI`, order: zOrder, visible: true };
+                layerData[colorHex] = { name: `${frequency}kHz/${lpi}LPC`, order: zOrder, visible: true };
 
                 zOrder++;
                 cellCount++;
@@ -410,8 +410,7 @@ export class TestGridGenerator {
         const freqMin = s.freqMin || 200;
         const freqMax = s.freqMax || 1200;
 
-        // Constants (User Confirmed: Power 14, Pulse 80, LPI 5000 LPC)
-        const power = s.power || 14;
+        // Constants (User Confirmed: Power 14, Pulse 80, LPC 5000 LPC)
         const lpi = s.lpi || 5000;
         const pulseWidth = s.pulseWidth || 80;
         const passes = s.passes || 1;

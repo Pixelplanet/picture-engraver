@@ -22,7 +22,7 @@ export const DEVICE_PROFILES = {
             // Frequency range (kHz)
             freqMin: 40,
             freqMax: 80,
-            // LPI range
+            // LPC range
             lpiMin: 300,
             lpiMax: 2000,
             // Standard Color Settings (UV Defaults)

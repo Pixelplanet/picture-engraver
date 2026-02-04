@@ -115,7 +115,7 @@ export class OnboardingManager {
                             <h4 style="margin-top: 0; color: var(--accent-primary); margin-bottom: 8px;">🚀 About this App</h4>
                             <p style="margin-bottom: 15px; font-size: 0.95rem; line-height: 1.5;">
                             This tool automates the creation of multi-colored laser engravings by converting images into calibrated vector layers. 
-                            By using your own test-grid results, it perfectly tunes Frequency and LPI settings for every color in your photo.
+                            By using your own test-grid results, it perfectly tunes Frequency and LPC settings for every color in your photo.
                         </p>
                         
                         <h4 style="margin-top: 20px; color: var(--accent-danger); margin-bottom: 8px;">⚠️ Hardware Compatibility</h4>
@@ -260,13 +260,15 @@ export class OnboardingManager {
             {
                 target: '.layers-list',
                 title: '4. Layer Overview',
-                description: 'The image has been processed into separate layers. However, they don\'t have laser settings assigned yet! Note the ⚠️ warning icons.'
+                description: 'The image has been processed into separate layers. However, they don\'t have laser settings assigned yet! Note the ⚠️ warning icons.',
+                placement: 'right'
             },
             {
                 target: '#btnAutoAssign',
                 title: '5. Auto-Assign Calibration',
                 description: 'Click this button to automatically match the detected colors with your closest laser calibration data. <strong>Try it now!</strong>',
-                waitForAction: 'auto-assign'
+                waitForAction: 'auto-assign',
+                placement: 'top'
             },
             {
                 target: '.layer-color.assigned',
@@ -275,16 +277,16 @@ export class OnboardingManager {
                 waitForAction: 'edit-modal-open'
             },
             {
-                target: '#layerEditColorGrid',
+                target: '#miniPickerCanvas',
                 title: '7. Pick a Calibrated Color',
                 description: 'Select a color from the grid. These colors are pulled directly from your laser calibration data!',
                 waitForAction: 'color-picked',
                 placement: 'top'
             },
             {
-                target: '#btnSaveLayerEdit',
-                title: '8. Save Changes',
-                description: 'Click "Save Changes" to apply your custom color selection.',
+                target: '#layersList',
+                title: '8. Changes Applied',
+                description: 'The color and laser settings have been applied to your layer instantly!',
                 waitForAction: 'save-edit'
             },
             {
@@ -315,13 +317,25 @@ export class OnboardingManager {
 
         if (!targetEl || targetEl.offsetParent === null) {
             if (step.onShow) step.onShow();
-            // Try one more time after onShow
-            const targetElRetry = document.querySelector(step.target);
-            if (!targetElRetry || targetElRetry.offsetParent === null) {
-                this.showStep(index + 1);
-                return;
-            }
-            this.showStepHandle(targetElRetry, step, index);
+
+            // Try again after a delay
+            setTimeout(() => {
+                const targetElRetry = document.querySelector(step.target);
+                if (targetElRetry && targetElRetry.offsetParent !== null) {
+                    this.showStepHandle(targetElRetry, step, index);
+                } else {
+                    // One last attempt after a longer delay
+                    setTimeout(() => {
+                        const finalRetry = document.querySelector(step.target);
+                        if (finalRetry && finalRetry.offsetParent !== null) {
+                            this.showStepHandle(finalRetry, step, index);
+                        } else if (index < this.tourSteps.length - 1) {
+                            console.warn(`[Onboarding] Skipping step ${index} (${step.title}) - target ${step.target} not visible after retries.`);
+                            this.showStep(index + 1);
+                        }
+                    }, 500);
+                }
+            }, 200);
             return;
         }
 
@@ -408,6 +422,11 @@ export class OnboardingManager {
         if (placement === 'left') {
             top = rect.top + (rect.height / 2) - (tooltipHeight / 2) + scrollY;
             left = rect.left - tooltipWidth - 20 + scrollX;
+        }
+
+        if (placement === 'right') {
+            top = rect.top + (rect.height / 2) - (tooltipHeight / 2) + scrollY;
+            left = rect.right + 20 + scrollX;
         }
 
         // Horizontal Clamp
