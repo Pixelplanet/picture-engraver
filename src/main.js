@@ -361,8 +361,8 @@ function cropGridImage(img, corners) {
         const resCtx = resCanvas.getContext('2d');
         resCtx.putImageData(warpedResult.imageData, 0, 0);
 
-        // Compress slightly to save space
-        const base64 = resCanvas.toDataURL('image/jpeg', 0.85);
+        // High quality to ensure color picker works best
+        const base64 = resCanvas.toDataURL('image/jpeg', 1.0);
         console.log('rectified grid image generated', { w: warpedResult.width, h: warpedResult.height, len: base64.length });
 
         return {
@@ -1275,7 +1275,6 @@ function displayLayers() {
 
             actionsHtml = `
                 ${outlineBtn}
-                <button class="btn btn-icon btn-sm" title="Edit" data-action="edit" data-layer-id="${layer.id}">✏️</button>
             `;
             // isVirtual defined above
             // const isVirtual = SettingsStorage.isCurrentDeviceVirtual();
