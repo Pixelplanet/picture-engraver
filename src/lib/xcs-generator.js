@@ -137,8 +137,10 @@ export class XCSGenerator {
         // Build map of display settings
         const displayEntries = displays.map(display => {
             // Get settings for this specific display
-            const s = displaySettingsMap.get(display.id) || {
-                speed: 100, power: 10, repeat: 1, frequency: 60, lpi: 300, crossHatch: false, pulseWidth: 80
+            const rawS = displaySettingsMap.get(display.id) || {};
+            const s = {
+                speed: 100, power: 10, repeat: 1, frequency: 60, lpi: 300, crossHatch: false, pulseWidth: 80,
+                ...rawS
             };
 
             const customize = {
@@ -170,8 +172,8 @@ export class XCSGenerator {
                 {
                     "isFill": true,
                     "type": isWarning ? "TEXT" : "PATH",
-                    "processingType": isWarning ? "IGNORE" : "FILL_VECTOR_ENGRAVING",
-                    "data": isWarning ? {} : {
+                    "processingType": "FILL_VECTOR_ENGRAVING",
+                    "data": {
                         "FILL_VECTOR_ENGRAVING": {
                             "materialType": "customize",
                             "planType": "dot_cloud",
