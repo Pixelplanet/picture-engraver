@@ -293,6 +293,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
+  overflow: hidden;
+  /* Ensure content stays within panel (scrolling inside) */
 }
 
 @media (min-width: 1024px) {
@@ -393,7 +395,10 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
+  align-items: center;
   min-height: 150px;
+  max-height: 40vh;
+  /* Limit height to prevent scrolling */
   overflow: hidden;
 }
 
@@ -539,7 +544,10 @@ body {
   gap: var(--spacing-sm);
   flex: 1;
   overflow-y: auto;
-  min-height: 200px;
+  min-height: 0;
+  /* Important for flex child scrolling */
+  padding-right: 4px;
+  /* Space for scrollbar */
 }
 
 @media (max-width: 1023px) {
@@ -638,6 +646,10 @@ body {
 .layers-actions {
   padding-top: var(--spacing-sm);
   border-top: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 /* ===================================
