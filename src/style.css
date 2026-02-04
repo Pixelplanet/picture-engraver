@@ -395,10 +395,9 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  align-items: center;
-  min-height: 150px;
-  max-height: 40vh;
-  /* Limit height to prevent scrolling */
+  min-height: 100px;
+  max-height: 35vh;
+  /* Reduced from 40vh to save more space */
   overflow: hidden;
 }
 
@@ -647,9 +646,19 @@ body {
   padding-top: var(--spacing-sm);
   border-top: 1px solid var(--border-primary);
   display: flex;
+  flex-direction: row;
+  /* Ensure horizontal */
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--spacing-sm);
+  flex-wrap: nowrap;
+  /* Prevent wrapping */
+}
+
+.calibration-status {
+  white-space: nowrap;
+  font-size: 0.75rem;
+  /* Slightly smaller for better fit */
 }
 
 /* ===================================
@@ -687,7 +696,8 @@ body {
 
 .preview-content {
   flex: 1;
-  min-height: 300px;
+  min-height: 0;
+  /* Changed from 300px to allow shrinking */
   overflow-y: auto;
   display: flex;
   flex-direction: column;
