@@ -125,8 +125,8 @@ export class XCSGenerator {
         // Add the warning layer if not already present
         if (!data["#fe0002"]) {
             data["#fe0002"] = {
-                "name": "Focus Warning (Ignore)",
-                "order": 99,
+                "name": "{Red}",
+                "order": 13,
                 "visible": true
             };
         }
@@ -168,7 +168,7 @@ export class XCSGenerator {
             return [
                 display.id,
                 {
-                    "isFill": !isWarning,
+                    "isFill": true,
                     "type": isWarning ? "TEXT" : "PATH",
                     "processingType": isWarning ? "IGNORE" : "FILL_VECTOR_ENGRAVING",
                     "data": isWarning ? {} : {
@@ -180,7 +180,8 @@ export class XCSGenerator {
                             }
                         }
                     },
-                    "processIgnore": isWarning
+                    "processIgnore": isWarning,
+                    "isWhiteModel": true
                 }
             ];
         });
@@ -391,13 +392,18 @@ export class XCSGenerator {
      * Create focus warning text box element
      */
     createFocusWarning(id, size) {
-        const width = size?.width || 200;
-        const x = width / 2;
-        const y = (size?.height || 100) + 15; // Position 15mm below image
+        // Exact numbers from Baum mit Text.xcs
+        const x = -3.1444998474120496;
+        const y = 146.45000078201292;
+        const offsetX = -5.604499885559022;
+        const offsetY = 165.15999986648558;
+        const width = 206.28899969482416;
+        const height = 53.54999921798705;
+        const fontSize = 71.99999999999999;
 
         return {
             "id": id,
-            "name": "Focus Reminder",
+            "name": null,
             "type": "TEXT",
             "x": x,
             "y": y,
@@ -406,15 +412,16 @@ export class XCSGenerator {
             "skew": { "x": 0, "y": 0 },
             "pivot": { "x": 0, "y": 0 },
             "localSkew": { "x": 0, "y": 0 },
-            "offsetX": x,
-            "offsetY": y,
+            "offsetX": offsetX,
+            "offsetY": offsetY,
             "lockRatio": true,
             "isClosePath": true,
-            "zOrder": 999,
+            "zOrder": 13, // Matching zOrder 13 from reference
+            "groupTag": "d942118a-d0f3-4cb9-8870-37a23a5d56ce", // Exact groupTag from reference
             "layerTag": "#fe0002",
             "layerColor": "#fe0002",
             "visible": true,
-            "originColor": "#fe0002",
+            "originColor": "#000000",
             "enableTransform": true,
             "visibleState": true,
             "lockState": false,
@@ -425,13 +432,13 @@ export class XCSGenerator {
             "fill": {
                 "paintType": "color",
                 "visible": false,
-                "color": 16646146,
+                "color": 0,
                 "alpha": 1
             },
             "stroke": {
                 "paintType": "color",
                 "visible": true,
-                "color": 16646146,
+                "color": 0,
                 "alpha": 1,
                 "width": 1,
                 "cap": "butt",
@@ -439,21 +446,23 @@ export class XCSGenerator {
                 "miterLimit": 4,
                 "alignment": 0.5
             },
-            "width": 80,
-            "height": 15,
+            "width": width,
+            "height": height,
             "isFill": true,
-            "lineColor": 16646146,
-            "fillColor": "#fe0002",
+            "lineColor": 16421416,
+            "fillColor": "#f9932b",
             "text": "Remember to raise \nthe focus by 4mm\n",
             "resolution": 1,
             "style": {
-                "fontSize": 32,
+                "fontSize": fontSize,
                 "fontFamily": "Lato",
                 "fontSubfamily": "Regular",
                 "fontSource": "build-in",
                 "letterSpacing": 0,
                 "leading": 0,
                 "align": "center",
+                "curveX": 56,
+                "curveY": 0,
                 "isUppercase": false,
                 "isWeld": false
             }
