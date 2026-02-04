@@ -97,10 +97,24 @@ body {
   min-height: 100vh;
 }
 
+@media (min-width: 1024px) {
+  body {
+    overflow: hidden;
+  }
+
+  .app {
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+  }
+}
+
 /* ===================================
    Header
    =================================== */
 .header {
+  flex-shrink: 0;
+  /* Header stays fixed */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -268,13 +282,22 @@ body {
 
 @media (min-width: 1024px) {
   .main {
-    grid-template-columns: 320px 1fr 1fr;
-    grid-template-rows: 1fr;
-    /* Force rows to stay within height */
-    padding: var(--spacing-lg) var(--spacing-xl);
-    height: calc(100vh - 71px);
-    /* Header is approx 70px */
+    grid-template-columns: 320px minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    padding: var(--spacing-md) var(--spacing-xl);
+    flex: 1;
+    /* Grow to fill viewport */
+    height: 0;
+    /* Force respect for parent constraints */
+    min-height: 0;
     overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  .main>.panel {
+    min-height: 0;
+    height: 100%;
+    max-height: 100%;
   }
 }
 
@@ -301,19 +324,31 @@ body {
 
 @media (min-width: 1024px) {
   .panel {
+    height: 100%;
+    min-height: 0;
     max-height: 100%;
-    overflow-y: auto;
     scrollbar-width: thin;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 1;
+    /* Allow panels to be sized by grid */
   }
 }
 
+#layerCalibrationPreview {
+  flex-shrink: 0;
+}
+
 .panel-title {
+  flex-shrink: 0;
+  /* Don't squash the title */
   font-size: var(--font-size-lg);
   font-weight: 600;
   color: var(--text-primary);
   padding-bottom: var(--spacing-xs);
   border-bottom: 1px solid var(--border-primary);
-  margin-bottom: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
 }
 
 /* ===================================
@@ -549,7 +584,7 @@ body {
   overflow-y: auto;
   min-height: 0;
   height: 0;
-  /* Force flex child to respect container instead of content height */
+  /* Ensures it respects container height */
   padding-right: 4px;
 }
 
@@ -647,28 +682,31 @@ body {
 }
 
 .layers-actions {
+  flex-shrink: 0;
+  /* Don't squash buttons */
   padding-top: var(--spacing-sm);
   border-top: 1px solid var(--border-primary);
   display: flex;
   flex-direction: row;
-  /* Ensure horizontal */
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-sm);
   flex-wrap: nowrap;
-  /* Prevent wrapping */
 }
 
 .calibration-status {
   white-space: nowrap;
   font-size: 0.75rem;
-  /* Slightly smaller for better fit */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ===================================
    Preview Panel
    =================================== */
 .preview-tabs {
+  flex-shrink: 0;
+  /* Tabs stay fixed */
   display: flex;
   gap: var(--spacing-sm);
   margin-bottom: var(--spacing-md);
@@ -703,11 +741,15 @@ body {
   min-height: 0;
   /* Changed from 300px to allow shrinking */
   overflow-y: auto;
+  scrollbar-gutter: stable;
+  /* Prevent content shift on scrollbar toggle */
   display: flex;
   flex-direction: column;
 }
 
 .export-actions {
+  flex-shrink: 0;
+  /* Actions stay fixed */
   display: flex;
   gap: var(--spacing-md);
   padding-top: var(--spacing-sm);
@@ -1367,7 +1409,6 @@ body {
 
 #previewQuantized:hover,
 #previewVectors:hover {
-  transform: scale(1.01);
   filter: brightness(1.05);
 }
 
