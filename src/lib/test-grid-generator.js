@@ -24,12 +24,12 @@ export class TestGridGenerator {
             // Engraving settings
             power: 70,
             speed: 425,
-            passes: 2,
+            passes: 1,
             crossHatch: true,
 
             // QR code settings
-            qrPower: 85,
-            qrSpeed: 80,
+            qrPower: 75,
+            qrSpeed: 100,
             qrSize: 12,
             qrFrequency: 45,
             qrLpi: 500,
@@ -446,7 +446,7 @@ export class TestGridGenerator {
 
                 // Color Helper (Gray Gradient)
                 const grayVal = Math.floor(255 - ((c / cols) * 200));
-                const colorHex = this.rgbToHex(grayVal, grayVal, grayVal);
+                const colorHex = this.colorToHex(grayVal, grayVal, grayVal);
                 const colorInt = (grayVal << 16) | (grayVal << 8) | grayVal;
 
                 // Create Path

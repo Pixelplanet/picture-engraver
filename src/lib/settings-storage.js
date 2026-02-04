@@ -250,10 +250,7 @@ export const SettingsStorage = {
     ensureSystemDefaultMap() {
         try {
             const maps = this.getColorMaps();
-            const defaultId = 'system_default_v7'; // Bump version to force update
-
-            // If already exists, do nothing
-            if (maps.some(m => m.id === defaultId)) return;
+            const defaultId = 'system_default_v8'; // Bump version to force update
 
             // Use real extracted data (from imported constant)
             const defaultMap = {
@@ -264,16 +261,31 @@ export const SettingsStorage = {
                 data: DEFAULT_COLOR_MAP_DATA
             };
 
-            // Remove ANY old default maps if they exist to prevent duplicates
-            // We want exactly one system default map
+            // Remove ANY old default maps (including current version to force update data)
+            // We want exactly one system default map with the latest data
             let i = maps.length;
+            let foundIndex = -1;
             while (i--) {
                 if (maps[i].id.startsWith('system_default_v')) {
-                    maps.splice(i, 1);
+                    if (maps[i].id === defaultId) {
+                        foundIndex = i;
+                    } else {
+                        maps.splice(i, 1);
+                    }
                 }
             }
 
-            maps.unshift(defaultMap); // Add to beginning
+            // Always update or add
+            if (foundIndex !== -1) {
+                // Update existing v7 to ensure cutting edge data (useful during dev)
+                // Preserve active status if user toggled it? No, system default should probably stay active unless user explicitly disabled it.
+                // But we mainly care about data.
+                maps[foundIndex].data = DEFAULT_COLOR_MAP_DATA;
+                maps[foundIndex].name = 'System Default (Optimized)'; // Ensure name is current
+            } else {
+                maps.unshift(defaultMap); // Add to beginning
+            }
+
             localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
             console.info('Created/Updated System Default color map');
 
@@ -371,10 +383,18 @@ export const SettingsStorage = {
                 throw new Error('Invalid format: missing maps array');
             }
 
+            // Validation: Check for embedded picture data in ALL maps
+            parsed.maps.forEach((map, index) => {
+                if (!map.data || !map.data.gridImage || !map.data.gridImage.base64) {
+                    throw new Error(`Map #${index + 1} "${map.name || 'Untitled'}" is missing embedded grid image. Legacy maps are no longer supported.`);
+                }
+            });
+
             const currentMaps = this.getColorMaps();
             let addedCount = 0;
 
             parsed.maps.forEach(importedMap => {
+
                 // Determine if we should generate a new ID (avoid collision)
                 // We'll regenerate IDs on import to be safe, unless it's a backup restore logic
                 // For simplicity, let's treat them as new maps if they don't exactly match ID

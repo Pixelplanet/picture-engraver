@@ -22,6 +22,12 @@ export class OnboardingManager {
             return;
         }
 
+        // Skip onboarding for virtual devices (SVG mode) - will have separate onboarding later
+        if (this.isVirtualDevice()) {
+            this.toggleProcessButton(true);
+            return;
+        }
+
         // Always check completion status
         if (this.hasCompletedOnboarding()) return;
 
@@ -30,6 +36,19 @@ export class OnboardingManager {
 
         // Show welcome/consent modal
         setTimeout(() => this.showWelcomeModal(), 500);
+    }
+
+    /**
+     * Check if current device is virtual (SVG export mode)
+     * @returns {boolean}
+     */
+    isVirtualDevice() {
+        try {
+            const settings = JSON.parse(localStorage.getItem('pictureEngraverSettings') || '{}');
+            return settings.activeDevice === 'svg_export';
+        } catch {
+            return false;
+        }
     }
 
     isMobile() {

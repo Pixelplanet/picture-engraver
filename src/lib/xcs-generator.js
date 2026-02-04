@@ -74,6 +74,12 @@ export class XCSGenerator {
             }
         });
 
+        // Add Focus Warning (Low Priority Task)
+        const warningId = this.generateUUID();
+        const warningDisplay = this.createFocusWarning(warningId, size);
+        displays.push(warningDisplay);
+        displaySettingsMap.set(warningId, { isWarning: true });
+
         // Top-level Structure matching Documentation
         const deviceId = this.settings.activeDevice || 'f2_ultra_uv';
         const isMopa = deviceId === 'f2_ultra_mopa' || deviceId === 'f2_ultra_base';
@@ -115,6 +121,15 @@ export class XCSGenerator {
                 "visible": true
             };
         });
+
+        // Add the warning layer if not already present
+        if (!data["#fe0002"]) {
+            data["#fe0002"] = {
+                "name": "Focus Warning (Ignore)",
+                "order": 99,
+                "visible": true
+            };
+        }
         return data;
     }
 
@@ -148,13 +163,15 @@ export class XCSGenerator {
                 customize.processingLightSource = "red";
             }
 
+            const isWarning = s.isWarning === true;
+
             return [
                 display.id,
                 {
-                    "isFill": true,
-                    "type": "PATH",
-                    "processingType": "FILL_VECTOR_ENGRAVING",
-                    "data": {
+                    "isFill": !isWarning,
+                    "type": isWarning ? "TEXT" : "PATH",
+                    "processingType": isWarning ? "IGNORE" : "FILL_VECTOR_ENGRAVING",
+                    "data": isWarning ? {} : {
                         "FILL_VECTOR_ENGRAVING": {
                             "materialType": "customize",
                             "planType": "dot_cloud",
@@ -163,7 +180,7 @@ export class XCSGenerator {
                             }
                         }
                     },
-                    "processIgnore": false
+                    "processIgnore": isWarning
                 }
             ];
         });
@@ -368,5 +385,78 @@ export class XCSGenerator {
             return hex.length === 1 ? "0" + hex : hex;
         };
         return "#" + toHex(color.r) + toHex(color.g) + toHex(color.b);
+    }
+
+    /**
+     * Create focus warning text box element
+     */
+    createFocusWarning(id, size) {
+        const width = size?.width || 200;
+        const x = width / 2;
+        const y = (size?.height || 100) + 15; // Position 15mm below image
+
+        return {
+            "id": id,
+            "name": "Focus Reminder",
+            "type": "TEXT",
+            "x": x,
+            "y": y,
+            "angle": 0,
+            "scale": { "x": 1, "y": 1 },
+            "skew": { "x": 0, "y": 0 },
+            "pivot": { "x": 0, "y": 0 },
+            "localSkew": { "x": 0, "y": 0 },
+            "offsetX": x,
+            "offsetY": y,
+            "lockRatio": true,
+            "isClosePath": true,
+            "zOrder": 999,
+            "layerTag": "#fe0002",
+            "layerColor": "#fe0002",
+            "visible": true,
+            "originColor": "#fe0002",
+            "enableTransform": true,
+            "visibleState": true,
+            "lockState": false,
+            "resourceOrigin": "",
+            "customData": { "from": { "officialFontId": 0 } },
+            "rootComponentId": "",
+            "minCanvasVersion": "0.0.0",
+            "fill": {
+                "paintType": "color",
+                "visible": false,
+                "color": 16646146,
+                "alpha": 1
+            },
+            "stroke": {
+                "paintType": "color",
+                "visible": true,
+                "color": 16646146,
+                "alpha": 1,
+                "width": 1,
+                "cap": "butt",
+                "join": "miter",
+                "miterLimit": 4,
+                "alignment": 0.5
+            },
+            "width": 80,
+            "height": 15,
+            "isFill": true,
+            "lineColor": 16646146,
+            "fillColor": "#fe0002",
+            "text": "Remember to raise \nthe focus by 4mm\n",
+            "resolution": 1,
+            "style": {
+                "fontSize": 32,
+                "fontFamily": "Lato",
+                "fontSubfamily": "Regular",
+                "fontSource": "build-in",
+                "letterSpacing": 0,
+                "leading": 0,
+                "align": "center",
+                "isUppercase": false,
+                "isWeld": false
+            }
+        };
     }
 }

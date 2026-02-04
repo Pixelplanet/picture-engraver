@@ -20,25 +20,25 @@ export const Logger = {
         }
 
         // Send to backend (fire and forget)
-        try {
-            fetch('/api/log', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    level,
-                    message,
-                    details,
-                    timestamp: new Date().toISOString()
-                })
-            }).catch(e => {
-                // Ignore network errors for logs to prevent loops
-                // console.error('Failed to send log:', e);
-            });
-        } catch (e) {
-            // Ignore
-        }
+        // try {
+        //     fetch('/api/log', {
+        //         method: 'POST',
+        //         headers: {
+        //             'Content-Type': 'application/json'
+        //         },
+        //         body: JSON.stringify({
+        //             level,
+        //             message,
+        //             details,
+        //             timestamp: new Date().toISOString()
+        //         })
+        //     }).catch(e => {
+        //         // Ignore network errors for logs to prevent loops
+        //         // console.error('Failed to send log:', e);
+        //     });
+        // } catch (e) {
+        //     // Ignore
+        // }
     },
 
     info(message, details) {

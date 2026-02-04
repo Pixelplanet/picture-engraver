@@ -61,19 +61,19 @@ Add a new profile definition:
 ## 3. Implementation Steps
 
 ### Step 1: Configuration
--   [ ] Update `settings-storage.js` with the new profile.
+-   [x] Update `settings-storage.js` with the new profile.
 
 ### Step 2: UI Context Switching
--   [ ] Update `main.js`: `updateSettingsUI()` to toggle visibility of laser controls.
--   [ ] Update `main.js`: Toggle "Top Bar" tabs (hide Analyzer) when SVG mode is active.
+-   [x] Update `main.js`: `updateSettingsUI()` to toggle visibility of laser controls.
+-   [x] Update `main.js`: Toggle "Top Bar" tabs (hide Analyzer) when SVG mode is active.
 
 ### Step 3: Color Override Logic
--   [ ] Modify Layer Edit Modal (`#layerEditModal`? or new modal?) to support "Visual Color Pick" mode.
--   [ ] Allow saving the new color to the layer state without LPI/Freq data.
+-   [x] Modify Layer Edit Modal (`#layerEditModal`? or new modal?) to support "Visual Color Pick" mode.
+-   [x] Allow saving the new color to the layer state without LPI/Freq data.
 
 ### Step 4: Export Functionality
--   [ ] Implement `exportSVG` function.
--   [ ] ensure correct scaling (mm to px, typically 96 DPI or similar standard for SVG).
+-   [x] Implement `exportSVG` function.
+-   [x] ensure correct scaling (mm to px, typically 96 DPI or similar standard for SVG).
 
 ## 4. Technical Nuances
 

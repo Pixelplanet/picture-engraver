@@ -31,8 +31,29 @@ export class GridDetector {
             return { success: false, reason: 'Could not detect card boundary' };
         }
 
-        // Step 4: Within card bounds, detect grid lines
-        const gridLines = this.detectGridLines(edges, width, height, cardBounds);
+        // Step 4: Warping - Rectify the image using the card corners
+        // This ensures subsequent grid detection runs on a straight, normalized image
+        const warpedResult = this.warpImage(imageData, cardBounds.corners);
+        const warpedData = warpedResult.imageData;
+        const warpedWidth = warpedData.width;
+        const warpedHeight = warpedData.height;
+
+        // Step 5: Re-calculate features on warped image
+        const warpedGray = this.toGrayscale(warpedData.data, warpedWidth, warpedHeight);
+        const warpedEdges = this.detectEdges(warpedGray, warpedWidth, warpedHeight);
+
+        // Since we warped the image to fit the card bounds, the "card" is now
+        // essentially the entire image (minus perhaps a very small sampling margin).
+        // We can define a virtual card bounds for the warped image.
+        const warpedCardBounds = {
+            x: 0,
+            y: 0,
+            width: warpedWidth,
+            height: warpedHeight
+        };
+
+        // Step 6: Detect grid lines on the warped image
+        const gridLines = this.detectGridLines(warpedEdges, warpedWidth, warpedHeight, warpedCardBounds);
 
         if (!gridLines.horizontal.length || !gridLines.vertical.length) {
             return {
@@ -42,8 +63,8 @@ export class GridDetector {
             };
         }
 
-        // Step 5: Find grid intersections (cell corners)
-        const cells = this.findCells(gridLines, cardBounds, hints);
+        // Step 7: Find grid intersections (cell corners) on warped image
+        const cells = this.findCells(gridLines, warpedCardBounds, hints);
 
         if (!cells || cells.length === 0) {
             return {
@@ -54,20 +75,96 @@ export class GridDetector {
             };
         }
 
-        // Step 6: Detect and exclude QR code region
-        const { colorCells, qrRegion } = this.excludeQRRegion(cells, gray, width, height);
+        // Step 8: Detect and exclude QR code region (on warped image)
+        const { colorCells, qrRegion } = this.excludeQRRegion(cells, warpedGray, warpedWidth, warpedHeight);
 
-        // Step 7: Find accurate cell centers for color sampling
-        const cellsWithCenters = this.findCellCenters(colorCells, gray, width, height);
+        // Step 9: Find precise cell centers
+        const cellsWithCenters = this.findCellCenters(colorCells, warpedGray, warpedWidth, warpedHeight);
+
+        // Sample actual colors from the warped image
+        const cellsWithColors = cellsWithCenters.map(cell => ({
+            ...cell,
+            color: this.sampleCellColor(warpedData, cell)
+        }));
 
         return {
             success: true,
-            cells: cellsWithCenters,
-            cardBounds,
+            cells: cellsWithColors,
+            cardBounds, // Original bounds
+            warpedImage: warpedResult, // Return the rectified image data
             gridLines,
             qrRegion,
             numRows: this.countRows(cellsWithCenters),
             numCols: this.countCols(cellsWithCenters)
+        };
+    }
+
+    /**
+     * Perspective warp an image to a rectified rectangle
+     */
+    warpImage(imageData, corners) {
+        // Define target dimensions based on the max edge lengths of the detected quad
+        // This preserves resolution
+        const topW = Math.sqrt(Math.pow(corners[1].x - corners[0].x, 2) + Math.pow(corners[1].y - corners[0].y, 2));
+        const botW = Math.sqrt(Math.pow(corners[2].x - corners[3].x, 2) + Math.pow(corners[2].y - corners[3].y, 2));
+        const leftH = Math.sqrt(Math.pow(corners[3].x - corners[0].x, 2) + Math.pow(corners[3].y - corners[0].y, 2));
+        const rightH = Math.sqrt(Math.pow(corners[2].x - corners[1].x, 2) + Math.pow(corners[2].y - corners[1].y, 2));
+
+        // Use a fixed reasonable size for calibration stability, or dynamic
+        // Fixed size is safer for consistent UI display (e.g. 800x600) but dynamic is higher fidelity
+        // Let's use dynamic but capped to avoid massive memory usage
+        const width = Math.min(2000, Math.round(Math.max(topW, botW)));
+        const height = Math.min(2000, Math.round(Math.max(leftH, rightH)));
+
+        // Create a canvas for the warp operation
+        // (We can't do perspective warp purely in 2D canvas easily without libraries, 
+        // so we'll do a manual inverse bilinear mapping pixel-by-pixel, similar to the frontend implementation)
+
+        const destLen = width * height * 4;
+        const destData = new Uint8ClampedArray(destLen);
+        const srcData = imageData.data;
+        const srcW = imageData.width;
+        const srcH = imageData.height;
+
+        // Helper for bilinear interpolation
+        const interpolate = (p1, p2, t) => ({
+            x: p1.x + (p2.x - p1.x) * t,
+            y: p1.y + (p2.y - p1.y) * t
+        });
+
+        for (let y = 0; y < height; y++) {
+            const ty = y / (height - 1);
+
+            // Interpolate left and right edges first
+            const left = interpolate(corners[0], corners[3], ty);  // TL -> BL
+            const right = interpolate(corners[1], corners[2], ty); // TR -> BR
+
+            for (let x = 0; x < width; x++) {
+                const tx = x / (width - 1);
+
+                // Interpolate between left and right points
+                const srcPt = interpolate(left, right, tx);
+
+                const srcX = Math.floor(srcPt.x);
+                const srcY = Math.floor(srcPt.y);
+
+                if (srcX >= 0 && srcX < srcW && srcY >= 0 && srcY < srcH) {
+                    const srcIdx = (srcY * srcW + srcX) * 4;
+                    const destIdx = (y * width + x) * 4;
+
+                    destData[destIdx] = srcData[srcIdx];     // R
+                    destData[destIdx + 1] = srcData[srcIdx + 1]; // G
+                    destData[destIdx + 2] = srcData[srcIdx + 2]; // B
+                    destData[destIdx + 3] = 255;             // A
+                }
+            }
+        }
+
+        return {
+            imageData: new ImageData(destData, width, height),
+            base64: null, // Can be generated later if needed
+            width,
+            height
         };
     }
 

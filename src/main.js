@@ -4723,7 +4723,7 @@ function renderManageMapsUI() {
                     showToast(`Imported ${count} color maps successfully!`, 'success');
                     renderManageMapsUI();
                 } catch (err) {
-                    showToast('Import failed: ' + err.message, 'error');
+                    showToast('Import failed: ' + err.message, 'error', 5000);
                 }
                 fileInput.value = ''; // Reset
             };
