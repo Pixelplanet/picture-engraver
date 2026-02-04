@@ -269,6 +269,8 @@ body {
 @media (min-width: 1024px) {
   .main {
     grid-template-columns: 320px 1fr 1fr;
+    grid-template-rows: 1fr;
+    /* Force rows to stay within height */
     padding: var(--spacing-lg) var(--spacing-xl);
     height: calc(100vh - 71px);
     /* Header is approx 70px */
@@ -396,9 +398,11 @@ body {
   justify-content: center;
   align-items: center;
   min-height: 100px;
-  max-height: 35vh;
-  /* Reduced from 40vh to save more space */
+  max-height: 60vh;
+  /* Increased to allow larger preview on big screens */
   overflow: hidden;
+  flex: 1;
+  /* Allow it to grow to fill available space in preview-content */
 }
 
 .image-preview canvas,
@@ -544,9 +548,9 @@ body {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
-  /* Important for flex child scrolling */
+  height: 0;
+  /* Force flex child to respect container instead of content height */
   padding-right: 4px;
-  /* Space for scrollbar */
 }
 
 @media (max-width: 1023px) {
