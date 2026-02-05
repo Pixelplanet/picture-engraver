@@ -396,12 +396,14 @@
                   <h3>Grid Layout</h3>
                   <div class="setting-row">
                     <label>Cell Size (mm)</label>
-                    <input type="number" class="input" id="gridCellSize" value="5" min="3" max="15">
+                    <input type="number" class="input" id="gridCellSize" value="5" min="1" max="10">
                   </div>
+                  <p class="setting-hint">Range: 1-10 mm</p>
                   <div class="setting-row">
                     <label>Cell Gap (mm)</label>
                     <input type="number" class="input" id="gridCellGap" value="1" min="0" max="5" step="0.5">
                   </div>
+                  <p class="setting-hint">Range: 0-5 mm</p>
                 </div>
 
                 <!-- Engraving Settings -->
@@ -422,6 +424,10 @@
                   <div class="setting-row">
                     <label>Cross Hatch</label>
                     <input type="checkbox" class="checkbox" id="gridCrossHatch" checked>
+                  </div>
+                  <div class="setting-row">
+                    <label>Fill Gaps (Justify)</label>
+                    <input type="checkbox" class="checkbox" id="gridFillGaps">
                   </div>
                 </div>
               </div>

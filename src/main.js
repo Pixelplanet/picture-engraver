@@ -2322,13 +2322,27 @@ function setupTestGrid() {
     const generatorInputs = [
         'gridFreqMin', 'gridFreqMax', 'gridLpiMin', 'gridLpiMax',
         'gridCellSize', 'gridCellGap', 'gridPower', 'gridSpeed',
-        'gridPasses', 'gridCrossHatch'
+        'gridPasses', 'gridCrossHatch', 'gridFillGaps'
     ];
 
     // Add event listeners for live preview update
     generatorInputs.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', updateGridPreview);
+        if (id === 'gridCellSize' && el) {
+            el.addEventListener('input', (e) => {
+                let val = parseInt(e.target.value);
+                if (val < 1) e.target.value = 1;
+                if (val > 10) e.target.value = 10;
+            });
+        }
+        if (id === 'gridCellGap' && el) {
+            el.addEventListener('input', (e) => {
+                let val = parseFloat(e.target.value);
+                if (val < 0) e.target.value = 0;
+                if (val > 5) e.target.value = 5;
+            });
+        }
     });
 
 
@@ -3535,12 +3549,16 @@ function getCustomGridSettings() {
         freqMax: parseInt(document.getElementById('gridFreqMax').value),
         lpiMin: parseInt(document.getElementById('gridLpiMin').value),
         lpiMax: parseInt(document.getElementById('gridLpiMax').value),
-        cellSize: parseInt(document.getElementById('gridCellSize').value),
-        cellGap: parseFloat(document.getElementById('gridCellGap').value),
+        cellSize: Math.max(1, Math.min(10, parseInt(document.getElementById('gridCellSize').value) || 5)),
+        cellGap: (() => {
+            const val = parseFloat(document.getElementById('gridCellGap').value);
+            return Math.max(0, Math.min(5, isNaN(val) ? 1 : val));
+        })(),
         power: parseInt(document.getElementById('gridPower').value),
         speed: parseInt(document.getElementById('gridSpeed').value),
         passes: parseInt(document.getElementById('gridPasses').value),
-        crossHatch: document.getElementById('gridCrossHatch').checked
+        crossHatch: document.getElementById('gridCrossHatch').checked,
+        fillGaps: document.getElementById('gridFillGaps').checked
     };
 }
 
@@ -3684,58 +3702,37 @@ function drawGridToCanvas(canvasId, settings) {
     // Draw cells
     const margin = settings.margin || 1;
     const cellSize = settings.cellSize || 5;
-    const gap = settings.cellGap !== undefined ? settings.cellGap : 1;
-    const totalCellSize = cellSize + gap;
 
-    // QR Reserved Area Logic (Scaled)
-    // gridInfo.qrX/Y are absolute workspace coordinates, we need them relative to the card.
+    // Gaps (Use effective gaps if provided, fallback to standard)
+    const gapX = gridInfo.gapX !== undefined ? gridInfo.gapX : (settings.cellGap || 1);
+    const gapY = gridInfo.gapY !== undefined ? gridInfo.gapY : (settings.cellGap || 1);
 
-    // We can assume gridInfo provides the correct "hole" logic implicitly if we just rely on geometric checks
-    // But since generateBusinessCardGrid logic is complex, let's replicate the exclusion visual:
-
-    // Re-calculate the relative QR rect for exclusion
-    const qrSizeMM = gridInfo.qrSize;
-    const qrGapMM = gridInfo.qrGap || 1;
-
-    // GridInfo.qrX is absolute to workspace (centered).
-    // We need relative to card (0,0) for the canvas drawing.
-    // However, the canvas is just the card itself.
-
-    // Let's use the layout parameters directly:
+    // Calculate Offsets for Centering
     const availableWidth = gridInfo.width - (margin * 2);
     const availableHeight = gridInfo.height - (margin * 2);
 
-    const relQrX = availableWidth - qrSizeMM;
-    const relQrY = availableHeight - qrSizeMM;
+    // Effective Grid Size
+    // If not provided in gridInfo, recalculate roughly
+    const effectiveGridW = gridInfo.effectiveGridW || (gridInfo.numCols * cellSize + (gridInfo.numCols - 1) * gapX);
+    const effectiveGridH = gridInfo.effectiveGridH || (gridInfo.numRows * cellSize + (gridInfo.numRows - 1) * gapY);
 
-    const reservedBox = {
-        left: relQrX - qrGapMM,
-        top: relQrY - qrGapMM,
-        right: availableWidth,
-        bottom: availableHeight
-    };
+    const startX = margin + (availableWidth - effectiveGridW) / 2;
+    const startY = margin + (availableHeight - effectiveGridH) / 2;
+
+    // QR Exclusion Indices (If not provided, default to no exclusion or fallback)
+    const excStartCol = gridInfo.excStartCol !== undefined ? gridInfo.excStartCol : 9999;
+    const excStartRow = gridInfo.excStartRow !== undefined ? gridInfo.excStartRow : 9999;
 
     for (let row = 0; row < gridInfo.numRows; row++) {
         for (let col = 0; col < gridInfo.numCols; col++) {
 
-            const cellRelX = col * totalCellSize;
-            const cellRelY = row * totalCellSize;
+            // Quantized Exclusion Check
+            if (col >= excStartCol && row >= excStartRow) {
+                continue;
+            }
 
-            const cellRight = cellRelX + cellSize;
-            const cellBottom = cellRelY + cellSize;
-
-            // Check overlap
-            const overlaps = !(
-                cellRight < reservedBox.left ||
-                cellRelX > reservedBox.right ||
-                cellBottom < reservedBox.top ||
-                cellRelY > reservedBox.bottom
-            );
-
-            if (overlaps) continue;
-
-            const x = (margin + cellRelX) * scale;
-            const y = (margin + cellRelY) * scale;
+            const x = (startX + col * (cellSize + gapX)) * scale;
+            const y = (startY + row * (cellSize + gapY)) * scale;
             const size = cellSize * scale;
 
             // Hue based on LPI (cols), Lightness based on Freq (rows)
@@ -3749,9 +3746,12 @@ function drawGridToCanvas(canvasId, settings) {
     }
 
     // QR Placeholder
-    // QR is anchored bottom-right inside margins
-    const qrX = (margin + relQrX) * scale;
-    const qrY = (margin + relQrY) * scale;
+    // Position relative to Effective Grid Bottom-Right
+    const qrSizeMM = gridInfo.qrSize || 17;
+    // qrX/Y in gridInfo are absolute to workspace. We need relative to card.
+
+    const qrX = (startX + effectiveGridW - qrSizeMM) * scale;
+    const qrY = (startY + effectiveGridH - qrSizeMM) * scale;
     const qrSize = qrSizeMM * scale;
 
     // Real QR Rendering

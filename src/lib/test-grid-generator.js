@@ -240,52 +240,133 @@ export class TestGridGenerator {
         const canvasId = this.generateUUID();
         const now = Date.now();
 
-        const totalCellSize = s.cellSize + s.cellGap;
+        // FIXED QR CODE LOGIC (17mm x 17mm with 1mm gap)
+        const QR_SIZE_MM = 17;
+        const QR_GAP_MM = 1;
 
         // Calculate how many cells fit
         const availableWidth = s.cardWidth - (s.margin * 2);
         const availableHeight = s.cardHeight - (s.margin * 2);
 
-        const numCols = Math.floor((availableWidth + s.cellGap) / totalCellSize);
-        const numRows = Math.floor((availableHeight + s.cellGap) / totalCellSize);
+        // Initial Calculation (Standard)
+        const totalCellSize = s.cellSize + s.cellGap;
+        let numCols = Math.floor((availableWidth + s.cellGap) / totalCellSize);
+        let numRows = Math.floor((availableHeight + s.cellGap) / totalCellSize);
+
+        // Gap Logic (Standard vs Fill)
+        let gapX = s.cellGap;
+        let gapY = s.cellGap;
+
+        if (s.fillGaps) {
+            // Force Fit Logic:
+            // Check if there is enough space for "almost" another column (80% threshold)
+            // Space used by N cols with standard gap = N * cell + (N-1) * gap
+            // Max space = availableWidth
+            // Actually, simplified:
+            // Current used width = numCols * totalCellSize - gap
+            // Remaining = availableWidth - usedWidth
+            // If Remaining > 0.8 * totalCellSize, try to squeeze one more in.
+
+            const usedW = numCols * totalCellSize - s.cellGap;
+            const remW = availableWidth - usedW;
+
+            if (remW > (0.8 * totalCellSize)) {
+                numCols++;
+            }
+
+            // Recalculate gapX to fit numCols exactly into availableWidth
+            // available = numCols * cell + (numCols - 1) * gapX
+            // gapX = (available - numCols * cell) / (numCols - 1)
+            if (numCols > 1) {
+                gapX = (availableWidth - (numCols * s.cellSize)) / (numCols - 1);
+                // Safety: Don't let gap become negative or absurdly small (e.g. overlap)
+                if (gapX < 0) gapX = 0;
+            }
+
+            // Same for Rows
+            const usedH = numRows * totalCellSize - s.cellGap;
+            const remH = availableHeight - usedH;
+
+            if (remH > (0.8 * totalCellSize)) {
+                numRows++;
+            }
+
+            if (numRows > 1) {
+                gapY = (availableHeight - (numRows * s.cellSize)) / (numRows - 1);
+                if (gapY < 0) gapY = 0;
+            }
+        }
+
+        // Safety check
+        if (numCols < 1) numCols = 1;
+        if (numRows < 1) numRows = 1;
+
+        // Final layout parameters (effective)
+        // With justified/forced gaps, the grid spans exactly availableWidth (approximately)
+        const effectiveGridW = numCols * s.cellSize + (numCols - 1) * gapX;
+        const effectiveGridH = numRows * s.cellSize + (numRows - 1) * gapY;
+
+        const workspaceSize = 200;
+        // Offsets to center the effective grid within the workspace
+        // (Note: s.cardWidth includes margins, so we center the card, then add margin + (available - effective)/2)
+        // Actually, we can just center the effective grid in the workspace directly?
+        // Standard card offset:
+        const cardOffsetX = (workspaceSize - s.cardWidth) / 2;
+        const cardOffsetY = (workspaceSize - s.cardHeight) / 2;
+
+        // Grid content offset within card (centering the leftovers if not justified)
+        const contentOffsetX = s.margin + (availableWidth - effectiveGridW) / 2;
+        const contentOffsetY = s.margin + (availableHeight - effectiveGridH) / 2;
+
+        const globalOffsetX = cardOffsetX + contentOffsetX;
+        const globalOffsetY = cardOffsetY + contentOffsetY;
+
+        // QR Code Quantized Exclusion Logic
+        // We need to clear at least QR_SIZE_MM + gap
+        const qrSpaceW = QR_SIZE_MM + QR_GAP_MM;
+        const qrSpaceH = QR_SIZE_MM + QR_GAP_MM;
+
+        // Calculate how many columns/rows from the END we need to drop
+        // Each col width = cell + gapX
+        const colPitch = s.cellSize + gapX;
+        const rowPitch = s.cellSize + gapY;
+
+        // We assume we cut from the bottom-right corner of the GRID.
+        // We need to free up `qrSpace` amount of physical space.
+        // The space freed by removing K columns is roughly K * pitch - gap? 
+        // Let's simpler: Find index I such that cell I overlaps the exclusion box.
+
+        // Exclusion box is anchored bottom-right of the EFFECTIVE GRID.
+        // relQrX = effectiveGridW - QR_SIZE_MM
+
+        // But the user wants "Dynamic" - "take as many rows... as needed".
+        // This implies grid-aligned chopping.
+        // We just count back from the edge until we have enough space.
+        // Space provided by removing 1 col = cell width. (The gap remains? No gap is removed too).
+        // Actually, removing last col removes 1 cell width. The gap before it becomes margin.
+
+        // Let's implement: count how many cols fit in `qrSpaceW`.
+        // If qrSpaceW = 18mm. pitch = 6mm.
+        // 18 / 6 = 3 cols.
+        // So we reserve 3 cols.
+        const colsReserved = Math.ceil(qrSpaceW / colPitch);
+        const rowsReserved = Math.ceil(qrSpaceH / rowPitch);
+
+        // Start indices for exclusion
+        const excStartCol = numCols - colsReserved;
+        const excStartRow = numRows - rowsReserved;
+
+        // QR Position:
+        // User wants it "display the QR code in the same size".
+        // And implied: Position it in the cleared space.
+        // Anchor: Bottom-Right of the EFFECTIVE GRID.
+        // X = globalOffsetX + effectiveGridW - QR_SIZE_MM
+        const qrX = globalOffsetX + effectiveGridW - QR_SIZE_MM;
+        const qrY = globalOffsetY + effectiveGridH - QR_SIZE_MM;
 
         // Generate values
-        // LPC: High to Low (left to right)
         const lpiValues = this.linspace(s.lpiMax, s.lpiMin, numCols);
-        // Frequency: Low to High (top to bottom)
         const freqValues = this.linspace(s.freqMin, s.freqMax, numRows);
-
-        // Center the grid in 200x200mm workspace
-        const workspaceSize = 200;
-        const offsetX = (workspaceSize - s.cardWidth) / 2;
-        const offsetY = (workspaceSize - s.cardHeight) / 2;
-
-        // FIXED QR CODE LOGIC (17mm x 17mm with 1mm gap)
-        const QR_SIZE_MM = 17;
-        const QR_GAP_MM = 1;
-        const qrSize = QR_SIZE_MM;
-
-        // Position QR code in bottom-right corner of the printable area
-        // Coordinates relative to the card's origin (margin included)
-        const contentX = s.margin;
-        const contentY = s.margin;
-
-        // Relative QR position (top-left of the QR box)
-        const relQrX = availableWidth - QR_SIZE_MM;
-        const relQrY = availableHeight - QR_SIZE_MM;
-
-        // Absolute QR position in workspace
-        const qrX = offsetX + contentX + relQrX;
-        const qrY = offsetY + contentY + relQrY;
-
-        // Define the reserved area for collision detection (including the gap)
-        // We add the gap to top and left of the QR code
-        const reservedBox = {
-            left: relQrX - QR_GAP_MM,
-            top: relQrY - QR_GAP_MM,
-            right: availableWidth,
-            bottom: availableHeight
-        };
 
         const displays = [];
         const displaySettings = [];
@@ -297,36 +378,20 @@ export class TestGridGenerator {
         for (let row = 0; row < numRows; row++) {
             for (let col = 0; col < numCols; col++) {
 
-                // Calculate cell position relative to card content area
-                const cellRelX = col * totalCellSize;
-                const cellRelY = row * totalCellSize;
-
-                // Check for overlap with reserved QR area
-                // We check if the cell's bounding box intersects the reserved box
-                // Cell box: [cellRelX, cellRelY] to [cellRelX + s.cellSize, cellRelY + s.cellSize]
-                const cellRight = cellRelX + s.cellSize;
-                const cellBottom = cellRelY + s.cellSize;
-
-                const overlaps = !(
-                    cellRight < reservedBox.left ||
-                    cellRelX > reservedBox.right ||
-                    cellBottom < reservedBox.top ||
-                    cellRelY > reservedBox.bottom
-                );
-
-                if (overlaps) {
-                    continue; // Skip this cell
+                // Quantized Grid-Index Exclusion
+                if (col >= excStartCol && row >= excStartRow) {
+                    continue;
                 }
 
                 const displayId = this.generateUUID();
 
-                const x = offsetX + s.margin + cellRelX;
-                const y = offsetY + s.margin + cellRelY;
+                const x = globalOffsetX + col * colPitch;
+                const y = globalOffsetY + row * rowPitch;
 
                 const frequency = Math.round(freqValues[row]);
                 const lpi = Math.round(lpiValues[col]);
 
-                // Generate color based on position (Logical color for mapping)
+                // Generate color based on position
                 const hue = (col / numCols) * 0.7;
                 const lightness = 0.3 + (row / numRows) * 0.4;
                 const rgb = this.hslToRgb(hue, 0.8, lightness);
@@ -334,7 +399,7 @@ export class TestGridGenerator {
                 const colorHex = this.colorToHex(rgb.r, rgb.g, rgb.b);
                 const colorInt = this.colorToInt(rgb.r, rgb.g, rgb.b);
 
-                // Create cell path (relative to x,y)
+                // Create cell path
                 const path = `M0 0 L${s.cellSize} 0 L${s.cellSize} ${s.cellSize} L0 ${s.cellSize} Z`;
 
                 const display = this.createPathDisplay(
@@ -343,7 +408,7 @@ export class TestGridGenerator {
                     colorHex, colorInt,
                     x, y, s.cellSize, s.cellSize,
                     zOrder, path,
-                    false // isCompoundPath
+                    false
                 );
 
                 displays.push(display);
@@ -357,15 +422,15 @@ export class TestGridGenerator {
 
         // Add Real QR Code
         const qrData = this.encodeSettings(numCols, numRows);
-        const qrPath = this.generateQRPath(qrData, 0, 0, qrSize);
+        const qrPath = this.generateQRPath(qrData, 0, 0, QR_SIZE_MM);
 
         const qrDisplayId = this.generateUUID();
         const qrDisplay = this.createPathDisplay(
             qrDisplayId, 'Settings QR Code',
             '#000000', 0,
-            qrX, qrY, qrSize, qrSize,
+            qrX, qrY, QR_SIZE_MM, QR_SIZE_MM,
             zOrder, qrPath,
-            true // isCompoundPath
+            true
         );
 
         displays.push(qrDisplay);
@@ -424,11 +489,19 @@ export class TestGridGenerator {
                 numRows,
                 totalCells: cellCount,
                 qrData,
-                qrSize: QR_SIZE_MM, // Return fixed size
+                qrSize: QR_SIZE_MM,
                 qrX,
                 qrY,
-                // Pass gap info if needed by frontend, though XCS is already built
-                qrGap: QR_GAP_MM
+                qrGap: QR_GAP_MM,
+                // Return effective gaps for preview
+                gapX,
+                gapY,
+                effectiveGridW,
+                effectiveGridH,
+                globalOffsetX,
+                globalOffsetY,
+                excStartCol,
+                excStartRow
             }
         };
     }
