@@ -260,13 +260,32 @@ export class TestGridGenerator {
         const offsetX = (workspaceSize - s.cardWidth) / 2;
         const offsetY = (workspaceSize - s.cardHeight) / 2;
 
-        // QR Code Position (Bottom Right, 3x3 cells for better readability with version 5)
-        const qrCells = 3;
-        const qrStartCol = numCols - qrCells;
-        const qrStartRow = numRows - qrCells;
-        const qrX = offsetX + s.margin + qrStartCol * totalCellSize;
-        const qrY = offsetY + s.margin + qrStartRow * totalCellSize;
-        const qrSize = (qrCells * totalCellSize) - s.cellGap;
+        // FIXED QR CODE LOGIC (17mm x 17mm with 1mm gap)
+        const QR_SIZE_MM = 17;
+        const QR_GAP_MM = 1;
+        const qrSize = QR_SIZE_MM;
+
+        // Position QR code in bottom-right corner of the printable area
+        // Coordinates relative to the card's origin (margin included)
+        const contentX = s.margin;
+        const contentY = s.margin;
+
+        // Relative QR position (top-left of the QR box)
+        const relQrX = availableWidth - QR_SIZE_MM;
+        const relQrY = availableHeight - QR_SIZE_MM;
+
+        // Absolute QR position in workspace
+        const qrX = offsetX + contentX + relQrX;
+        const qrY = offsetY + contentY + relQrY;
+
+        // Define the reserved area for collision detection (including the gap)
+        // We add the gap to top and left of the QR code
+        const reservedBox = {
+            left: relQrX - QR_GAP_MM,
+            top: relQrY - QR_GAP_MM,
+            right: availableWidth,
+            bottom: availableHeight
+        };
 
         const displays = [];
         const displaySettings = [];
@@ -277,15 +296,32 @@ export class TestGridGenerator {
         // Generate grid cells
         for (let row = 0; row < numRows; row++) {
             for (let col = 0; col < numCols; col++) {
-                // Skip QR area
-                if (col >= qrStartCol && row >= qrStartRow) {
-                    continue;
+
+                // Calculate cell position relative to card content area
+                const cellRelX = col * totalCellSize;
+                const cellRelY = row * totalCellSize;
+
+                // Check for overlap with reserved QR area
+                // We check if the cell's bounding box intersects the reserved box
+                // Cell box: [cellRelX, cellRelY] to [cellRelX + s.cellSize, cellRelY + s.cellSize]
+                const cellRight = cellRelX + s.cellSize;
+                const cellBottom = cellRelY + s.cellSize;
+
+                const overlaps = !(
+                    cellRight < reservedBox.left ||
+                    cellRelX > reservedBox.right ||
+                    cellBottom < reservedBox.top ||
+                    cellRelY > reservedBox.bottom
+                );
+
+                if (overlaps) {
+                    continue; // Skip this cell
                 }
 
                 const displayId = this.generateUUID();
 
-                const x = offsetX + s.margin + col * totalCellSize;
-                const y = offsetY + s.margin + row * totalCellSize;
+                const x = offsetX + s.margin + cellRelX;
+                const y = offsetY + s.margin + cellRelY;
 
                 const frequency = Math.round(freqValues[row]);
                 const lpi = Math.round(lpiValues[col]);
@@ -388,9 +424,11 @@ export class TestGridGenerator {
                 numRows,
                 totalCells: cellCount,
                 qrData,
-                qrSize,
+                qrSize: QR_SIZE_MM, // Return fixed size
                 qrX,
-                qrY
+                qrY,
+                // Pass gap info if needed by frontend, though XCS is already built
+                qrGap: QR_GAP_MM
             }
         };
     }

@@ -448,12 +448,37 @@ export class GridDetector {
             }
         }
 
+        // Geometric Exclusion Zone (Hardcoded for 17x17mm QR on 85x55mm card)
+        // 17mm is approx 20% of 85mm width
+        // 17mm is approx 30% of 55mm height
+        // We use slightly conservative thresholds to be safe: > 78% Width, > 67% Height
+        const X_THRESHOLD = 0.78;
+        const Y_THRESHOLD = 0.67;
+
         // Filter out QR region cells
-        const colorCells = qrRegion
-            ? cellVariances.filter(c =>
-                c.row < qrRegion.minRow || c.row > qrRegion.maxRow ||
-                c.col < qrRegion.minCol || c.col > qrRegion.maxCol)
-            : cellVariances;
+        const colorCells = cellVariances.filter(c => {
+            // 1. Check Variance-based QR Region
+            if (qrRegion) {
+                if (c.row >= qrRegion.minRow && c.row <= qrRegion.maxRow &&
+                    c.col >= qrRegion.minCol && c.col <= qrRegion.maxCol) {
+                    return false;
+                }
+            }
+
+            // 2. Check Geometric Zone (Bottom-Right Corner)
+            // Calculate relative position based on row/col index vs total found
+            const numRows = Math.max(...cellVariances.map(x => x.row)) + 1;
+            const numCols = Math.max(...cellVariances.map(x => x.col)) + 1;
+
+            const relX = (c.col + 1) / numCols; // Right edge of cell roughly
+            const relY = (c.row + 1) / numRows; // Bottom edge of cell roughly
+
+            if (relX > X_THRESHOLD && relY > Y_THRESHOLD) {
+                return false;
+            }
+
+            return true;
+        });
 
         return { colorCells, qrRegion };
     }

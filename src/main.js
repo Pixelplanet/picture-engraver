@@ -3685,20 +3685,60 @@ function drawGridToCanvas(canvasId, settings) {
     const margin = settings.margin || 1;
     const cellSize = settings.cellSize || 5;
     const gap = settings.cellGap !== undefined ? settings.cellGap : 1;
+    const totalCellSize = cellSize + gap;
 
-    const qrCells = 3;
-    const qrStartCol = gridInfo.numCols - qrCells;
-    const qrStartRow = gridInfo.numRows - qrCells;
+    // QR Reserved Area Logic (Scaled)
+    // gridInfo.qrX/Y are absolute workspace coordinates, we need them relative to the card.
+
+    // We can assume gridInfo provides the correct "hole" logic implicitly if we just rely on geometric checks
+    // But since generateBusinessCardGrid logic is complex, let's replicate the exclusion visual:
+
+    // Re-calculate the relative QR rect for exclusion
+    const qrSizeMM = gridInfo.qrSize;
+    const qrGapMM = gridInfo.qrGap || 1;
+
+    // GridInfo.qrX is absolute to workspace (centered).
+    // We need relative to card (0,0) for the canvas drawing.
+    // However, the canvas is just the card itself.
+
+    // Let's use the layout parameters directly:
+    const availableWidth = gridInfo.width - (margin * 2);
+    const availableHeight = gridInfo.height - (margin * 2);
+
+    const relQrX = availableWidth - qrSizeMM;
+    const relQrY = availableHeight - qrSizeMM;
+
+    const reservedBox = {
+        left: relQrX - qrGapMM,
+        top: relQrY - qrGapMM,
+        right: availableWidth,
+        bottom: availableHeight
+    };
 
     for (let row = 0; row < gridInfo.numRows; row++) {
         for (let col = 0; col < gridInfo.numCols; col++) {
-            if (col >= qrStartCol && row >= qrStartRow) continue;
 
-            const x = (margin + col * (cellSize + gap)) * scale;
-            const y = (margin + row * (cellSize + gap)) * scale;
+            const cellRelX = col * totalCellSize;
+            const cellRelY = row * totalCellSize;
+
+            const cellRight = cellRelX + cellSize;
+            const cellBottom = cellRelY + cellSize;
+
+            // Check overlap
+            const overlaps = !(
+                cellRight < reservedBox.left ||
+                cellRelX > reservedBox.right ||
+                cellBottom < reservedBox.top ||
+                cellRelY > reservedBox.bottom
+            );
+
+            if (overlaps) continue;
+
+            const x = (margin + cellRelX) * scale;
+            const y = (margin + cellRelY) * scale;
             const size = cellSize * scale;
 
-            // Hue based on LPC (cols), Lightness based on Freq (rows)
+            // Hue based on LPI (cols), Lightness based on Freq (rows)
             const hue = (col / gridInfo.numCols) * 240;
             const sat = 70;
             const light = 40 + (row / gridInfo.numRows) * 40;
@@ -3709,9 +3749,10 @@ function drawGridToCanvas(canvasId, settings) {
     }
 
     // QR Placeholder
-    const qrSize = ((qrCells * (cellSize + gap)) - gap) * scale;
-    const qrX = (margin + qrStartCol * (cellSize + gap)) * scale;
-    const qrY = (margin + qrStartRow * (cellSize + gap)) * scale;
+    // QR is anchored bottom-right inside margins
+    const qrX = (margin + relQrX) * scale;
+    const qrY = (margin + relQrY) * scale;
+    const qrSize = qrSizeMM * scale;
 
     // Real QR Rendering
     if (gridInfo.qrData) {
