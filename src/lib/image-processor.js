@@ -44,6 +44,8 @@ export class ImageProcessor {
         canvas.height = drawHeight;
 
         // Draw image (no background fill needed as canvas is exactly sized)
+        ctx.imageSmoothingEnabled = (smoothing > 0);
+
         if (smoothing > 0) {
             ctx.filter = `blur(${smoothing}px)`;
         } else {

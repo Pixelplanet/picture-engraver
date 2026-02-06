@@ -271,10 +271,11 @@ export class OnboardingManager {
                 placement: 'top'
             },
             {
-                target: '.layer-color.assigned',
+                target: '#tour-target-layer-color',
                 title: '6. Manual Fine-Tuning',
                 description: 'If a match isn\'t perfect, click the color square (🎯) to manually pick a different setting from your grid.',
-                waitForAction: 'edit-modal-open'
+                waitForAction: 'edit-modal-open',
+                placement: 'top'
             },
             {
                 target: '#miniPickerCanvas',
@@ -284,26 +285,39 @@ export class OnboardingManager {
                 placement: 'top'
             },
             {
-                target: '#layersList',
-                title: '8. Changes Applied',
-                description: 'The color and laser settings have been applied to your layer instantly!',
-                waitForAction: 'save-edit'
-            },
-            {
                 target: '#previewPanel',
-                title: '9. Preview Results',
+                title: '8. Preview Results',
                 description: 'Review the output layers and vector paths here.',
                 placement: 'left'
             },
             {
                 target: '#btnDownloadXCS',
-                title: '10. Export',
+                title: '9. Export',
                 description: 'Once all layers are assigned, click to download your XCS file!',
                 waitForAction: 'download'
             }
         ];
 
         this.showStep(0);
+    }
+
+    injectMergeStep() {
+        if (!this.isActive) return;
+
+        // Find current step index (should be the one waiting for auto-assign)
+        // Or just insert after current index
+        const insertIndex = this.currentStepIndex + 1;
+
+        const mergeStep = {
+            target: '#mergeModal .modal-content',
+            title: 'Refinement: Merge Layers',
+            description: 'We detected layers with identical settings! Merging them reduces processing time. Select the groups you want to combine and click <strong>Merge Selected</strong>.',
+            waitForAction: 'merge-complete',
+            placement: 'right',
+            padding: 20
+        };
+
+        this.tourSteps.splice(insertIndex, 0, mergeStep);
     }
 
     showStep(index) {
@@ -345,25 +359,37 @@ export class OnboardingManager {
     showStepHandle(targetEl, step, index) {
         if (step.onShow) step.onShow();
 
-        // Ensure target is visible
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Instant scroll to avoid timing issues
+        targetEl.scrollIntoView({ behavior: 'auto', block: 'center' });
 
-        // Add a small delay for scroll to finish
-        setTimeout(() => {
-            this.positionElements(targetEl, step, index);
-        }, 300);
+        // Update position multiple times to catch any layout shifts
+        const update = () => this.positionElements(targetEl, step, index);
+
+        update(); // Immediate
+        requestAnimationFrame(update); // Next frame
+        setTimeout(update, 100);
+        setTimeout(update, 300);
+        setTimeout(update, 500);
     }
 
     positionElements(targetEl, step, index) {
         const rect = targetEl.getBoundingClientRect();
-        const highlightPadding = 10;
-        const scrollY = window.scrollY;
-        const scrollX = window.scrollX;
 
-        // Position Highlight
+        // If element is hidden or not layouted yet, retry
+        if (rect.width === 0 && rect.height === 0) {
+            requestAnimationFrame(() => this.positionElements(targetEl, step, index));
+            return;
+        }
+
+        const highlightPadding = step.padding !== undefined ? step.padding : 10;
+
+        // Position Highlight (Absolute to document)
+        const top = rect.top + window.scrollY;
+        const left = rect.left + window.scrollX;
+
         Object.assign(this.elements.highlight.style, {
-            top: `${rect.top - highlightPadding + scrollY}px`,
-            left: `${rect.left - highlightPadding + scrollX}px`,
+            top: `${top - highlightPadding}px`,
+            left: `${left - highlightPadding}px`,
             width: `${rect.width + (highlightPadding * 2)}px`,
             height: `${rect.height + (highlightPadding * 2)}px`
         });
@@ -404,8 +430,8 @@ export class OnboardingManager {
 
         // Smart Positioning
         // Default: Bottom Center
-        let top = rect.bottom + 20 + scrollY;
-        let left = rect.left + (rect.width / 2) - (tooltipWidth / 2) + scrollX;
+        let tooltipTop = rect.bottom + 20 + scrollY;
+        let tooltipLeft = rect.left + (rect.width / 2) - (tooltipWidth / 2) + scrollX;
         let placement = step.placement || 'auto';
 
         // Check if bottom fits
@@ -415,30 +441,30 @@ export class OnboardingManager {
             // Try Top
             const topPos = rect.top - tooltipHeight - 20 + scrollY;
             if (topPos > window.scrollY) { // Only if it doesn't go off top
-                top = topPos;
+                tooltipTop = topPos;
             }
         }
 
         if (placement === 'left') {
-            top = rect.top + (rect.height / 2) - (tooltipHeight / 2) + scrollY;
-            left = rect.left - tooltipWidth - 20 + scrollX;
+            tooltipTop = rect.top + (rect.height / 2) - (tooltipHeight / 2) + scrollY;
+            tooltipLeft = rect.left - tooltipWidth - 20 + scrollX;
         }
 
         if (placement === 'right') {
-            top = rect.top + (rect.height / 2) - (tooltipHeight / 2) + scrollY;
-            left = rect.right + 20 + scrollX;
+            tooltipTop = rect.top + (rect.height / 2) - (tooltipHeight / 2) + scrollY;
+            tooltipLeft = rect.right + 20 + scrollX;
         }
 
         // Horizontal Clamp
         const padding = 20;
-        if (left < padding + scrollX) left = padding + scrollX;
-        if (left + tooltipWidth > window.innerWidth - padding + scrollX) {
-            left = window.innerWidth - tooltipWidth - padding + scrollX;
+        if (tooltipLeft < padding + scrollX) tooltipLeft = padding + scrollX;
+        if (tooltipLeft + tooltipWidth > window.innerWidth - padding + scrollX) {
+            tooltipLeft = window.innerWidth - tooltipWidth - padding + scrollX;
         }
 
         Object.assign(this.elements.tooltip.style, {
-            top: `${top}px`,
-            left: `${left}px`
+            top: `${tooltipTop}px`,
+            left: `${tooltipLeft}px`
         });
 
         this.elements.tooltip.classList.add('active');

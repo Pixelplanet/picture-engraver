@@ -8,7 +8,7 @@
  * @param {string} type - Type: 'success', 'error', 'warning'
  * @param {number} duration - Duration in ms (default 3000)
  */
-export function showToast(message, type = 'success', duration = 3000) {
+export function showToast(message, type = 'success', duration = 5000) {
     const container = document.getElementById('toastContainer');
     if (!container) return;
 

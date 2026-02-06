@@ -38,6 +38,7 @@
     /* Let clicks pass through to target */
     transition: all 0.3s ease;
     border-radius: 6px;
+    will-change: top, left, width, height;
 }
 
 /* Tooltip */

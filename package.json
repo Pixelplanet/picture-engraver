@@ -26,6 +26,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
+    "image-q": "^4.0.0",
     "jsqr": "^1.4.0",
     "morgan": "^1.10.1",
     "potrace": "^2.1.8",

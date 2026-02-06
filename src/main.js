@@ -13,6 +13,7 @@ import { TestGridGenerator } from './lib/test-grid-generator.js';
 import { SettingsStorage } from './lib/settings-storage.js';
 import { ImageProcessor } from './lib/image-processor.js';
 import { ColorQuantizer } from './lib/color-quantizer.js';
+import { EnhancedQuantizer } from './lib/enhanced-quantizer.js';
 import { Vectorizer } from './lib/vectorizer.js';
 import { XCSGenerator } from './lib/xcs-generator.js';
 import { showToast } from './lib/toast.js';
@@ -95,10 +96,10 @@ const elements = {
     // Preview
     previewPanel: document.getElementById('previewPanel'),
     quantizedCanvas: document.getElementById('quantizedCanvas'),
-    vectorSvgContainer: document.getElementById('vectorSvgContainer'),
     previewTabs: document.querySelectorAll('.tab'),
     previewQuantized: document.getElementById('previewQuantized'),
     previewVectors: document.getElementById('previewVectors'),
+    vectorSvgContainer: document.getElementById('previewVectors'),
 
     // Export
     btnDownloadXCS: document.getElementById('btnDownloadXCS'),
@@ -110,6 +111,11 @@ const elements = {
     btnTestGrid: document.getElementById('btnTestGrid'),
     closeSettingsModal: document.getElementById('closeSettingsModal'),
     closeTestGridModal: document.getElementById('closeTestGridModal'),
+    mergeModal: document.getElementById('mergeModal'),
+    closeMergeModal: document.getElementById('closeMergeModal'),
+    mergeSuggestionsList: document.getElementById('mergeSuggestionsList'),
+    btnCancelMerge: document.getElementById('btnCancelMerge'),
+    btnConfirmMerge: document.getElementById('btnConfirmMerge'),
 
     // Settings inputs
     settingPower: document.getElementById('settingPower'),
@@ -997,6 +1003,16 @@ function setupControls() {
 
     // Process button
     btnProcess.addEventListener('click', processImage);
+
+    // Merge Modal listeners
+    elements.closeMergeModal.addEventListener('click', () => {
+        elements.mergeModal.classList.remove('active');
+        if (window.onboarding) window.onboarding.handleAction('merge-complete');
+    });
+    elements.btnCancelMerge.addEventListener('click', () => {
+        elements.mergeModal.classList.remove('active');
+        if (window.onboarding) window.onboarding.handleAction('merge-complete');
+    });
 }
 
 // ===================================
@@ -1043,9 +1059,58 @@ async function processImage() {
 
             setTimeout(() => {
                 try {
-                    // Quantize colors
-                    const quantizer = new ColorQuantizer();
-                    const { quantizedImage, palette } = quantizer.quantize(resized, numColors);
+                    // Smart quantization: for higher color counts, use gradient expansion
+                    const BASE_COLOR_THRESHOLD = 12;
+                    let quantizedImage, palette;
+
+                    if (numColors <= BASE_COLOR_THRESHOLD) {
+                        // Standard quantization for low color counts
+                        const quantizer = new ColorQuantizer();
+                        const result = quantizer.quantize(resized, numColors);
+                        quantizedImage = result.quantizedImage;
+                        palette = result.palette;
+                    } else {
+                        // For higher color counts: base quantization + gradient expansion
+                        // Base colors = min(12, numColors/3) for optimal gradient distribution
+                        const baseColors = Math.min(12, Math.max(4, Math.floor(numColors / 3)));
+
+                        updateStatus(`Quantizing to ${baseColors} base colors...`, 35);
+
+                        const baseQuantizer = new ColorQuantizer();
+                        const baseResult = baseQuantizer.quantize(resized, baseColors);
+
+                        updateStatus(`Expanding to ${numColors} colors with gradients...`, 45);
+
+                        // Expand with gradient interpolation
+                        const enhancedQuantizer = new EnhancedQuantizer();
+                        const expandedResult = enhancedQuantizer.expandAndRequantize(
+                            resized,
+                            baseResult.palette,
+                            numColors
+                        );
+
+                        // Convert plain object back to ImageData for canvas display
+                        quantizedImage = new ImageData(
+                            new Uint8ClampedArray(expandedResult.quantizedImage.data),
+                            expandedResult.quantizedImage.width,
+                            expandedResult.quantizedImage.height
+                        );
+                        palette = expandedResult.palette.map(c => ({ r: c.r, g: c.g, b: c.b }));
+
+                        Logger.info('Gradient expansion complete', {
+                            baseColors: baseResult.palette.length,
+                            expandedColors: palette.length,
+                            interpolatedCount: expandedResult.stats?.interpolatedColors || 0
+                        });
+                    }
+
+                    // Sync UI if image has fewer colors than requested
+                    if (palette.length < numColors) {
+                        elements.colorSlider.value = palette.length;
+                        elements.colorCountDisplay.textContent = palette.length;
+                        showToast(`Note: Image contains only ${palette.length} distinct colors. Adjusted layer count.`, 'info');
+                    }
+
 
                     state.processedImage = quantizedImage;
                     state.palette = palette;
@@ -1174,7 +1239,8 @@ function displayVectorPreview() {
     const { width, height } = state.outputSize;
     const container = elements.vectorSvgContainer;
 
-    let svg = `<svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto; background: #fff;">`;
+    // Use array accumulation for better performance with many paths
+    const svgParts = [`<svg width="100%" height="100%" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="background: #fff;">`];
 
     state.layers.forEach(layer => {
         if (!layer.visible) return;
@@ -1182,16 +1248,18 @@ function displayVectorPreview() {
         // Fallback to originalColor if calibrated color is not yet assigned
         const displayColor = layer.color || layer.originalColor;
         const colorStr = `rgb(${displayColor.r}, ${displayColor.g}, ${displayColor.b})`;
+
+        // Batch paths for this layer
         layer.paths.forEach(path => {
             if (path && path.length > 0) {
                 // Use fill-rule: evenodd to handle holes correctly in combined paths
-                svg += `<path d="${path}" fill="${colorStr}" stroke="none" fill-opacity="0.9"/>`;
+                svgParts.push(`<path d="${path}" fill="${colorStr}" stroke="none" fill-opacity="0.9"/>`);
             }
         });
     });
 
-    svg += '</svg>';
-    container.innerHTML = svg;
+    svgParts.push('</svg>');
+    container.innerHTML = svgParts.join('');
 }
 
 // ===================================
@@ -1309,7 +1377,7 @@ function displayLayers() {
             colorHtml = `
                 <div class="layer-colors-container">
                     <div class="layer-color original" style="background-color: rgb(${layer.originalColor.r}, ${layer.originalColor.g}, ${layer.originalColor.b}); pointer-events: none;" title="Original detected color"></div>
-                    <div class="layer-color assigned" style="${assignedStyle} cursor: pointer;" data-layer-id="${layer.id}" title="${assignedColor ? 'Assigned calibrated color - Click to edit' : 'No color assigned - Click to pick'}">${assignedContent}</div>
+                    <div class="layer-color assigned" ${index === 0 ? 'id="tour-target-layer-color"' : ''} style="${assignedStyle} cursor: pointer;" data-layer-id="${layer.id}" title="${assignedColor ? 'Assigned calibrated color - Click to edit' : 'No color assigned - Click to pick'}">${assignedContent}</div>
                 </div>
             `;
         }
@@ -1621,8 +1689,36 @@ function autoAssignColors() {
             Logger.info('Auto-assign colors completed', { layersUpdated: state.layers.length });
             showToast(`Colors auto-assigned using calibrated color map!`, 'success');
 
-            // Onboarding action: Auto Assigning
-            if (window.onboarding) window.onboarding.handleAction('auto-assign');
+            // Detect and offer to merge layers with identical assignments
+            const assignments = new Map();
+            state.layers.forEach(layer => {
+                if (layer.frequency !== null && layer.lpi !== null) {
+                    const key = `${Math.round(layer.frequency)}-${layer.lpi}`;
+                    if (!assignments.has(key)) assignments.set(key, []);
+                    assignments.get(key).push(layer);
+                }
+            });
+
+            let dupCount = 0;
+            for (const [key, group] of assignments) {
+                if (group.length > 1) {
+                    dupCount += (group.length - 1);
+                }
+            }
+
+            if (dupCount > 0) {
+                // Onboarding: Add the merge step if needed
+                if (window.onboarding) window.onboarding.injectMergeStep();
+
+                setTimeout(() => {
+                    showMergeOpportunity(assignments);
+                    // Trigger onboarding advance AFTER modal is shown
+                    if (window.onboarding) window.onboarding.handleAction('auto-assign');
+                }, 500); // Small delay to let the success toast show first
+            } else {
+                // No duplicates, proceed immediately
+                if (window.onboarding) window.onboarding.handleAction('auto-assign');
+            }
         } catch (error) {
             Logger.error('Auto-assign error', { error: error.message });
             showToast('Failed to assign colors: ' + error.message, 'error');
@@ -1632,6 +1728,175 @@ function autoAssignColors() {
             btn.innerHTML = originalContent;
         }
     }, 50);
+}
+
+/**
+ * Shows the merge opportunity modal with details about overlapping assignments
+ * @param {Map} assignments - Map of key to array of layers
+ */
+function showMergeOpportunity(assignments) {
+    const list = elements.mergeSuggestionsList;
+    list.innerHTML = '';
+
+    // Track which merge groups are selected (all selected by default)
+    const selectedGroups = new Map();
+
+    for (const [key, group] of assignments) {
+        if (group.length <= 1) continue;
+
+        // Select by default
+        selectedGroups.set(key, true);
+
+        const primary = group[0];
+        const groupEl = document.createElement('div');
+        groupEl.className = 'merge-group';
+        groupEl.dataset.key = key;
+
+        // Header with checkbox: Assigned Color & Settings
+        const header = document.createElement('div');
+        header.className = 'merge-group-target';
+        header.style.cursor = 'pointer';
+        header.innerHTML = `
+            <input type="checkbox" class="merge-checkbox" data-key="${key}" checked style="width: 18px; height: 18px; margin-right: 10px; cursor: pointer;">
+            <div class="merge-swatch" style="background: rgb(${primary.color.r}, ${primary.color.g}, ${primary.color.b}); width: 24px; height: 24px;"></div>
+            <div style="flex: 1;">
+                <div class="target-label">${Math.round(primary.frequency)}kHz / ${primary.lpi}LPC</div>
+                <div style="font-size: 0.8em; color: var(--text-tertiary);">${group.length} layers → 1</div>
+            </div>
+        `;
+
+        // Toggle checkbox when clicking anywhere on header
+        header.addEventListener('click', (e) => {
+            if (e.target.type !== 'checkbox') {
+                const checkbox = header.querySelector('.merge-checkbox');
+                checkbox.checked = !checkbox.checked;
+                checkbox.dispatchEvent(new Event('change'));
+            }
+        });
+
+        groupEl.appendChild(header);
+
+        // Sources: List of layers being merged
+        const sources = document.createElement('div');
+        sources.className = 'merge-group-sources';
+        group.forEach(layer => {
+            const item = document.createElement('div');
+            item.className = 'merge-source-item';
+            item.innerHTML = `
+                <div class="merge-swatch" style="background: rgb(${layer.originalColor.r}, ${layer.originalColor.g}, ${layer.originalColor.b})"></div>
+                <span>${layer.name}</span>
+            `;
+            sources.appendChild(item);
+        });
+        groupEl.appendChild(sources);
+
+        list.appendChild(groupEl);
+    }
+
+    // Add change listeners to checkboxes
+    list.querySelectorAll('.merge-checkbox').forEach(cb => {
+        cb.addEventListener('change', (e) => {
+            selectedGroups.set(e.target.dataset.key, e.target.checked);
+            // Update visual state
+            const groupEl = e.target.closest('.merge-group');
+            if (groupEl) {
+                groupEl.style.opacity = e.target.checked ? '1' : '0.5';
+            }
+            // Update button state
+            const anySelected = Array.from(selectedGroups.values()).some(v => v);
+            elements.btnConfirmMerge.disabled = !anySelected;
+        });
+    });
+
+    // Set up button handlers for this specific session
+    const confirmBtn = elements.btnConfirmMerge;
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    elements.btnConfirmMerge = newConfirmBtn; // Update reference
+
+    elements.btnConfirmMerge.addEventListener('click', () => {
+        const btn = elements.btnConfirmMerge;
+        const originalContent = btn.innerHTML;
+
+        // Show loading state and disable button
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Merging...';
+
+        // Use setTimeout to allow UI to update before heavy operation
+        setTimeout(() => {
+            // Filter assignments to only include selected groups
+            const selectedAssignments = new Map();
+            for (const [key, value] of assignments) {
+                if (selectedGroups.get(key)) {
+                    selectedAssignments.set(key, value);
+                }
+            }
+            mergeDuplicateLayers(selectedAssignments);
+
+            // Restore button and close modal
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+            elements.mergeModal.classList.remove('active');
+
+            // Onboarding action: Merge Complete
+            if (window.onboarding) window.onboarding.handleAction('merge-complete');
+        }, 50);
+    });
+
+    elements.mergeModal.classList.add('active');
+}
+
+/**
+ * Merges layers that have identical frequency/lpi settings
+ * Optimized for performance with large path arrays
+ * @param {Map} assignments - Map of key to array of layers
+ */
+function mergeDuplicateLayers(assignments) {
+    const newLayers = [];
+    const processedKeys = new Set();
+
+    state.layers.forEach(layer => {
+        // Only consider layers with assignments
+        if (layer.frequency === null || layer.lpi === null) {
+            newLayers.push(layer);
+            return;
+        }
+
+        const key = `${Math.round(layer.frequency)}-${layer.lpi}`;
+        if (processedKeys.has(key)) return;
+
+        const group = assignments.get(key);
+        if (group && group.length > 1) {
+            // Keep the first layer and merge paths from others
+            const primary = group[0];
+
+            // Optimization: Use push with spread to avoid creating intermediate arrays
+            // This is faster than repeated concat() for large arrays
+            for (let i = 1; i < group.length; i++) {
+                if (group[i].paths && group[i].paths.length > 0) {
+                    primary.paths.push(...group[i].paths);
+                }
+            }
+
+            newLayers.push(primary);
+            processedKeys.add(key);
+        } else {
+            newLayers.push(layer);
+        }
+    });
+
+    state.layers = newLayers;
+
+    // Sync the color slider to reflect the new layer count
+    elements.colorSlider.value = state.layers.length;
+    elements.colorCountDisplay.textContent = state.layers.length;
+
+    // Defer DOM updates to next frame for smoother UI
+    requestAnimationFrame(() => {
+        displayLayers();
+        displayVectorPreview();
+        showToast(`${state.layers.length} layers remaining after merge.`, 'info');
+    });
 }
 
 /**
@@ -3549,6 +3814,7 @@ function getCustomGridSettings() {
         freqMax: parseInt(document.getElementById('gridFreqMax').value),
         lpiMin: parseInt(document.getElementById('gridLpiMin').value),
         lpiMax: parseInt(document.getElementById('gridLpiMax').value),
+
         cellSize: Math.max(1, Math.min(10, parseInt(document.getElementById('gridCellSize').value) || 5)),
         cellGap: (() => {
             const val = parseFloat(document.getElementById('gridCellGap').value);
@@ -3749,6 +4015,9 @@ function drawGridToCanvas(canvasId, settings) {
     // Position relative to Effective Grid Bottom-Right
     const qrSizeMM = gridInfo.qrSize || 17;
     // qrX/Y in gridInfo are absolute to workspace. We need relative to card.
+    // Logic: globalOffsetX = cardOffsetX + contentOffsetX.
+    // contentOffsetX = startX.
+    // so qrX_on_card = startX + effectiveGridW - qrSizeMM.
 
     const qrX = (startX + effectiveGridW - qrSizeMM) * scale;
     const qrY = (startY + effectiveGridH - qrSizeMM) * scale;

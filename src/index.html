@@ -71,7 +71,8 @@
           <div class="control-group">
             <label class="control-label">Output Size</label>
             <select class="select" id="sizeSelect">
-              <option value="200x200">200 × 200 mm (Default)</option>
+              <option value="100x100" selected>100 × 100 mm (Default)</option>
+              <option value="200x200">200 × 200 mm</option>
               <option value="85x55">85 × 55 mm (Business Card)</option>
               <option value="custom">Custom...</option>
             </select>
@@ -81,27 +82,27 @@
             <div class="input-row">
               <div class="input-group">
                 <label>Width (mm)</label>
-                <input type="number" class="input" id="customWidth" value="200" min="10" max="200">
+                <input type="number" class="input" id="customWidth" value="100" min="10" max="200">
               </div>
               <span class="input-separator">×</span>
               <div class="input-group">
                 <label>Height (mm)</label>
-                <input type="number" class="input" id="customHeight" value="200" min="10" max="200">
+                <input type="number" class="input" id="customHeight" value="100" min="10" max="200">
               </div>
             </div>
           </div>
 
-          <div class="control-group">
+          <div class="control-group" style="gap: 10px;">
             <label class="control-label">
-              Number of Colors: <span class="value-display" id="colorCountDisplay">4</span>
+              Number of Colors: <span class="value-display" id="colorCountDisplay">8</span>
             </label>
-            <input type="range" class="slider" id="colorSlider" min="2" max="12" value="4">
+            <input type="range" class="slider" id="colorSlider" min="2" max="64" value="8">
           </div>
 
-          <button class="btn btn-primary" id="btnProcess">
+          <button class="btn btn-primary" id="btnProcess" style="margin-top: 15px;">
             <span>🔄</span> Process Image
           </button>
-          <div style="margin-top: 15px; font-size: 0.75em; color: #888; text-align: center;">
+          <div style="margin-top: 5px; font-size: 0.75em; color: #888; text-align: center;">
             v2.0.0
           </div>
         </div>
@@ -152,7 +153,6 @@
             <canvas id="quantizedCanvas"></canvas>
           </div>
           <div class="image-preview" id="previewVectors" style="display: none;">
-            <div id="vectorSvgContainer"></div>
           </div>
         </div>
 
@@ -808,6 +808,28 @@
           <strong>Enter</strong> Apply &nbsp;|&nbsp;
           <strong>Esc</strong> Done
         </span>
+      </div>
+    </div>
+
+    <!-- Merge Layers Modal -->
+    <div id="mergeModal" class="modal">
+      <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+          <h2 class="modal-title">Merge Layers</h2>
+          <span class="modal-close" id="closeMergeModal">&times;</span>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom: 15px; color: var(--text-secondary); font-size: 0.9em;">
+            Multiple layers have the same laser settings. Select which groups you want to merge:
+          </p>
+          <div id="mergeSuggestionsList" class="merge-suggestions-list">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+          <button class="btn btn-secondary" id="btnCancelMerge">Cancel</button>
+          <button class="btn btn-primary" id="btnConfirmMerge">Merge Selected</button>
+        </div>
       </div>
     </div>
 

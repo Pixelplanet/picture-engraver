@@ -74,9 +74,10 @@ export class XCSGenerator {
             }
         });
 
-        // Add Focus Warning (Low Priority Task)
+        // Add Focus Warning (always on top - zOrder higher than all layers)
         const warningId = this.generateUUID();
-        const warningDisplay = this.createFocusWarning(warningId, size);
+        const maxZOrder = displays.length + 100; // Ensure warning is always on top
+        const warningDisplay = this.createFocusWarning(warningId, size, maxZOrder);
         displays.push(warningDisplay);
         displaySettingsMap.set(warningId, { isWarning: true });
 
@@ -392,8 +393,11 @@ export class XCSGenerator {
 
     /**
      * Create focus warning text box element
+     * @param {string} id - Element ID
+     * @param {Object} size - Canvas size
+     * @param {number} zOrder - z-order for layering (higher = on top)
      */
-    createFocusWarning(id, size) {
+    createFocusWarning(id, size, zOrder = 999) {
         // Exact numbers from Baum mit Text.xcs
         const x = -3.1444998474120496;
         const y = 146.45000078201292;
@@ -418,7 +422,7 @@ export class XCSGenerator {
             "offsetY": offsetY,
             "lockRatio": true,
             "isClosePath": true,
-            "zOrder": 13, // Matching zOrder 13 from reference
+            "zOrder": zOrder, // Dynamic zOrder to ensure warning is always on top
             "groupTag": "d942118a-d0f3-4cb9-8870-37a23a5d56ce", // Exact groupTag from reference
             "layerTag": "#fe0002",
             "layerColor": "#fe0002",
