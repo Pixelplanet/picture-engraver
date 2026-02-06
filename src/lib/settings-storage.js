@@ -250,7 +250,7 @@ export const SettingsStorage = {
     ensureSystemDefaultMap() {
         try {
             const maps = this.getColorMaps();
-            const versionSuffix = '_v9'; // Bump version to force update
+            const versionSuffix = '_v10'; // Bump version to force update
             let mapsChanged = false;
 
             if (!SYSTEM_DEFAULTS || !Array.isArray(SYSTEM_DEFAULTS)) {
