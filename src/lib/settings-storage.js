@@ -3,9 +3,9 @@
  * Handles saving/loading settings from cookies/localStorage
  */
 
-const STORAGE_KEY = 'pictureEngraverSettings';
+import { SYSTEM_DEFAULTS } from './default-color-map.js';
 
-import { DEFAULT_COLOR_MAP_DATA } from './default-color-map.js';
+const STORAGE_KEY = 'pictureEngraverSettings';
 
 // Device Profiles definitions
 export const DEVICE_PROFILES = {
@@ -244,53 +244,73 @@ export const SettingsStorage = {
     },
 
     /**
-     * Ensure a system default map exists
+     * Ensure system default maps exist
      * Uses real extracted data from calibration
      */
     ensureSystemDefaultMap() {
         try {
             const maps = this.getColorMaps();
-            const defaultId = 'system_default_v8'; // Bump version to force update
+            const versionSuffix = '_v9'; // Bump version to force update
+            let mapsChanged = false;
 
-            // Use real extracted data (from imported constant)
-            const defaultMap = {
-                id: defaultId,
-                name: 'System Default (Optimized)',
-                active: true,
-                createdAt: new Date().toISOString(),
-                data: DEFAULT_COLOR_MAP_DATA
-            };
+            if (!SYSTEM_DEFAULTS || !Array.isArray(SYSTEM_DEFAULTS)) {
+                console.warn('No system defaults defined');
+                return;
+            }
 
-            // Remove ANY old default maps (including current version to force update data)
-            // We want exactly one system default map with the latest data
-            let i = maps.length;
-            let foundIndex = -1;
-            while (i--) {
-                if (maps[i].id.startsWith('system_default_v')) {
-                    if (maps[i].id === defaultId) {
-                        foundIndex = i;
-                    } else {
+            SYSTEM_DEFAULTS.forEach(def => {
+                const targetId = def.id + versionSuffix;
+
+                // Let's sweep for older versions of THIS specific system map
+                let foundIndex = -1;
+
+                // Filter out OLD versions of this map
+                for (let i = maps.length - 1; i >= 0; i--) {
+                    if (maps[i].id.startsWith(def.id)) {
+                        if (maps[i].id === targetId) {
+                            foundIndex = i;
+                        } else {
+                            maps.splice(i, 1);
+                            mapsChanged = true;
+                        }
+                    } else if (def.id === 'system_default_basic' && maps[i].id.startsWith('system_default_v')) {
+                        // Legacy cleanup
                         maps.splice(i, 1);
+                        mapsChanged = true;
                     }
                 }
-            }
 
-            // Always update or add
-            if (foundIndex !== -1) {
-                // Update existing v7 to ensure cutting edge data (useful during dev)
-                // Preserve active status if user toggled it? No, system default should probably stay active unless user explicitly disabled it.
-                // But we mainly care about data.
-                maps[foundIndex].data = DEFAULT_COLOR_MAP_DATA;
-                maps[foundIndex].name = 'System Default (Optimized)'; // Ensure name is current
-            } else {
-                maps.unshift(defaultMap); // Add to beginning
-            }
+                if (foundIndex !== -1) {
+                    // Update existing
+                    if (JSON.stringify(maps[foundIndex].data) !== JSON.stringify(def.data) || maps[foundIndex].name !== def.name) {
+                        maps[foundIndex].data = def.data;
+                        maps[foundIndex].name = def.name;
+                        maps[foundIndex].description = def.description;
+                        mapsChanged = true;
+                    }
+                } else {
+                    // Create new
+                    const newMap = {
+                        id: targetId,
+                        name: def.name,
+                        description: def.description,
+                        active: true, // Default to active
+                        isSystem: true, // Flag to prevent deletion
+                        createdAt: new Date().toISOString(),
+                        data: def.data
+                    };
+                    maps.unshift(newMap); // Add to top
+                    mapsChanged = true;
+                }
+            });
 
-            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
-            console.info('Created/Updated System Default color map');
+            if (mapsChanged) {
+                localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
+                console.info('Created/Updated System Default color maps');
+            }
 
         } catch (error) {
-            console.error('Failed to create default map:', error);
+            console.error('Failed to create default maps:', error);
         }
     },
 
@@ -319,6 +339,20 @@ export const SettingsStorage = {
         } catch (error) {
             console.error('Failed to save color map:', error);
             return null;
+        }
+    },
+
+    /**
+     * Save/Update the entire list of color maps
+     * @param {Array} maps 
+     */
+    saveColorMaps(maps) {
+        try {
+            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
+            return true;
+        } catch (error) {
+            console.error('Failed to save color maps:', error);
+            return false;
         }
     },
 

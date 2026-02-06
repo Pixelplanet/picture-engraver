@@ -21,6 +21,9 @@ import { Logger } from './lib/logger.js';
 import { LandingPage } from './lib/landing-page.js';
 import { OnboardingManager } from './lib/onboarding.js';
 import { GridDetector } from './lib/grid-detector.js';
+import { multiGridPalette, initializeMultiGridPalette } from './lib/multi-grid-palette.js';
+import { GridImagePicker } from './lib/grid-image-picker.js';
+
 
 
 // Application State
@@ -33,7 +36,9 @@ const state = {
     palette: [],
     outputSize: { width: 200, height: 200 },
     settings: null,
-    editingLayerId: null
+    editingLayerId: null,
+    gridPicker: null, // GridImagePicker instance
+    currentMiniPickerMapId: null // Current grid in picker
 };
 
 // ===================================
@@ -87,6 +92,10 @@ const elements = {
     miniPickerCanvas: document.getElementById('miniPickerCanvas'),
     miniPickerCoords: document.getElementById('miniPickerCoords'),
     miniPickerValues: document.getElementById('miniPickerValues'),
+    miniPickerGridSelect: document.getElementById('miniPickerGridSelect'),
+    btnZoomIn: document.getElementById('btnZoomIn'),
+    btnZoomOut: document.getElementById('btnZoomOut'),
+    btnZoomReset: document.getElementById('btnZoomReset'),
 
     // Layers
     layersPanel: document.getElementById('layersPanel'),
@@ -116,6 +125,13 @@ const elements = {
     mergeSuggestionsList: document.getElementById('mergeSuggestionsList'),
     btnCancelMerge: document.getElementById('btnCancelMerge'),
     btnConfirmMerge: document.getElementById('btnConfirmMerge'),
+
+    // Color Grids Management
+    colorGridsList: document.getElementById('colorGridsList'),
+    gridStatsText: document.getElementById('gridStatsText'),
+    btnExportGrids: document.getElementById('btnExportGrids'),
+    btnImportGrids: document.getElementById('btnImportGrids'),
+    gridImportFileInput: document.getElementById('gridImportFileInput'),
 
     // Settings inputs
     settingPower: document.getElementById('settingPower'),
@@ -218,6 +234,60 @@ function getLineIntersection(p1, p2, p3, p4) {
         };
     }
     return null;
+}
+
+/**
+ * Calculate QR code exclusion zone based on physical dimensions
+ * QR code is always 17mm x 17mm with 1mm gap around it
+ * @param {number} numCols - Total number of grid columns
+ * @param {number} numRows - Total number of grid rows
+ * @param {number} cellSize - Cell size in mm (default 5)
+ * @param {number} cellGap - Cell gap in mm (default 1)
+ * @returns {{ startCol: number, startRow: number, colsExcluded: number, rowsExcluded: number }}
+ */
+function calculateQRExclusionZone(numCols, numRows, cellSize = null, cellGap = null) {
+    const QR_SIZE_MM = 17;
+    const QR_GAP_MM = 1;
+
+    // Total space needed for QR code + gap
+    const qrSpaceW = QR_SIZE_MM + QR_GAP_MM;
+    const qrSpaceH = QR_SIZE_MM + QR_GAP_MM;
+
+    // Standard Business Card dimensions (default test grid)
+    const CARD_WIDTH = 85;
+    const CARD_HEIGHT = 55;
+    const MARGIN = 1;
+
+    // Estimate pitch based on detected grid dimensions and physical card size
+    // This is more robust than relying on manual inputs which might default to 5mm
+    // Usable Width = Card Width - Margins
+    // Avg Pitch = Usable Width / Num Cols
+
+    const usableW = CARD_WIDTH - (MARGIN * 2);
+    const usableH = CARD_HEIGHT - (MARGIN * 2);
+
+    // Guard against divide by zero
+    if (numCols <= 0 || numRows <= 0) {
+        return { startCol: 0, startRow: 0, colsExcluded: 0, rowsExcluded: 0 };
+    }
+
+    const estColPitch = usableW / numCols;
+    const estRowPitch = usableH / numRows;
+
+    // Calculate how many columns/rows need to be excluded
+    const colsExcluded = Math.ceil(qrSpaceW / estColPitch);
+    const rowsExcluded = Math.ceil(qrSpaceH / estRowPitch);
+
+    // Start indices for exclusion (from the bottom-right corner)
+    const startCol = Math.max(0, numCols - colsExcluded);
+    const startRow = Math.max(0, numRows - rowsExcluded);
+
+    return {
+        startCol,
+        startRow,
+        colsExcluded,
+        rowsExcluded
+    };
 }
 
 /**
@@ -325,7 +395,7 @@ function initMiniPicker() {
         }
     });
 
-    // Canvas interaction
+    // Canvas interaction (will be replaced by GridImagePicker)
     elements.miniPickerCanvas.addEventListener('mousedown', handleMiniPickerClick);
     elements.miniPickerCanvas.addEventListener('mousemove', handleMiniPickerHover);
 
@@ -335,30 +405,124 @@ function initMiniPicker() {
         const touch = e.touches[0];
         handleMiniPickerClick(touch);
     }, { passive: false });
+
+    // Zoom controls
+    if (elements.btnZoomIn) {
+        elements.btnZoomIn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (state.gridPicker) state.gridPicker.zoomIn();
+        });
+    }
+    if (elements.btnZoomOut) {
+        elements.btnZoomOut.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (state.gridPicker) state.gridPicker.zoomOut();
+        });
+    }
+    if (elements.btnZoomReset) {
+        elements.btnZoomReset.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (state.gridPicker) state.gridPicker.resetZoom();
+        });
+    }
+
+    // Mouse wheel zoom on canvas
+    elements.miniPickerCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (state.gridPicker) {
+            // GridImagePicker handles wheel internally
+        }
+    }, { passive: false });
+
+    // Grid dropdown change
+    if (elements.miniPickerGridSelect) {
+        elements.miniPickerGridSelect.addEventListener('change', (e) => {
+            const selectedMapId = e.target.value;
+            if (selectedMapId && state.editingLayerId) {
+                state.currentMiniPickerMapId = selectedMapId;
+                const layer = state.layers.find(l => l.id === state.editingLayerId);
+                if (layer) {
+                    const targetEl = document.querySelector(`[data-layer-id="${layer.id}"] .layer-color`);
+                    openMiniPicker(layer.id, targetEl, selectedMapId);
+                }
+            }
+        });
+    }
+
+    // Grid Lines Toggle
+    const cbShowGridLines = document.getElementById('cbShowGridLines');
+    if (cbShowGridLines) {
+        // Load saved setting
+        const savedSetting = localStorage.getItem('pictureEngraver_settings_ui');
+        if (savedSetting) {
+            try {
+                const parsed = JSON.parse(savedSetting);
+                if (parsed.showGridLines !== undefined) {
+                    cbShowGridLines.checked = parsed.showGridLines;
+                }
+            } catch (e) {
+                console.warn('Failed to parse UI settings');
+            }
+        }
+
+        cbShowGridLines.addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+
+            // Update picker if active
+            if (state.gridPicker) {
+                state.gridPicker.setShowGridLines(isChecked);
+            }
+
+            // Save setting
+            const uiSettings = {
+                showGridLines: isChecked
+            };
+            localStorage.setItem('pictureEngraver_settings_ui', JSON.stringify(uiSettings));
+        });
+    }
 }
 
 function cropGridImage(img, corners) {
     try {
-        console.log('Generating rectified grid image (Source: Analyzer Canvas)...');
+        console.log('Generating rectified grid image (Source: Original Image)...');
 
-        // Use the analyzer canvas as source because 'corners' coordinates are relative to it.
-        const sourceCanvas = elements.analyzerCanvas;
-        if (!sourceCanvas) {
-            console.error('Analyzer canvas not found');
+        if (!img) {
+            console.error('No source image provided for grid cropping');
             return null;
         }
 
-        const width = sourceCanvas.width;
-        const height = sourceCanvas.height;
-        const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
-        const imageData = ctx.getImageData(0, 0, width, height);
+        // Calculate scale factor between display canvas (which might be downsampled) and original image
+        // 'corners' are in canvas coordinate space, so we need to scale them up to original image space
+        const displayCanvas = elements.analyzerCanvas;
+        let scaleX = 1;
+        let scaleY = 1;
 
-        // 2. Warp using GridDetector
+        if (displayCanvas) {
+            scaleX = img.width / displayCanvas.width;
+            scaleY = img.height / displayCanvas.height;
+        }
+
+        const scaledCorners = corners.map(p => ({
+            x: p.x * scaleX,
+            y: p.y * scaleY
+        }));
+
+        // Use a temporary canvas to extract clean ImageData from the original image
+        // This avoids capturing grid lines or other UI elements drawn on the display canvas
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = img.width;
+        tempCanvas.height = img.height;
+        const ctx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0);
+
+        const imageData = ctx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+
+        // 2. Warp using GridDetector with SCALED corners
         if (!analyzerState.gridDetector) {
             analyzerState.gridDetector = new GridDetector();
         }
 
-        const warpedResult = analyzerState.gridDetector.warpImage(imageData, corners);
+        const warpedResult = analyzerState.gridDetector.warpImage(imageData, scaledCorners);
 
         // 3. Convert warped ImageData back to Base64
         const resCanvas = document.createElement('canvas');
@@ -426,36 +590,42 @@ function openMiniPicker(layerId, targetEl, mapId = null) {
 
     const { gridImage, entries, numCols, numRows } = activeMap.data;
 
-    // Update Footer Info
-    const gridNameEl = document.getElementById('miniPickerGridName');
-    if (gridNameEl) gridNameEl.textContent = activeMap.name || 'Untitled Grid';
+    // Populate grid dropdown
+    if (elements.miniPickerGridSelect) {
+        elements.miniPickerGridSelect.innerHTML = '';
+        maps.forEach(map => {
+            const option = document.createElement('option');
+            option.value = map.id;
+            option.textContent = `${map.name} (${map.data?.entries?.length || '?'} colors)`;
+            option.selected = map.id === activeMap.id;
+            elements.miniPickerGridSelect.appendChild(option);
+        });
+    }
 
-    // Setup Buttons
-    const btnPrev = document.getElementById('btnPrevGrid');
-    const btnNext = document.getElementById('btnNextGrid');
+    // Initialize GridImagePicker if not already done
+    if (!state.gridPicker) {
+        state.gridPicker = new GridImagePicker({
+            canvas: elements.miniPickerCanvas,
+            onHover: (entry, gridPos) => {
+                if (entry && gridPos) {
+                    elements.miniPickerCoords.textContent = `Col ${gridPos.col + 1} Row ${gridPos.row + 1}`;
+                    elements.miniPickerValues.textContent = `F: ${Math.round(entry.frequency)}kHz  LPC: ${Math.round(entry.lpi)}`;
+                } else {
+                    elements.miniPickerCoords.textContent = 'Col: - Row: -';
+                    elements.miniPickerValues.textContent = 'F: - LPC: -';
+                }
+            },
+            onSelect: (entry, gridPos) => {
+                if (entry && state.editingLayerId) {
+                    applyMiniPickerSelection(entry, activeMap.id, gridPos);
+                }
+            }
+        });
 
-    if (maps.length <= 1) {
-        if (btnPrev) btnPrev.style.display = 'none';
-        if (btnNext) btnNext.style.display = 'none';
-    } else {
-        if (btnPrev) {
-            btnPrev.style.display = 'inline-block';
-            const newPrev = btnPrev.cloneNode(true);
-            btnPrev.parentNode.replaceChild(newPrev, btnPrev);
-            newPrev.addEventListener('click', (e) => {
-                e.stopPropagation();
-                navigateMiniPickerGrid(-1);
-            });
-        }
-
-        if (btnNext) {
-            btnNext.style.display = 'inline-block';
-            const newNext = btnNext.cloneNode(true);
-            btnNext.parentNode.replaceChild(newNext, btnNext);
-            newNext.addEventListener('click', (e) => {
-                e.stopPropagation();
-                navigateMiniPickerGrid(1);
-            });
+        // Apply initial grid lines setting
+        const cbShowGridLines = document.getElementById('cbShowGridLines');
+        if (cbShowGridLines) {
+            state.gridPicker.setShowGridLines(cbShowGridLines.checked);
         }
     }
 
@@ -466,76 +636,109 @@ function openMiniPicker(layerId, targetEl, mapId = null) {
 
     const img = new Image();
     img.onload = () => {
+        const finishLoading = (loadedImage) => {
+            // Load data into GridImagePicker for zoom/pan support
+            if (state.gridPicker) {
+                state.gridPicker.loadGrid({
+                    image: loadedImage,
+                    entries: entries,
+                    numCols: numCols,
+                    numRows: numRows
+                });
+
+                // Set currently selected entry for highlighting
+                if (layer.frequency !== undefined && layer.lpi !== undefined) {
+                    const selectedEntry = entries.find(e =>
+                        Math.round(e.frequency) === Math.round(layer.frequency) &&
+                        Math.round(e.lpi) === Math.round(layer.lpi)
+                    );
+                    if (selectedEntry) {
+                        state.gridPicker.setSelectedEntry(selectedEntry);
+                    }
+                }
+            }
+        };
+
         // Handle Legacy Maps: If relativeCorners exist, we must warp the image on the fly
         if (gridImage.relativeCorners && gridImage.relativeCorners.length === 4) {
-            // We need to warp it. Use GridDetector logic if available, or fall back to drawing unwarped
-            if (analyzerState.gridDetector) {
-                try {
-                    // Convert image to ImageData
-                    const tmpCanvas = document.createElement('canvas');
-                    tmpCanvas.width = img.width;
-                    tmpCanvas.height = img.height;
-                    const tmpCtx = tmpCanvas.getContext('2d');
-                    tmpCtx.drawImage(img, 0, 0);
-                    const imgData = tmpCtx.getImageData(0, 0, img.width, img.height);
+            // Ensure GridDetector is available
+            if (!analyzerState.gridDetector) {
+                analyzerState.gridDetector = new GridDetector();
+            }
 
-                    // Warp
-                    const result = analyzerState.gridDetector.warpImage(imgData, gridImage.relativeCorners);
+            try {
+                // Convert image to ImageData
+                const tmpCanvas = document.createElement('canvas');
+                tmpCanvas.width = img.width;
+                tmpCanvas.height = img.height;
+                const tmpCtx = tmpCanvas.getContext('2d');
+                tmpCtx.drawImage(img, 0, 0);
+                const imgData = tmpCtx.getImageData(0, 0, img.width, img.height);
 
-                    // Draw warped
-                    canvas.width = result.width;
-                    canvas.height = result.height;
-                    const resCtx = canvas.getContext('2d');
-                    resCtx.putImageData(result.imageData, 0, 0);
-                } catch (e) {
-                    console.error("Legacy Warp Failed", e);
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    ctx.drawImage(img, 0, 0);
-                }
-            } else {
-                // No detector available? Just draw raw
+                // Warp
+                const result = analyzerState.gridDetector.warpImage(imgData, gridImage.relativeCorners);
+
+                // Draw warped
+                canvas.width = result.width;
+                canvas.height = result.height;
+                const resCtx = canvas.getContext('2d');
+                resCtx.putImageData(result.imageData, 0, 0);
+
+                // Create image from warped result for GridImagePicker
+                const warpedImg = new Image();
+                warpedImg.onload = () => finishLoading(warpedImg);
+                warpedImg.src = canvas.toDataURL();
+            } catch (e) {
+                console.error("Legacy Warp Failed", e);
+                // Fallback to raw image
                 canvas.width = img.width;
                 canvas.height = img.height;
                 ctx.drawImage(img, 0, 0);
+                finishLoading(img);
             }
         } else {
             // New Maps: Image is already rectified
             canvas.width = img.width;
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
+            finishLoading(img);
         }
+    };
 
-        // Highlight currently selected color if it exists
-        if (layer.frequency !== undefined && layer.lpi !== undefined) {
-            const entry = activeMap.data.entries.find(e =>
-                Math.round(e.frequency) === Math.round(layer.frequency) &&
-                Math.round(e.lpi) === Math.round(layer.lpi)
-            );
 
-            if (entry && entry.gridPos) {
-                const cw = canvas.width / numCols;
-                const ch = canvas.height / numRows;
 
-                // Simple grid coordinates
-                const x = Math.floor(entry.gridPos.col * cw);
-                const y = Math.floor(entry.gridPos.row * ch);
-                const w = Math.floor(cw);
-                const h = Math.floor(ch);
+    // Fallback: Highlight currently selected color on canvas (for non-GridImagePicker path)
+    if (!state.gridPicker && layer.frequency !== undefined && layer.lpi !== undefined) {
+        const entry = activeMap.data.entries.find(e =>
+            Math.round(e.frequency) === Math.round(layer.frequency) &&
+            Math.round(e.lpi) === Math.round(layer.lpi)
+        );
 
-                ctx.strokeStyle = '#ff0000';
-                ctx.lineWidth = 3;
-                ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+        if (entry && entry.gridPos) {
+            const cw = canvas.width / numCols;
+            const ch = canvas.height / numRows;
 
-                // Add a small inner white glow to make it pop on dark colors
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-                ctx.strokeRect(x + 3.5, y + 3.5, w - 7, h - 7);
-            }
+            // Simple grid coordinates
+            const x = Math.floor(entry.gridPos.col * cw);
+            const y = Math.floor(entry.gridPos.row * ch);
+            const w = Math.floor(cw);
+            const h = Math.floor(ch);
+
+            ctx.strokeStyle = '#ff0000';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+
+            // Add a small inner white glow to make it pop on dark colors
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+            ctx.strokeRect(x + 3.5, y + 3.5, w - 7, h - 7);
         }
+    }
 
-        // Position the picker to the right of the target element
+    // Position the picker to the right of the target element
+    // Position the picker to the right of the target element
+    if (targetEl) {
         const rect = targetEl.getBoundingClientRect();
 
         let left = rect.right + 15;
@@ -553,13 +756,20 @@ function openMiniPicker(layerId, targetEl, mapId = null) {
 
         elements.miniColorPicker.style.left = `${left + window.scrollX}px`;
         elements.miniColorPicker.style.top = `${top + window.scrollY}px`;
-        elements.miniColorPicker.classList.add('active');
+        elements.miniColorPicker.style.transform = 'none';
+    } else {
+        // Fallback: Center on screen
+        elements.miniColorPicker.style.left = '50%';
+        elements.miniColorPicker.style.top = '50%';
+        elements.miniColorPicker.style.transform = 'translate(-50%, -50%)';
+    }
+    elements.miniColorPicker.classList.add('active');
 
-        // Onboarding action: Mini Picker Opened (with delay to ensure rendering)
-        setTimeout(() => {
-            if (window.onboarding) window.onboarding.handleAction('edit-modal-open');
-        }, 100);
-    };
+    // Onboarding action: Mini Picker Opened (with delay to ensure rendering)
+    setTimeout(() => {
+        if (window.onboarding) window.onboarding.handleAction('edit-modal-open');
+    }, 100);
+
     img.src = gridImage.base64;
 }
 
@@ -568,6 +778,37 @@ function closeMiniPicker() {
         elements.miniColorPicker.classList.remove('active');
     }
     state.editingLayerId = null;
+}
+
+/**
+ * Apply selection from GridImagePicker
+ * @param {Object} entry - Selected color entry
+ * @param {string} mapId - Source map ID
+ * @param {Object} gridPos - Grid position {row, col}
+ */
+function applyMiniPickerSelection(entry, mapId, gridPos) {
+    const layer = state.layers.find(l => l.id === state.editingLayerId);
+    if (!layer || !entry) return;
+
+    layer.color = { ...entry.color };
+    layer.frequency = entry.frequency;
+    layer.lpi = entry.lpi;
+    layer.sourceGridId = mapId;
+    layer.sourceGridPos = gridPos;
+
+    displayLayers();
+    displayVectorPreview();
+    closeMiniPicker();
+
+    // Onboarding action: Color Picked
+    if (window.onboarding) {
+        window.onboarding.handleAction('color-picked');
+        setTimeout(() => {
+            if (window.onboarding) window.onboarding.handleAction('save-edit');
+        }, 100);
+    }
+
+    showToast(`Assigned ${Math.round(layer.frequency)}kHz / ${layer.lpi}LPC`, 'success');
 }
 
 function handleMiniPickerClick(e) {
@@ -686,6 +927,10 @@ function getCellFromCoords(x, y) {
 async function init() {
     // 1. Initialize Settings Storage & Defaults
     SettingsStorage.ensureSystemDefaultMap();
+
+    // 1b. Initialize Multi-Grid Palette with k-d tree index
+    await initializeMultiGridPalette(SettingsStorage);
+
     initMiniPicker();
 
     // 2. Initialize Landing Page for Device Selection
@@ -716,6 +961,7 @@ async function init() {
     setupAnalyzer();
     setupAdvancedAnalyzer();
     setupLightbox();
+    setupColorGridsManagement();
 
     Logger.info('Picture Engraver initialized', { appVersion: '2.0.0' });
 
@@ -1349,17 +1595,43 @@ function displayLayers() {
 
             const hasSettings = layer.frequency !== null && layer.lpi !== null;
             let settingsText = '⚠️ Settings Pending';
+            let matchQualityClass = '';
+            let sourceTooltip = '';
 
             if (isVirtual) {
                 settingsText = 'Ready for Export';
             } else if (hasSettings) {
+                // Primary settings: frequency and LPC
                 settingsText = `${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)}LPC`;
-                if (layer.speed) settingsText += ` / ${layer.speed}mm/s`;
-                if (layer.power) settingsText += ` / ${layer.power}%`;
+
+                // Add source grid info if available
+                if (layer.sourceGridName) {
+                    settingsText += ` · ${layer.sourceGridName}`;
+                }
+
+                // Add match quality indicator
+                if (layer.matchQuality) {
+                    const qualityIcons = {
+                        'Excellent': '✓',
+                        'Good': '●',
+                        'Approximate': '◐',
+                        'Poor': '○'
+                    };
+                    const icon = qualityIcons[layer.matchQuality] || '';
+                    matchQualityClass = `match-${layer.matchQuality.toLowerCase()}`;
+                    settingsText = `${icon} ${settingsText}`;
+                }
+
+                // Build tooltip with alternative sources
+                if (layer.alternativeSources && layer.alternativeSources.length > 0) {
+                    const altNames = layer.alternativeSources.map(s => s.gridName).join(', ');
+                    sourceTooltip = `Also available in: ${altNames}`;
+                }
             }
 
             const isValid = hasSettings || isVirtual;
-            settingsHtml = `<div class="layer-settings ${isValid ? '' : 'pending'}" style="${isVirtual ? 'color:#4CAF50;' : ''}">${settingsText}</div>`;
+            const tooltipAttr = sourceTooltip ? `title="${sourceTooltip}"` : '';
+            settingsHtml = `<div class="layer-settings ${isValid ? '' : 'pending'} ${matchQualityClass}" ${tooltipAttr} style="${isVirtual ? 'color:#4CAF50;' : ''}">${settingsText}</div>`;
         }
 
         let colorHtml = '';
@@ -1616,11 +1888,11 @@ function updateCalibrationStatus() {
 }
 
 function autoAssignColors() {
-    // Load the saved color map
-    const colorMap = SettingsStorage.loadColorMap();
+    // Check if multi-grid palette has colors
+    const stats = multiGridPalette.getStats();
 
-    if (!colorMap || !colorMap.entries || colorMap.entries.length === 0) {
-        showToast('No color map found! Please calibrate colors in the Test Grid > Analyze Grid tab first.', 'error');
+    if (stats.uniqueColors === 0) {
+        showToast('No color grids found! Please calibrate colors in the Test Grid > Analyze Grid tab first.', 'error');
         return;
     }
 
@@ -1629,7 +1901,7 @@ function autoAssignColors() {
         return;
     }
 
-    Logger.info(`Auto-assigning colors using ${colorMap.entries.length} calibrated colors`);
+    Logger.info(`Auto-assigning colors using ${stats.uniqueColors} unique colors from ${stats.gridCount} grid(s)`);
 
     // Disable button and show loading state
     const btn = elements.btnAutoAssign;
@@ -1640,43 +1912,70 @@ function autoAssignColors() {
     // Allow UI to update before processing
     setTimeout(() => {
         try {
-            // Pool for matching: Standard Colors + Calibrated Map
+            // Standard Colors (black/white) with custom speed/power
             const s = state.settings;
             const standardColors = [
                 {
                     color: { r: 0, g: 0, b: 0 },
                     frequency: s.blackFreq, lpi: s.blackLpi,
-                    speed: s.blackSpeed, power: s.blackPower
+                    speed: s.blackSpeed, power: s.blackPower,
+                    gridName: 'Standard',
+                    isStandard: true
                 },
                 {
                     color: { r: 255, g: 255, b: 255 },
                     frequency: s.whiteFreq, lpi: s.whiteLpi,
-                    speed: s.whiteSpeed, power: s.whitePower
+                    speed: s.whiteSpeed, power: s.whitePower,
+                    gridName: 'Standard',
+                    isStandard: true
                 }
             ];
-            const matchPool = [...standardColors, ...colorMap.entries];
 
-            // For each layer, find the closest matching color from the pool
+            // For each layer, find the closest matching color
             state.layers.forEach(layer => {
                 // Skip outline layers - they have fixed settings/colors and shouldn't be auto-matched
                 if (layer.type === 'outline') return;
 
-                const bestMatch = findClosestCalibrationColor(layer.originalColor, matchPool);
+                // First check standard colors (exact match for pure black/white)
+                const layerColor = layer.originalColor;
+                let bestMatch = null;
+
+                // Check for exact black/white match first
+                for (const std of standardColors) {
+                    const dist = Math.sqrt(
+                        Math.pow(layerColor.r - std.color.r, 2) +
+                        Math.pow(layerColor.g - std.color.g, 2) +
+                        Math.pow(layerColor.b - std.color.b, 2)
+                    );
+                    if (dist < 20) { // Near-exact match for black/white
+                        bestMatch = { ...std, matchDistance: dist, matchQuality: 'Excellent' };
+                        break;
+                    }
+                }
+
+                // If not a standard color, use k-d tree for fast matching
+                if (!bestMatch) {
+                    bestMatch = multiGridPalette.findBestMatch(layerColor);
+                }
 
                 if (bestMatch) {
                     layer.frequency = bestMatch.frequency;
                     layer.lpi = bestMatch.lpi;
 
-                    // Only apply speed/power if they are defined in the match
+                    // Only apply speed/power if they are defined (standard colors)
                     if (bestMatch.speed !== undefined) layer.speed = bestMatch.speed;
                     if (bestMatch.power !== undefined) layer.power = bestMatch.power;
 
-                    // Use the actual calibrated color as requested
+                    // Use the actual calibrated color
                     layer.color = { ...bestMatch.color };
 
-                    // Store source mapping (if present)
-                    layer.sourceMapId = bestMatch._sourceMapId || null;
+                    // Store source mapping
+                    layer.sourceGridId = bestMatch.gridId || null;
+                    layer.sourceGridName = bestMatch.gridName || null;
                     layer.sourceGridPos = bestMatch.gridPos || null;
+                    layer.matchDistance = bestMatch.matchDistance || null;
+                    layer.matchQuality = bestMatch.matchQuality || null;
+                    layer.alternativeSources = bestMatch.alternativeSources || [];
                 }
             });
 
@@ -1686,8 +1985,12 @@ function autoAssignColors() {
                 displayVectorPreview();
             }
 
-            Logger.info('Auto-assign colors completed', { layersUpdated: state.layers.length });
-            showToast(`Colors auto-assigned using calibrated color map!`, 'success');
+            Logger.info('Auto-assign colors completed', {
+                layersUpdated: state.layers.length,
+                uniqueColors: stats.uniqueColors,
+                indexBuildTime: stats.indexBuildTimeMs
+            });
+            showToast(`Colors auto-assigned using ${stats.uniqueColors} calibrated colors!`, 'success');
 
             // Detect and offer to merge layers with identical assignments
             const assignments = new Map();
@@ -2458,46 +2761,6 @@ function setupModals() {
     elements.closeLayerEditModal.addEventListener('click', () => closeModal(elements.layerEditModal));
     elements.btnCancelLayerEdit.addEventListener('click', () => closeModal(elements.layerEditModal));
     elements.btnSaveLayerEdit.addEventListener('click', saveLayerEdit);
-
-    // Setup Export Data
-    const btnExport = document.getElementById('btnExportData');
-    if (btnExport) {
-        btnExport.addEventListener('click', () => {
-            const json = SettingsStorage.exportColorMaps();
-            const blob = new Blob([json], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `picture_engraver_data_${Date.now()}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            showToast('Data exported successfully!', 'success');
-        });
-    }
-
-    // Setup Import Data
-    const btnImport = document.getElementById('btnImportData');
-    const importInput = document.getElementById('importFileInput');
-    if (btnImport && importInput) {
-        btnImport.addEventListener('click', () => importInput.click());
-        importInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    try {
-                        const count = SettingsStorage.importColorMaps(ev.target.result);
-                        showToast(`Imported ${count} color maps! Reloading...`, 'success');
-                        setTimeout(() => location.reload(), 1500);
-                    } catch (err) {
-                        showToast('Import failed: ' + err.message, 'error');
-                    }
-                };
-                reader.readAsText(e.target.files[0]);
-            }
-        });
-    }
 }
 
 function openModal(modal) {
@@ -2574,6 +2837,238 @@ function resetSettings() {
     state.settings = SettingsStorage.getDefaults();
     applySettingsToUI();
     showToast('Settings reset to defaults', 'success');
+}
+
+// ===================================
+// Color Grids Management
+// ===================================
+
+/**
+ * Render the color grids list in settings
+ */
+function renderColorGridsList() {
+    if (!elements.colorGridsList) return;
+
+    const maps = SettingsStorage.getColorMaps();
+    const stats = multiGridPalette.getStats();
+
+    // Update stats summary
+    if (elements.gridStatsText) {
+        if (stats.gridCount > 0) {
+            elements.gridStatsText.innerHTML = `
+                <strong>${stats.uniqueColors}</strong> unique colors from 
+                <strong>${stats.gridCount}</strong> grid${stats.gridCount !== 1 ? 's' : ''}
+                ${stats.duplicatesRemoved > 0 ? ` · <span style="color: var(--accent-success);">${stats.duplicatesRemoved} merged</span>` : ''}
+            `;
+        } else {
+            elements.gridStatsText.textContent = 'No grids loaded. Analyze a test grid to add colors.';
+        }
+    }
+
+    // Render grid list
+    if (maps.length === 0) {
+        elements.colorGridsList.innerHTML = `
+            <div style="text-align: center; padding: 20px; color: var(--text-tertiary);">
+                No color grids saved yet. Use the <strong>Test Grid</strong> tool to create one.
+            </div>
+        `;
+        return;
+    }
+
+    elements.colorGridsList.innerHTML = maps.map(map => {
+        const colorCount = map.data?.entries?.length || 0;
+        const isSystem = map.isSystem || map.name?.includes('System') || map.name?.includes('Default');
+
+        return `
+            <div class="color-grid-item ${isSystem ? 'system-grid' : ''}" data-grid-id="${map.id}">
+                <input type="checkbox" class="grid-select-checkbox" data-grid-id="${map.id}" title="Select for export">
+                <label class="color-grid-toggle">
+                    <input type="checkbox" class="grid-active-toggle" ${map.active ? 'checked' : ''} data-grid-id="${map.id}" title="Toggle active for Auto-Assign">
+                    <span class="slider"></span>
+                </label>
+                <div class="color-grid-info">
+                    <div class="color-grid-name">${map.name}</div>
+                    <div class="color-grid-meta">
+                        ${colorCount} colors${isSystem ? ' · System' : ''}
+                    </div>
+                </div>
+                <div class="color-grid-actions">
+                    <button class="btn-grid-action" data-action="export" data-grid-id="${map.id}" title="Export this grid">📤</button>
+                    ${!isSystem ? `<button class="btn-grid-action danger" data-action="delete" data-grid-id="${map.id}" title="Delete grid">🗑️</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Add active toggle listeners
+    elements.colorGridsList.querySelectorAll('.grid-active-toggle').forEach(toggle => {
+        toggle.addEventListener('change', async (e) => {
+            const gridId = e.target.dataset.gridId;
+            const isActive = e.target.checked;
+
+            // Update in storage
+            const maps = SettingsStorage.getColorMaps();
+            const map = maps.find(m => m.id === gridId);
+            if (map) {
+                map.active = isActive;
+                SettingsStorage.saveColorMaps(maps);
+
+                // Reinitialize multi-grid palette
+                await initializeMultiGridPalette(SettingsStorage);
+                renderColorGridsList();
+
+                showToast(`Grid "${map.name}" ${isActive ? 'enabled' : 'disabled'}`, 'success');
+            }
+        });
+    });
+
+    // Add individual export button listeners
+    elements.colorGridsList.querySelectorAll('[data-action="export"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const gridId = e.target.dataset.gridId;
+            const maps = SettingsStorage.getColorMaps();
+            const map = maps.find(m => m.id === gridId);
+
+            if (map) {
+                exportGrids([map]);
+            }
+        });
+    });
+
+    // Add delete listeners
+    elements.colorGridsList.querySelectorAll('[data-action="delete"]').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const gridId = e.target.dataset.gridId;
+            const maps = SettingsStorage.getColorMaps();
+            const map = maps.find(m => m.id === gridId);
+
+            if (map && confirm(`Delete grid "${map.name}"? This cannot be undone.`)) {
+                SettingsStorage.deleteColorMap(gridId);
+                await initializeMultiGridPalette(SettingsStorage);
+                renderColorGridsList();
+                showToast(`Grid "${map.name}" deleted`, 'success');
+            }
+        });
+    });
+}
+
+/**
+ * Export grids to JSON file
+ * @param {Array} grids - Array of grid objects to export
+ */
+function exportGrids(grids) {
+    if (!grids || grids.length === 0) {
+        showToast('No grids to export', 'warning');
+        return;
+    }
+
+    const exportData = {
+        version: '2.0',
+        exportDate: new Date().toISOString(),
+        grids: grids
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const fileName = grids.length === 1
+        ? `${grids[0].name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.json`
+        : `color-grids-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast(`Exported ${grids.length} grid(s)`, 'success');
+}
+
+
+/**
+ * Setup color grids management event listeners
+ */
+function setupColorGridsManagement() {
+    // Export grids button - exports selected or all
+    if (elements.btnExportGrids) {
+        elements.btnExportGrids.addEventListener('click', () => {
+            // Get selected grids from checkboxes
+            const selectedIds = [];
+            document.querySelectorAll('.grid-select-checkbox:checked').forEach(cb => {
+                selectedIds.push(cb.dataset.gridId);
+            });
+
+            const allMaps = SettingsStorage.getColorMaps();
+
+            // If none selected, export all
+            const gridsToExport = selectedIds.length > 0
+                ? allMaps.filter(m => selectedIds.includes(m.id))
+                : allMaps;
+
+            exportGrids(gridsToExport);
+        });
+    }
+
+    // Import grids button
+    if (elements.btnImportGrids && elements.gridImportFileInput) {
+        elements.btnImportGrids.addEventListener('click', () => {
+            elements.gridImportFileInput.click();
+        });
+
+        elements.gridImportFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+
+                // Validate format
+                if (!data.grids || !Array.isArray(data.grids)) {
+                    throw new Error('Invalid grid file format');
+                }
+
+                // Import grids
+                let imported = 0;
+                for (const grid of data.grids) {
+                    if (grid.id && grid.data) {
+                        // Check if grid already exists
+                        const existing = SettingsStorage.getColorMaps().find(m => m.id === grid.id);
+                        if (!existing) {
+                            SettingsStorage.saveColorMap(grid);
+                            imported++;
+                        }
+                    }
+                }
+
+                // Reinitialize palette
+                await initializeMultiGridPalette(SettingsStorage);
+                renderColorGridsList();
+
+                showToast(`Imported ${imported} new grid(s)`, 'success');
+            } catch (err) {
+                console.error('Import failed:', err);
+                showToast('Failed to import grids: ' + err.message, 'error');
+            }
+
+            // Reset file input
+            e.target.value = '';
+        });
+    }
+
+    // Render grid list when Test Grid modal opens
+    if (elements.btnTestGrid) {
+        elements.btnTestGrid.addEventListener('click', () => {
+            // Delay to allow modal to open
+            setTimeout(renderColorGridsList, 100);
+        });
+    }
+
+    // Also render when Analyzer tab is clicked
+    const analyzerTab = document.querySelector('[data-modal-tab="analyzer"]');
+    if (analyzerTab) {
+        analyzerTab.addEventListener('click', () => {
+            setTimeout(renderColorGridsList, 100);
+        });
+    }
 }
 
 // ===================================
@@ -2725,9 +3220,6 @@ function setupAnalyzer() {
 
     const btnApplyManual = document.getElementById('btnApplyManualSettings');
     if (btnApplyManual) btnApplyManual.addEventListener('click', applyManualSettings);
-
-    // Initialize Map Management UI
-    setupMapManagement();
 }
 
 /**
@@ -3311,8 +3803,10 @@ function drawAlignmentUI() {
         const rows = analyzerState.numRows;
 
         // QR region
-        const qrStartCol = cols - 3;
-        const qrStartRow = rows - 3;
+        // QR region
+        const qrExclusion = calculateQRExclusionZone(cols, rows);
+        const qrStartCol = qrExclusion.startCol;
+        const qrStartRow = qrExclusion.startRow;
 
         ctx.fillStyle = '#00d4ff'; // Cyan for centers
 
@@ -3421,10 +3915,10 @@ function drawAlignmentGrid(ctx, corners, cols, rows) {
     // Draw cell backgrounds for better visibility
     ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
 
-    // QR region is bottom-right 3×3
-    const qrCells = 3;
-    const qrStartCol = cols - qrCells;
-    const qrStartRow = rows - qrCells;
+    // QR region calculation
+    const qrExclusion = calculateQRExclusionZone(cols, rows);
+    const qrStartCol = qrExclusion.startCol;
+    const qrStartRow = qrExclusion.startRow;
 
     // Draw each cell with subtle fill
     for (let r = 0; r < rows; r++) {
@@ -3568,14 +4062,15 @@ function updateExtractedColors() {
         const colors = [];
         const rgbColors = []; // Store as {r, g, b} objects
 
-        // QR region definition
-        const qrRegionInfo = qrRegion || {
-            startCol: numCols - 3,
-            startRow: numRows - 3,
-            cells: 3
-        };
-        const qrStartCol = qrRegionInfo.startCol;
-        const qrStartRow = qrRegionInfo.startRow;
+        // QR region definition - calculate based on physical dimensions (17mm + 1mm gap)
+        // Get cell size and gap from current grid settings or use defaults
+        const cellSize = parseFloat(document.getElementById('gridCellSize')?.value) || 5;
+        const cellGap = parseFloat(document.getElementById('gridCellGap')?.value) || 1;
+
+        const qrExclusion = calculateQRExclusionZone(numCols, numRows, cellSize, cellGap);
+        const qrRegionInfo = qrExclusion;
+        const qrStartCol = qrExclusion.startCol;
+        const qrStartRow = qrExclusion.startRow;
 
         for (let r = 0; r < numRows; r++) {
             for (let c = 0; c < numCols; c++) {
@@ -3665,13 +4160,12 @@ function _old_updateExtractedColors() {
     const colors = [];
     const rgbColors = []; // Store as {r, g, b} objects
 
-    // QR region definition
-    // Use existing qrRegion if available, or default to bottom-right 3x3
-    const qrRegionInfo = qrRegion || {
-        startCol: numCols - 3,
-        startRow: numRows - 3,
-        cells: 3
-    };
+    // QR region definition - calculate based on physical dimensions (17mm + 1mm gap)
+    // Get cell size and gap from current grid settings or use defaults
+    const cellSize = parseFloat(document.getElementById('gridCellSize')?.value) || 5;
+    const cellGap = parseFloat(document.getElementById('gridCellGap')?.value) || 1;
+
+    const qrRegionInfo = calculateQRExclusionZone(numCols, numRows, cellSize, cellGap);
     const qrStartCol = qrRegionInfo.startCol;
     const qrStartRow = qrRegionInfo.startRow;
 
@@ -3869,9 +4363,9 @@ function unused_updateGridPreview() {
     const cellSize = settings.cellSize;
     const gap = settings.cellGap;
 
-    const qrCells = 3; // Must match generator (3x3 for version 5 QR codes)
-    const qrStartCol = gridInfo.numCols - qrCells;
-    const qrStartRow = gridInfo.numRows - qrCells;
+    const qrExclusion = calculateQRExclusionZone(gridInfo.numCols, gridInfo.numRows, settings.cellSize, settings.cellGap);
+    const qrStartCol = qrExclusion.startCol;
+    const qrStartRow = qrExclusion.startRow;
 
     for (let row = 0; row < gridInfo.numRows; row++) {
         for (let col = 0; col < gridInfo.numCols; col++) {
@@ -4245,8 +4739,13 @@ function generateColorMapWithData(freqValues, lpiValues, extractedColors) {
     grid.style.gridTemplateColumns = `repeat(${numCols}, 1fr)`;
 
     // QR region info
-    const qrStartCol = qrRegion?.startCol ?? (numCols - 3);
-    const qrStartRow = qrRegion?.startRow ?? (numRows - 3);
+    // QR region info - use dynamic calculation
+    const cellSize = parseFloat(document.getElementById('gridCellSize')?.value) || 5;
+    const cellGap = parseFloat(document.getElementById('gridCellGap')?.value) || 1;
+    const qrExclusion = calculateQRExclusionZone(numCols, numRows, cellSize, cellGap);
+
+    const qrStartCol = qrExclusion.startCol;
+    const qrStartRow = qrExclusion.startRow;
 
     let colorIdx = 0;
     for (let row = 0; row < numRows; row++) {
@@ -4309,8 +4808,14 @@ function saveColorMap() {
     let colorIdx = 0;
 
     // QR region info
-    const qrStartCol = numCols - 3;
-    const qrStartRow = numRows - 3;
+    // QR region info
+    // Get settings for exclusion calculation
+    const cellSize = parseFloat(document.getElementById('gridCellSize')?.value) || 5;
+    const cellGap = parseFloat(document.getElementById('gridCellGap')?.value) || 1;
+    const qrExclusion = calculateQRExclusionZone(numCols, numRows, cellSize, cellGap);
+
+    const qrStartCol = qrExclusion.startCol;
+    const qrStartRow = qrExclusion.startRow;
 
     for (let row = 0; row < numRows; row++) {
         const freq = freqValues[row];
@@ -4368,8 +4873,8 @@ function saveColorMap() {
             statusDiv.style.display = 'block';
         }
 
-        // Refresh the Manage Maps UI
-        renderManageMapsUI();
+        // Refresh the Color Grids list
+        initializeMultiGridPalette(SettingsStorage).then(() => renderColorGridsList());
 
     } else {
         showToast('Failed to save color map.', 'error');
@@ -4462,8 +4967,13 @@ function openAdvancedAnalyzer() {
     }
 
     // QR region info
-    const qrStartCol = qrRegion?.startCol ?? (numCols - 3);
-    const qrStartRow = qrRegion?.startRow ?? (numRows - 3);
+    // QR region info
+    const cellSize = parseFloat(document.getElementById('gridCellSize')?.value) || 5;
+    const cellGap = parseFloat(document.getElementById('gridCellGap')?.value) || 1;
+    const qrExclusion = calculateQRExclusionZone(numCols, numRows, cellSize, cellGap);
+
+    const qrStartCol = qrExclusion.startCol;
+    const qrStartRow = qrExclusion.startRow;
 
     // Initialize metadata for each color, marking QR cells as excluded
     advancedAnalyzerState.colorMetadata = extractedColors.map((color, idx) => {
@@ -4937,7 +5447,9 @@ function saveAdvancedColorMap() {
     if (SettingsStorage.saveColorMap(colorMapData, name)) {
         showToast(`Color map "${name}" saved with ${colorEntries.length} colors!`, 'success');
         closeAdvancedAnalyzer();
-        renderManageMapsUI();
+
+        // Refresh the Color Grids list
+        initializeMultiGridPalette(SettingsStorage).then(() => renderColorGridsList());
 
         // Also update the simple view status
         const statusDiv = document.getElementById('savedColorMapStatus');
@@ -4947,171 +5459,6 @@ function saveAdvancedColorMap() {
     } else {
         showToast('Failed to save color map.', 'error');
     }
-}
-
-// ===================================
-// Map Management UI (Injected)
-// ===================================
-
-
-function setupMapManagement() {
-    // Locate where to inject the management panel. 
-    // We'll put it in the #tabAnalyzer to ensure it's always visible even without active analysis
-    const container = document.getElementById('tabAnalyzer');
-    if (!container) return; // Should not happen if DOM matches
-
-    // Create section if not exists
-    let manageSection = document.getElementById('manageMapsSection');
-    if (!manageSection) {
-        manageSection = document.createElement('div');
-        manageSection.id = 'manageMapsSection';
-        manageSection.className = 'info-panel';
-        manageSection.style.marginTop = '20px';
-        manageSection.style.borderTop = '1px solid var(--border-color)';
-        manageSection.style.paddingTop = '15px';
-
-        container.appendChild(manageSection);
-    }
-
-    renderManageMapsUI();
-}
-
-function renderManageMapsUI() {
-    const section = document.getElementById('manageMapsSection');
-    if (!section) return;
-
-    const maps = SettingsStorage.getColorMaps();
-
-    let html = `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-            <h4 style="margin:0;">Manage Color Maps (${maps.length})</h4>
-            <div style="gap:5px; display:flex;">
-                 <button id="btnImportMaps" class="btn btn-sm btn-secondary" title="Import JSON file">📥 Import</button>
-                 <button id="btnExportMaps" class="btn btn-sm btn-secondary" title="Export all maps to JSON">📤 Export</button>
-                 <input type="file" id="fileImportMaps" accept=".json" style="display:none">
-            </div>
-        </div>
-        
-        <div class="maps-list" style="max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
-    `;
-
-    if (maps.length === 0) {
-        html += `<div style="color: #888; font-style: italic; text-align: center;">No saved color maps yet. Analyze a grid to save one.</div>`;
-    } else {
-        maps.forEach(map => {
-            const date = new Date(map.createdAt).toLocaleDateString();
-            const checked = map.active ? 'checked' : '';
-            const opacity = map.active ? '1' : '0.6';
-            const thumbnail = map.data.gridImage ? `
-                <div style="width: 40px; height: 40px; background: #000; border-radius: 4px; overflow: hidden; margin-right: 10px; border: 1px solid var(--border-primary); flex-shrink: 0;">
-                    <img src="${map.data.gridImage.base64}" style="width: 100%; height: 100%; object-fit: cover;">
-                </div>
-            ` : '<div style="width: 40px; height: 40px; margin-right: 10px; flex-shrink: 0;"></div>';
-
-            html += `
-                <div class="map-item" style="display:flex; align-items:center; background: var(--bg-secondary); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); opacity: ${opacity};">
-                    <input type="checkbox" class="map-toggle" data-id="${map.id}" ${checked} title="Enable/Disable this map" style="margin-right: 10px; cursor: pointer;">
-                    
-                    ${thumbnail}
-                    
-                    <div style="flex:1;">
-                        <div style="font-weight: 500;">${map.name}</div>
-                        <div style="font-size: 0.8em; color: #888;">${date} • ${map.data.entries.length} Colors</div>
-                    </div>
-                    
-                    <button class="btn btn-icon btn-sm btn-export-single-map" data-id="${map.id}" title="Export this map" style="color: #4a90e2; margin-left:10px;">📤</button>
-                    <button class="btn btn-icon btn-sm btn-delete-map" data-id="${map.id}" title="Delete" style="color: #ff4444; margin-left:5px;">🗑️</button>
-                </div>
-            `;
-        });
-    }
-
-    html += `</div>`;
-
-    section.innerHTML = html;
-
-    // Bind Events
-
-    // Export
-    document.getElementById('btnExportMaps').addEventListener('click', () => {
-        const json = SettingsStorage.exportColorMaps();
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `picture_engraver_maps_${Date.now()}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        showToast('Configuration exported!', 'success');
-    });
-
-    // Import Trigger
-    const fileInput = document.getElementById('fileImportMaps');
-    document.getElementById('btnImportMaps').addEventListener('click', () => fileInput.click());
-
-    // Import Action
-    fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-                try {
-                    const count = SettingsStorage.importColorMaps(evt.target.result);
-                    showToast(`Imported ${count} color maps successfully!`, 'success');
-                    renderManageMapsUI();
-                } catch (err) {
-                    showToast('Import failed: ' + err.message, 'error', 5000);
-                }
-                fileInput.value = ''; // Reset
-            };
-            reader.readAsText(e.target.files[0]);
-        }
-    });
-
-    // Export Single Map
-    section.querySelectorAll('.btn-export-single-map').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const id = e.target.closest('button').dataset.id;
-            const map = maps.find(m => m.id === id);
-            if (map) {
-                const exportData = { version: 1, exportedAt: new Date().toISOString(), maps: [map] };
-                const json = JSON.stringify(exportData, null, 2);
-                const blob = new Blob([json], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${map.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }
-        });
-    });
-
-    // Toggle Active
-    section.querySelectorAll('.map-toggle').forEach(chk => {
-        chk.addEventListener('change', (e) => {
-            const id = e.target.dataset.id;
-            SettingsStorage.toggleColorMapActive(id, e.target.checked);
-            renderManageMapsUI(); // Refresh style
-            showToast('Map status updated', 'success');
-        });
-    });
-
-    // Delete Map
-    section.querySelectorAll('.btn-delete-map').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const id = e.target.dataset.id;
-            if (confirm('Are you sure you want to delete this color map?')) {
-                if (SettingsStorage.deleteColorMap(id)) {
-                    renderManageMapsUI();
-                    showToast('Color map deleted', 'success');
-                }
-            }
-        });
-    });
 }
 
 

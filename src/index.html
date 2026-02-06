@@ -270,20 +270,6 @@
               <input type="number" class="input" id="settingWhitePower" value="70" min="1" max="100">
             </div>
           </div>
-
-          <div class="setting-group">
-            <h3>Backup & Restore</h3>
-            <p class="setting-hint">Export your color maps and settings to transfer between devices.</p>
-            <div style="display: flex; gap: 10px; margin-top: 10px;">
-              <button class="btn btn-secondary" id="btnExportData" style="flex: 1;">
-                <span>📤</span> Export Data
-              </button>
-              <button class="btn btn-secondary" id="btnImportData" style="flex: 1;">
-                <span>📥</span> Import Data
-              </button>
-              <input type="file" id="importFileInput" accept=".json" hidden>
-            </div>
-          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" id="btnResetSettings">Reset to Defaults</button>
@@ -618,6 +604,42 @@
                 </div>
               </div>
             </div>
+
+            <!-- Color Grids Section (consolidated) -->
+            <div class="color-grids-section" id="colorGridsSection"
+              style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-primary);">
+
+              <!-- Header with stats -->
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                <div>
+                  <h3 style="margin: 0;">Color Grids</h3>
+                  <p class="modal-description" style="margin: 5px 0 0 0;">
+                    Active grids are merged for Auto-Assign. Toggle to enable/disable.
+                  </p>
+                </div>
+                <div id="gridStatsSummary"
+                  style="background: var(--bg-tertiary); padding: 8px 12px; border-radius: 6px; font-size: 0.85em; text-align: right;">
+                  <span id="gridStatsText">Loading...</span>
+                </div>
+              </div>
+
+              <!-- Grid list with toggles -->
+              <div id="colorGridsList" class="color-grids-list"
+                style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; margin-bottom: 12px;">
+                <!-- Populated by JS -->
+              </div>
+
+              <!-- Actions: Import/Export only -->
+              <div style="display: flex; gap: 10px;">
+                <button class="btn btn-secondary btn-sm" id="btnExportGrids" style="flex: 1;">
+                  <span>📤</span> Export Grids
+                </button>
+                <button class="btn btn-secondary btn-sm" id="btnImportGrids" style="flex: 1;">
+                  <span>📥</span> Import Grids
+                </button>
+                <input type="file" id="gridImportFileInput" accept=".json" hidden>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -842,22 +864,44 @@
       <div class="mini-picker-content">
         <div class="mini-picker-canvas-container">
           <canvas id="miniPickerCanvas" class="mini-picker-canvas"></canvas>
+          <!-- Zoom controls overlay -->
+          <div class="mini-picker-zoom-controls">
+            <button id="btnZoomOut" class="zoom-btn" title="Zoom Out">−</button>
+            <button id="btnZoomReset" class="zoom-btn zoom-reset" title="Reset Zoom">⤢</button>
+            <button id="btnZoomIn" class="zoom-btn" title="Zoom In">+</button>
+          </div>
         </div>
       </div>
       <div id="miniPickerFooter" class="mini-picker-footer" style="flex-direction: column; gap: 8px;">
         <div class="picker-navigation"
-          style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-          <button id="btnPrevGrid" class="btn btn-sm btn-secondary" title="Previous Saved Grid"
-            style="padding: 2px 8px;">◀</button>
-          <span id="miniPickerGridName"
-            style="font-weight: 500; font-size: 0.9em; flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; color: var(--text-secondary);">Grid
-            Name</span>
-          <button id="btnNextGrid" class="btn btn-sm btn-secondary" title="Next Saved Grid"
-            style="padding: 2px 8px;">▶</button>
+          style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 8px;">
+          <label style="font-size: 0.8em; color: var(--text-secondary); white-space: nowrap;">Grid:</label>
+          <select id="miniPickerGridSelect" class="grid-dropdown"
+            style="flex: 1; padding: 4px 8px; font-size: 0.85em; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-primary); border-radius: var(--radius-sm); cursor: pointer;">
+            <!-- Options populated by JS -->
+          </select>
+          <!-- Keep prev/next as secondary option for keyboard users -->
+          <button id="btnPrevGrid" class="btn btn-sm btn-secondary" title="Previous Grid (←)"
+            style="padding: 2px 8px; display: none;">◀</button>
+          <button id="btnNextGrid" class="btn btn-sm btn-secondary" title="Next Grid (→)"
+            style="padding: 2px 8px; display: none;">▶</button>
         </div>
+
+        <!-- View Options -->
+        <div class="picker-options" style="display: flex; align-items: center; gap: 8px; padding: 0 4px;">
+          <label class="checkbox-label"
+            style="font-size: 0.8em; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="checkbox" id="cbShowGridLines">
+            Show Grid Lines
+          </label>
+        </div>
+
         <div style="display: flex; justify-content: space-between; width: 100%;">
           <span id="miniPickerCoords">Col: - Row: -</span>
           <span id="miniPickerValues">F: - LPC: -</span>
+        </div>
+        <div id="miniPickerHint" style="font-size: 0.75em; color: var(--text-tertiary); text-align: center;">
+          Scroll to zoom • Click to select
         </div>
       </div>
     </div>

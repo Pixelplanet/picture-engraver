@@ -693,6 +693,27 @@ body {
   font-style: italic;
 }
 
+/* Match quality indicators */
+.layer-settings.match-excellent {
+  color: #4CAF50;
+  /* Green - excellent match */
+}
+
+.layer-settings.match-good {
+  color: var(--text-secondary);
+  /* Default - good match */
+}
+
+.layer-settings.match-approximate {
+  color: #ff9800;
+  /* Orange - approximate match */
+}
+
+.layer-settings.match-poor {
+  color: #f44336;
+  /* Red - poor match, may need attention */
+}
+
 .layer-actions {
   display: flex;
   gap: var(--spacing-xs);
@@ -1828,6 +1849,58 @@ body {
   background: var(--bg-primary);
 }
 
+/* Zoom controls overlay */
+.mini-picker-zoom-controls {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+}
+
+.zoom-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.zoom-btn:hover {
+  background: rgba(74, 144, 226, 0.9);
+  transform: scale(1.05);
+}
+
+.zoom-btn:active {
+  transform: scale(0.95);
+}
+
+.zoom-btn.zoom-reset {
+  font-size: 14px;
+}
+
+/* Grid dropdown in picker */
+.mini-picker .grid-dropdown {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M3 4.5L6 8l3-3.5H3z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+}
+
+.mini-picker .grid-dropdown:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
 @keyframes miniPickerFadeIn {
   from {
     opacity: 0;
@@ -1838,4 +1911,138 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ===================================
+   Color Grids Settings
+   =================================== */
+.color-grids-list {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-primary) transparent;
+}
+
+.color-grids-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.color-grids-list::-webkit-scrollbar-thumb {
+  background: var(--border-primary);
+  border-radius: 3px;
+}
+
+.color-grid-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.color-grid-item:hover {
+  border-color: var(--accent-primary);
+}
+
+.color-grid-item.system-grid {
+  border-left: 3px solid var(--accent-primary);
+}
+
+/* Selection checkbox for multi-export */
+.grid-select-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.color-grid-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.color-grid-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.color-grid-toggle .slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #3a3a3a;
+  transition: 0.3s;
+  border-radius: 22px;
+}
+
+.color-grid-toggle .slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.color-grid-toggle input:checked+.slider {
+  background-color: var(--accent-primary);
+}
+
+.color-grid-toggle input:checked+.slider:before {
+  transform: translateX(18px) translateY(-50%);
+}
+
+.color-grid-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.color-grid-name {
+  font-weight: 500;
+  font-size: 0.9em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.color-grid-meta {
+  font-size: 0.75em;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.color-grid-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-grid-action {
+  padding: 4px 6px;
+  font-size: 0.75em;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-grid-action:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.btn-grid-action.danger:hover {
+  background: rgba(244, 67, 54, 0.15);
+  border-color: #f44336;
+  color: #f44336;
 }
