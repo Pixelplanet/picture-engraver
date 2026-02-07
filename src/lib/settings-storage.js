@@ -223,9 +223,13 @@ export const SettingsStorage = {
     // Multi Color Map Storage
     // ===================================
 
+    // ===================================
+    // Multi Color Map Storage
+    // ===================================
+
     /**
      * Get all saved color maps
-     * Performs auto-migration of legacy single map if found
+     * Combines immutable System Defaults with User Saved Maps
      * @returns {Array} Array of color map objects
      */
     getColorMaps() {
@@ -233,84 +237,59 @@ export const SettingsStorage = {
             // Check for legacy migration
             this._migrateLegacyColorMap();
 
+            // 1. Get User Maps from Storage
+            let userMaps = [];
             const stored = localStorage.getItem(STORAGE_KEY + '_maps');
             if (stored) {
-                return JSON.parse(stored);
+                try {
+                    const parsed = JSON.parse(stored);
+                    // Filter out any system maps that might have been accidentally saved previously
+                    userMaps = parsed.filter(m => !m.isSystem && !m.id.startsWith('system_default_'));
+
+                    // If we filtered anything out (meaning we had Bloat), let's save the cleaned version immediately
+                    if (userMaps.length < parsed.length) {
+                        console.log('Cleaning up system defaults from local storage...');
+                        localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(userMaps));
+                    }
+                } catch (e) {
+                    console.error('Error parsing user maps:', e);
+                }
             }
+
+            // 2. Mark System Defaults
+            const systemMaps = SYSTEM_DEFAULTS.map(m => ({
+                ...m,
+                isSystem: true,
+                active: true // System defaults always available (activation handled by UI logic mostly, but good to have)
+            }));
+
+            // 3. Return Combined List
+            return [...systemMaps, ...userMaps];
         } catch (error) {
             console.warn('Failed to load color maps:', error);
+            // Fallback to just system defaults if storage fails
+            return SYSTEM_DEFAULTS.map(m => ({ ...m, isSystem: true }));
         }
-        return [];
     },
 
     /**
      * Ensure system default maps exist
-     * Uses real extracted data from calibration
+     * NOW: Checks for and REMOVES system defaults from localStorage to free up space
      */
     ensureSystemDefaultMap() {
         try {
-            const maps = this.getColorMaps();
-            const versionSuffix = '_v10'; // Bump version to force update
-            let mapsChanged = false;
+            const stored = localStorage.getItem(STORAGE_KEY + '_maps');
+            if (!stored) return;
 
-            if (!SYSTEM_DEFAULTS || !Array.isArray(SYSTEM_DEFAULTS)) {
-                console.warn('No system defaults defined');
-                return;
+            const parsed = JSON.parse(stored);
+            const userMapsOnly = parsed.filter(m => !m.isSystem && !m.id.startsWith('system_default_'));
+
+            if (userMapsOnly.length < parsed.length) {
+                console.info('Optimizing storage: Removing system defaults from localStorage');
+                localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(userMapsOnly));
             }
-
-            SYSTEM_DEFAULTS.forEach(def => {
-                const targetId = def.id + versionSuffix;
-
-                // Let's sweep for older versions of THIS specific system map
-                let foundIndex = -1;
-
-                // Filter out OLD versions of this map
-                for (let i = maps.length - 1; i >= 0; i--) {
-                    if (maps[i].id.startsWith(def.id)) {
-                        if (maps[i].id === targetId) {
-                            foundIndex = i;
-                        } else {
-                            maps.splice(i, 1);
-                            mapsChanged = true;
-                        }
-                    } else if (def.id === 'system_default_basic' && maps[i].id.startsWith('system_default_v')) {
-                        // Legacy cleanup
-                        maps.splice(i, 1);
-                        mapsChanged = true;
-                    }
-                }
-
-                if (foundIndex !== -1) {
-                    // Update existing
-                    if (JSON.stringify(maps[foundIndex].data) !== JSON.stringify(def.data) || maps[foundIndex].name !== def.name) {
-                        maps[foundIndex].data = def.data;
-                        maps[foundIndex].name = def.name;
-                        maps[foundIndex].description = def.description;
-                        mapsChanged = true;
-                    }
-                } else {
-                    // Create new
-                    const newMap = {
-                        id: targetId,
-                        name: def.name,
-                        description: def.description,
-                        active: true, // Default to active
-                        isSystem: true, // Flag to prevent deletion
-                        createdAt: new Date().toISOString(),
-                        data: def.data
-                    };
-                    maps.unshift(newMap); // Add to top
-                    mapsChanged = true;
-                }
-            });
-
-            if (mapsChanged) {
-                localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
-                console.info('Created/Updated System Default color maps');
-            }
-
         } catch (error) {
-            console.error('Failed to create default maps:', error);
+            console.error('Failed to optimize maps:', error);
         }
     },
 
@@ -322,8 +301,21 @@ export const SettingsStorage = {
      */
     saveColorMap(data, name) {
         try {
-            const maps = this.getColorMaps();
+            // 1. Get ONLY User Maps directly from storage to avoid complexity
+            let userMaps = [];
+            const stored = localStorage.getItem(STORAGE_KEY + '_maps');
+            if (stored) {
+                userMaps = JSON.parse(stored).filter(m => !m.isSystem && !m.id.startsWith('system_default_'));
+            }
+
             const id = 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+
+            // 2. Resize/Compress Grid Image if present to save space
+            if (data.gridImage && data.gridImage.base64) {
+                // Simple check: if string is huge (>500KB), we might want to warn or resize
+                // For now, we assume the caller passes a reasonable image, but we could add logic here
+                // if needed.
+            }
 
             const newMap = {
                 id: id,
@@ -333,25 +325,35 @@ export const SettingsStorage = {
                 data: data // The actual map data (entries, ranges, etc)
             };
 
-            maps.push(newMap);
-            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
+            userMaps.push(newMap);
+            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(userMaps));
             return id;
         } catch (error) {
             console.error('Failed to save color map:', error);
-            return null;
+            // If quota exceeded, try to notify user
+            if (error.name === 'QuotaExceededError') {
+                alert('Storage full! Please delete some old custom color maps.');
+            }
+            throw error; // Re-throw so UI can handle it
         }
     },
 
     /**
      * Save/Update the entire list of color maps
+     * IMPORTANT: Filters out system maps before saving!
      * @param {Array} maps 
      */
     saveColorMaps(maps) {
         try {
-            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
+            // Filter out system maps
+            const userMaps = maps.filter(m => !m.isSystem && !m.id.startsWith('system_default_'));
+            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(userMaps));
             return true;
         } catch (error) {
             console.error('Failed to save color maps:', error);
+            if (error.name === 'QuotaExceededError') {
+                alert('Storage full! Could not save changes.');
+            }
             return false;
         }
     },
@@ -362,9 +364,19 @@ export const SettingsStorage = {
      */
     deleteColorMap(id) {
         try {
-            let maps = this.getColorMaps();
-            maps = maps.filter(m => m.id !== id);
-            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
+            if (id.startsWith('system_default_')) {
+                console.warn('Cannot delete system default map');
+                return false;
+            }
+
+            let userMaps = [];
+            const stored = localStorage.getItem(STORAGE_KEY + '_maps');
+            if (stored) {
+                userMaps = JSON.parse(stored).filter(m => !m.isSystem && !m.id.startsWith('system_default_'));
+            }
+
+            const newMaps = userMaps.filter(m => m.id !== id);
+            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(newMaps));
             return true;
         } catch (error) {
             console.error('Failed to delete color map:', error);
@@ -374,17 +386,24 @@ export const SettingsStorage = {
 
     /**
      * Toggle active state of a map
-     * @param {string} id 
-     * @param {boolean} isActive 
+     * For system maps, we might need a separate 'preference' storage if we want per-user toggling
+     * For this usage, we'll assume system maps are always active for now, or use ephemeral state in app
      */
     toggleColorMapActive(id, isActive) {
         try {
-            const maps = this.getColorMaps();
-            const map = maps.find(m => m.id === id);
-            if (map) {
-                map.active = isActive;
-                localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(maps));
+            if (id.startsWith('system_default_')) {
+                // TODO: Store system map preference separately if needed
+                // For now, allow toggling in memory but it won't persist deeply
                 return true;
+            }
+
+            const maps = this.getColorMaps(); // Gets full list
+            const userMap = maps.find(m => m.id === id && !m.isSystem);
+
+            if (userMap) {
+                userMap.active = isActive;
+                // Save ONLY user maps
+                return this.saveColorMaps(maps);
             }
         } catch (error) {
             console.error('Failed to toggle map:', error);
@@ -394,13 +413,16 @@ export const SettingsStorage = {
 
     /**
      * Export all color maps to JSON string
+     * Exports BOTH system and user maps? Or just user?
+     * Usually export is for backup, so user maps are critical. System maps can be re-imported or just exist.
      */
     exportColorMaps() {
         const maps = this.getColorMaps();
+        const userMaps = maps.filter(m => !m.isSystem); // Only export user maps
         const exportData = {
             version: 1,
             exportedAt: new Date().toISOString(),
-            maps: maps
+            maps: userMaps
         };
         return JSON.stringify(exportData, null, 2);
     },
@@ -424,27 +446,28 @@ export const SettingsStorage = {
                 }
             });
 
-            const currentMaps = this.getColorMaps();
+            // Get current USER maps
+            let userMaps = [];
+            const stored = localStorage.getItem(STORAGE_KEY + '_maps');
+            if (stored) {
+                userMaps = JSON.parse(stored).filter(m => !m.isSystem && !m.id.startsWith('system_default_'));
+            }
+
             let addedCount = 0;
 
             parsed.maps.forEach(importedMap => {
-
-                // Determine if we should generate a new ID (avoid collision)
-                // We'll regenerate IDs on import to be safe, unless it's a backup restore logic
-                // For simplicity, let's treat them as new maps if they don't exactly match ID
-
-                // Check for duplicate by content/name to avoid spamming duplicates?
-                // For now, simple append
+                // Generate new ID to avoid collisions
                 const newId = 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 importedMap.id = newId;
                 importedMap.importedAt = new Date().toISOString();
-                importedMap.active = true; // Activate imported maps by default
+                importedMap.active = true;
+                importedMap.isSystem = false; // Ensure imported maps are not system
 
-                currentMaps.push(importedMap);
+                userMaps.push(importedMap);
                 addedCount++;
             });
 
-            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(currentMaps));
+            localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(userMaps));
             return addedCount;
         } catch (error) {
             console.error('Import failed:', error);

@@ -531,8 +531,8 @@ function cropGridImage(img, corners) {
         const resCtx = resCanvas.getContext('2d');
         resCtx.putImageData(warpedResult.imageData, 0, 0);
 
-        // High quality to ensure color picker works best
-        const base64 = resCanvas.toDataURL('image/jpeg', 1.0);
+        // Reduced quality to 0.85 to save local storage space (User request)
+        const base64 = resCanvas.toDataURL('image/jpeg', 0.85);
         console.log('rectified grid image generated', { w: warpedResult.width, h: warpedResult.height, len: base64.length });
 
         return {
