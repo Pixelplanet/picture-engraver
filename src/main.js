@@ -4550,8 +4550,23 @@ function drawGridToCanvas(canvasId, settings) {
 }
 
 function updateStandardPreview() {
+    // FIXED settings matching the generator
+    const fixedSettings = {
+        lpiMin: 300,
+        lpiMax: 800,
+        freqMin: 40,
+        freqMax: 90,
+        cellSize: 5,
+        cellGap: 1
+    };
+
+    // Merge with device ID if needed for MOPA/UV logic inside generator (although drawGridToCanvas mainly uses layout)
     const currentSettings = SettingsStorage.load();
-    drawGridToCanvas('standardPreviewCanvas', currentSettings);
+    if (currentSettings.activeDevice) {
+        fixedSettings.activeDevice = currentSettings.activeDevice;
+    }
+
+    drawGridToCanvas('standardPreviewCanvas', fixedSettings);
 }
 
 function downloadTestGridXCS(xcsContent, filename) {
