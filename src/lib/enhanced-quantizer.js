@@ -2,7 +2,7 @@
  * Enhanced Color Quantizer with Gradient Expansion
  * 
  * Extends the base quantization workflow with gradient interpolation,
- * allowing expansion from 8-12 base colors to up to 64 colors for smoother
+ * allowing expansion from 8-12 base colors to up to 32 colors for smoother
  * gradients and better image quality.
  * 
  * All processing runs in the browser - no server required.
@@ -14,28 +14,28 @@
 export const EXPANSION_PRESETS = {
     standard: {
         name: 'Standard',
-        multiplier: 4,
-        maxColors: 32,
-        description: '4x expansion - Recommended for most images'
+        multiplier: 2,
+        maxColors: 16,
+        description: '2x expansion - Recommended for most images'
     },
     quality: {
         name: 'Quality',
-        multiplier: 6,
-        maxColors: 48,
-        description: '6x expansion - Better gradients'
+        multiplier: 3,
+        maxColors: 24,
+        description: '3x expansion - Better gradients'
     },
     premium: {
         name: 'Premium',
-        multiplier: 8,
-        maxColors: 64,
-        description: '8x expansion - Maximum practical quality'
+        multiplier: 4,
+        maxColors: 32,
+        description: '4x expansion - Maximum practical quality'
     }
 };
 
 /**
  * Maximum allowed colors (diminishing returns beyond this)
  */
-export const MAX_COLORS = 64;
+export const MAX_COLORS = 32;
 
 export class EnhancedQuantizer {
     constructor() {
