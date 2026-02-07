@@ -525,6 +525,7 @@ export class TestGridGenerator {
         const lpi = s.lpi || 5000;
         const pulseWidth = s.pulseWidth || 80;
         const passes = s.passes || 1;
+        const power = s.power || 14;
 
         // XCS Structure for MOPA
         const extId = "GS009-CLASS-1";

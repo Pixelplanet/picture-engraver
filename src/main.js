@@ -4416,17 +4416,34 @@ function generateStandardGridXCS() {
     const deviceId = currentSettings.activeDevice || 'f2_ultra_uv';
     const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
 
-    const filename = isMopa ? 'default_test_grid_MOPA.xcs' : 'default_test_grid_UV.xcs';
-    const encodedFilename = encodeURIComponent(filename);
+    // Fixed settings as requested
+    const fixedSettings = {
+        lpiMin: 300,
+        lpiMax: 800,
+        freqMin: 40,
+        freqMax: 90,
+        cellSize: 5,
+        cellGap: 1,
+        // Use defaults for others (Speed 425, Power 70, Passes 1) which are set in TestGridGenerator constructor
+        // Explicitly ensuring speed is default if needed, but constructor handles it.
+    };
 
-    const a = document.createElement('a');
-    a.href = `/${encodedFilename}`; // Public root
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const generator = new TestGridGenerator(fixedSettings);
 
-    showToast(`Downloaded standard grid for ${isMopa ? 'MOPA' : 'UV'}`, 'success');
+    // Check if MOPA to alert user or handle differently?
+    // The previous logic had a separate file for MOPA. 
+    // generator.generateBusinessCardGrid() handles MOPA internally via generateMopaGrid if activeDevice is mopa.
+    // However, we just instantiated generator with fixed settings. 
+    // We need to make sure the generator knows about the device type if it relies on 'activeDevice' in settings.
+    // The TestGridGenerator constructor merges settings.
+
+    generator.settings.activeDevice = deviceId; // Ensure generator knows the device
+
+    const { xcs } = generator.generateBusinessCardGrid();
+
+    const filename = isMopa ? 'Standard_Test_Grid_MOPA.xcs' : 'Standard_Test_Grid_UV.xcs';
+
+    downloadTestGridXCS(xcs, filename);
 }
 
 function generateCustomGridXCS() {
