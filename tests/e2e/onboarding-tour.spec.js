@@ -131,4 +131,19 @@ test.describe('Onboarding Tour', () => {
         // Tour elements should NOT be present
         await expect(page.locator('.tour-tooltip')).toBeHidden();
     });
+    test('should keep welcome modal buttons visible on small screens', async ({ page }) => {
+        // Set a small viewport height
+        await page.setViewportSize({ width: 800, height: 400 });
+        await page.goto('/');
+
+        // Welcome Modal should be visible
+        await expect(page.locator('#welcomeModal')).toBeVisible();
+
+        // Buttons should be visible and clickable
+        const skipBtn = page.locator('#welcomeModal button:has-text("Accept & Skip")');
+        const startBtn = page.locator('#welcomeModal button:has-text("Accept & Start Tour")');
+
+        await expect(skipBtn).toBeInViewport();
+        await expect(startBtn).toBeInViewport();
+    });
 });

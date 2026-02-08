@@ -74,16 +74,18 @@ export class XCSGenerator {
             }
         });
 
-        // Add Focus Warning (always on top - zOrder higher than all layers)
-        const warningId = this.generateUUID();
-        const maxZOrder = displays.length + 100; // Ensure warning is always on top
-        const warningDisplay = this.createFocusWarning(warningId, size, maxZOrder);
-        displays.push(warningDisplay);
-        displaySettingsMap.set(warningId, { isWarning: true });
-
         // Top-level Structure matching Documentation
         const deviceId = this.settings.activeDevice || 'f2_ultra_uv';
         const isMopa = deviceId === 'f2_ultra_mopa' || deviceId === 'f2_ultra_base';
+
+        // Add Focus Warning (UV only)
+        if (!isMopa) {
+            const warningId = this.generateUUID();
+            const maxZOrder = displays.length + 100; // Ensure warning is always on top
+            const warningDisplay = this.createFocusWarning(warningId, size, maxZOrder);
+            displays.push(warningDisplay);
+            displaySettingsMap.set(warningId, { isWarning: true });
+        }
 
         // Device Identifiers
         // "GS009-CLASS-4" is definitely the UV module

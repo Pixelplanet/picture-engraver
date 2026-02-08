@@ -104,6 +104,26 @@ describe('XCSGenerator', () => {
 
             expect(customize.pulseWidth).toBe(80);
             expect(customize.processingLightSource).toBe('red');
+
+            // Verify NO focus warning layer for MOPA
+            const canvasObj = json.canvas[0];
+            const displays = canvasObj.displays;
+            const warningLayer = displays.find(d => d.text && d.text.includes('raise'));
+            expect(warningLayer).toBeUndefined();
+        });
+
+        it('should include focus warning for UV device', () => {
+            const uvGenerator = new XCSGenerator({
+                activeDevice: 'f2_ultra_uv'
+            });
+            const output = uvGenerator.generate({}, [], { width: 100, height: 100 });
+            const json = JSON.parse(output);
+
+            const canvasObj = json.canvas[0];
+            const displays = canvasObj.displays;
+            const warningLayer = displays.find(d => d.text && d.text.includes('raise'));
+            expect(warningLayer).toBeDefined();
+            expect(warningLayer.text).toContain('4mm');
         });
     });
 });

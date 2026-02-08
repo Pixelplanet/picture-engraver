@@ -157,7 +157,7 @@
         </div>
 
         <div class="export-actions">
-          <div class="focus-warning"
+          <div class="focus-warning focus-warning-block"
             style="color: #ff4d4f; background: rgba(255, 77, 79, 0.1); border: 1px solid rgba(255, 77, 79, 0.2); padding: 10px; border-radius: 8px; text-align: center; font-size: 0.95em;">
             <strong>⚠️ Important:</strong> Manually change focus <u style="font-weight: bold;">UP by 4mm</u> for best
             results!
@@ -301,7 +301,7 @@
                 <h3>Optimized Business Card Grid</h3>
                 <p>The perfect starting point for stainless steel color engraving.</p>
 
-                <div
+                <div class="focus-warning-block"
                   style="background-color: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin: 15px 0; border: 1px solid #ffeeba;">
                   <p style="margin: 0;">
                     <strong style="font-size: 1.1em; margin-right: 5px;">⚠️ Important:</strong>
@@ -310,12 +310,12 @@
                 </div>
 
                 <ul class="feature-list">
-                  <li><strong>Format:</strong> 85mm × 55mm (Business Card)</li>
-                  <li><strong>Density:</strong> 122 Test Points (14 × 9 Grid)</li>
-                  <li><strong>Frequency:</strong> 40kHz - 90kHz (Optimized range)</li>
-                  <li><strong>Lines/cm:</strong> 800 - 300 (High to Low)</li>
-                  <li><strong>Passes:</strong> 1</li>
-                  <li><strong>Smart QR:</strong> Located at bottom-right, scanned for auto-settings.</li>
+                  <li id="stdGridFormat"><strong>Format:</strong> 85mm × 55mm (Business Card)</li>
+                  <li id="stdGridPoints"><strong>Density:</strong> 122 Test Points (14 × 9 Grid)</li>
+                  <li id="stdGridVar1"><strong>Frequency:</strong> 40kHz - 90kHz (Optimized range)</li>
+                  <li id="stdGridVar2"><strong>Lines/cm:</strong> 800 - 300 (High to Low)</li>
+                  <li id="stdGridPasses"><strong>Passes:</strong> 1</li>
+                  <li id="stdGridQR"><strong>Smart QR:</strong> Located at bottom-right, scanned for auto-settings.</li>
                 </ul>
               </div>
 
@@ -339,7 +339,7 @@
               Create a custom calibration grid with your specific limits and dimensions.
             </p>
 
-            <div
+            <div class="focus-warning-block"
               style="background-color: #fff3cd; color: #856404; padding: 12px; border-radius: 6px; margin-bottom: 20px; border: 1px solid #ffeeba;">
               <p style="margin: 0;">
                 <strong style="font-size: 1.1em; margin-right: 5px;">⚠️ Important:</strong>
@@ -348,33 +348,56 @@
             </div>
 
             <div class="custom-grid-layout">
+
+              <!-- MOPA Control: Fixed Parameter Selection -->
+              <div class="setting-group" id="mopaFixedControl"
+                style="display:none; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px;">
+                <h3>Fixed Parameter</h3>
+                <select class="input" id="gridFixedParam">
+                  <option value="frequency">Fixed Frequency (Vary Speed & Power)</option>
+                  <option value="power">Fixed Power (Vary Speed & Freq)</option>
+                  <option value="speed">Fixed Speed (Vary Power & Freq)</option>
+                </select>
+              </div>
+
               <div class="grid-settings-columns">
-                <!-- Frequency Settings -->
-                <div class="setting-group">
-                  <h3>Frequency (kHz)</h3>
-                  <div class="setting-row">
-                    <label>Min</label>
-                    <input type="number" class="input" id="gridFreqMin" value="40" min="40" max="150">
+                <!-- Frequency Settings (Axis 1 or Fixed) -->
+                <div class="setting-group" id="groupFreq">
+                  <h3 id="gridHeaderFreq">Frequency (kHz)</h3>
+                  <!-- Range Inputs -->
+                  <div id="cntFreqRange">
+                    <div class="setting-row">
+                      <label>Min</label>
+                      <input type="number" class="input" id="gridFreqMin" value="40" min="1" max="4000">
+                    </div>
+                    <div class="setting-row">
+                      <label>Max</label>
+                      <input type="number" class="input" id="gridFreqMax" value="90" min="1" max="4000">
+                    </div>
                   </div>
-                  <div class="setting-row">
-                    <label>Max</label>
-                    <input type="number" class="input" id="gridFreqMax" value="90" min="40" max="150">
+                  <!-- Fixed Input (Hidden by default) -->
+                  <div class="setting-row" id="cntFreqFixed" style="display:none">
+                    <label>Value</label>
+                    <input type="number" class="input" id="gridFreqFixed" value="40" min="1" max="4000">
                   </div>
-                  <p class="setting-hint">Laser range: 40-150 kHz</p>
+                  <p class="setting-hint">Laser range: 1-4000 kHz</p>
                 </div>
 
-                <!-- LPC Settings -->
-                <div class="setting-group">
-                  <h3>Lines/cm (LPC)</h3>
-                  <div class="setting-row">
-                    <label>Min</label>
-                    <input type="number" class="input" id="gridLpiMin" value="300" min="100" max="5000">
+                <!-- LPC/Speed Settings (Axis 2 or Fixed) -->
+                <div class="setting-group" id="groupLpi">
+                  <h3 id="gridHeaderLPI">Lines/cm (LPC)</h3>
+                  <!-- Range Inputs -->
+                  <div id="cntLpiRange">
+                    <div class="setting-row">
+                      <label>Min</label>
+                      <input type="number" class="input" id="gridLpiMin" value="300" min="10" max="5000">
+                    </div>
+                    <div class="setting-row">
+                      <label>Max</label>
+                      <input type="number" class="input" id="gridLpiMax" value="800" min="10" max="5000">
+                    </div>
                   </div>
-                  <div class="setting-row">
-                    <label>Max</label>
-                    <input type="number" class="input" id="gridLpiMax" value="800" min="100" max="5000">
-                  </div>
-
+                  <!-- Fixed Speed Input is in Engraving section, we might move it here or hide this group -->
                 </div>
 
                 <!-- Grid Layout -->
@@ -389,21 +412,57 @@
                     <label>Cell Gap (mm)</label>
                     <input type="number" class="input" id="gridCellGap" value="1" min="0" max="5" step="0.5">
                   </div>
-                  <p class="setting-hint">Range: 0-5 mm</p>
                 </div>
 
-                <!-- Engraving Settings -->
-                <div class="setting-group">
-                  <h3>Engraving</h3>
-                  <div class="setting-row">
-                    <label>Power (%)</label>
-                    <input type="number" class="input" id="gridPower" value="70" min="1" max="100">
+                <!-- Engraving / Power / Speed Settings -->
+                <div class="setting-group" id="groupEngraving">
+                  <h3 id="gridHeaderEngraving">Parameters</h3>
+
+                  <!-- Power -->
+                  <div id="subGroupPower">
+                    <!-- Single -->
+                    <div class="setting-row" id="cntPowerFixed">
+                      <label id="gridLabelPower">Power (%)</label>
+                      <input type="number" class="input" id="gridPower" value="70" min="1" max="100">
+                    </div>
+                    <!-- Range (Hidden default) -->
+                    <div id="cntPowerRange" style="display:none">
+                      <label style="font-size:0.9em; color:#666; display:block; margin-bottom:5px;">Power Range
+                        (%)</label>
+                      <div class="setting-row">
+                        <label>Min</label>
+                        <input type="number" class="input" id="gridPowerMin" value="10" min="1" max="100">
+                      </div>
+                      <div class="setting-row">
+                        <label>Max</label>
+                        <input type="number" class="input" id="gridPowerMax" value="20" min="1" max="100">
+                      </div>
+                    </div>
                   </div>
-                  <div class="setting-row">
-                    <label>Speed (mm/s)</label>
-                    <input type="number" class="input" id="gridSpeed" value="425" min="1" max="1000">
+
+                  <!-- Speed -->
+                  <div id="subGroupSpeed" style="margin-top:10px;">
+                    <!-- Single -->
+                    <div class="setting-row" id="cntSpeedFixed">
+                      <label id="gridLabelSpeed">Speed (mm/s)</label>
+                      <input type="number" class="input" id="gridSpeed" value="425" min="1" max="4000">
+                    </div>
+                    <!-- Range (Hidden default) -->
+                    <div id="cntSpeedRange" style="display:none">
+                      <label style="font-size:0.9em; color:#666; display:block; margin-bottom:5px;">Speed Range
+                        (mm/s)</label>
+                      <div class="setting-row">
+                        <label>Min</label>
+                        <input type="number" class="input" id="gridSpeedMin" value="200" min="1" max="4000">
+                      </div>
+                      <div class="setting-row">
+                        <label>Max</label>
+                        <input type="number" class="input" id="gridSpeedMax" value="1500" min="1" max="4000">
+                      </div>
+                    </div>
                   </div>
-                  <div class="setting-row">
+
+                  <div class="setting-row" style="margin-top:15px; border-top:1px solid #eee; padding-top:10px;">
                     <label>Passes</label>
                     <input type="number" class="input" id="gridPasses" value="1" min="1" max="10">
                   </div>

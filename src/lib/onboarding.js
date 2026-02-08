@@ -59,18 +59,24 @@ export class OnboardingManager {
         const modalHtml = `
             <div class="modal active" id="mobileWarningModal" style="z-index: 10000; background: rgba(0,0,0,0.9);">
                 <div class="modal-content welcome-content" style="max-width: 400px; border: 1px solid #ff4444;">
-                    <div class="welcome-icon">📱</div>
-                    <h2 style="margin-bottom: 15px; color: #ff4444;">Desktop Required</h2>
+                    <div class="welcome-header">
+                        <div class="welcome-icon">📱</div>
+                        <h2 style="margin: 0; color: #ff4444;">Desktop Required</h2>
+                    </div>
                     
-                    <p style="margin-bottom: 20px; line-height: 1.6;">
-                        Picture Engraver is a powerful image processing tool designed for <strong>desktop computers</strong>.
-                    </p>
-                     <p style="margin-bottom: 25px; line-height: 1.6; font-size: 0.9em; color: #aaa;">
-                        The interface and canvas controls are not optimized for touch screens or small displays.
-                    </p>
+                    <div class="welcome-body" style="text-align: center;">
+                        <p style="margin-bottom: 15px; line-height: 1.6;">
+                            Picture Engraver is a powerful image processing tool designed for <strong>desktop computers</strong>.
+                        </p>
+                         <p style="margin-bottom: 15px; line-height: 1.6; font-size: 0.9em; color: #aaa;">
+                            The interface and canvas controls are not optimized for touch screens or small displays.
+                        </p>
+                    </div>
 
-                    <div class="modal-actions" style="justify-content: center;">
-                        <button class="btn btn-secondary" onclick="document.getElementById('mobileWarningModal').remove();">I Understand, Continue Anyway</button>
+                    <div class="welcome-footer">
+                        <div class="modal-actions" style="justify-content: center;">
+                            <button class="btn btn-secondary" onclick="document.getElementById('mobileWarningModal').remove();">I Understand, Continue Anyway</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -109,37 +115,43 @@ export class OnboardingManager {
         const modalHtml = `
             <div class="modal active" id="welcomeModal" style="z-index: 10000;">
                     <div class="welcome-content" style="max-width: 550px;">
-                        <h2 style="margin-bottom: 20px;">Welcome to Picture Engraver!</h2>
+                        <div class="welcome-header">
+                            <h2 style="margin: 0;">Welcome to Picture Engraver!</h2>
+                        </div>
                     
-                        <div class="app-info-notice" style="text-align: left; background: rgba(88, 166, 255, 0.05); border: 1px solid var(--border-primary); padding: 20px; border-radius: 8px; margin-bottom: 15px;">
-                            <h4 style="margin-top: 0; color: var(--accent-primary); margin-bottom: 8px;">🚀 About this App</h4>
-                            <p style="margin-bottom: 15px; font-size: 0.95rem; line-height: 1.5;">
-                            This tool automates the creation of multi-colored laser engravings by converting images into calibrated vector layers. 
-                            By using your own test-grid results, it perfectly tunes Frequency and LPC settings for every color in your photo.
-                        </p>
-                        
-                        <h4 style="margin-top: 20px; color: var(--accent-danger); margin-bottom: 8px;">⚠️ Hardware Compatibility</h4>
-                        <p style="margin-bottom: 0; font-size: 0.95rem; line-height: 1.5; border-left: 3px solid var(--accent-danger); padding-left: 12px;">
-                            This application is currently optimized <strong>exclusively for the XTool F2 Ultra UV</strong>. 
-                            It will not function correctly with other laser models at this time.
+                        <div class="welcome-body" style="text-align: left;">
+                            <div class="app-info-notice" style="background: rgba(88, 166, 255, 0.05); border: 1px solid var(--border-primary); padding: 20px; border-radius: 8px; margin-bottom: 15px;">
+                                <h4 style="margin-top: 0; color: var(--accent-primary); margin-bottom: 8px;">🚀 About this App</h4>
+                                <p style="margin-bottom: 15px; font-size: 0.95rem; line-height: 1.5;">
+                                This tool automates the creation of multi-colored laser engravings by converting images into calibrated vector layers. 
+                                By using your own test-grid results, it perfectly tunes Frequency and LPC settings for every color in your photo.
+                            </p>
+                            
+                            <h4 style="margin-top: 20px; color: var(--accent-danger); margin-bottom: 8px;">⚠️ Hardware Compatibility</h4>
+                            <p style="margin-bottom: 0; font-size: 0.95rem; line-height: 1.5; border-left: 3px solid var(--accent-danger); padding-left: 12px;">
+                                This application is currently optimized <strong>exclusively for the XTool F2 Ultra UV</strong>. 
+                                It will not function correctly with other laser models at this time.
+                            </p>
+                        </div>
+
+                        <div class="privacy-notice" style="text-align: left; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-primary); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                            <h4 style="margin-top: 0; font-size: 0.9rem; color: var(--text-secondary);">🍪 Privacy & Storage</h4>
+                            <p style="margin-bottom: 0; font-size: 0.85rem; color: var(--text-secondary);">
+                                We use Local Storage to save your settings. All processing happens 100% locally in your browser.
+                                Your images never leave your device.
+                            </p>
+                        </div>
+
+                        <p style="margin-bottom: 5px; font-weight: 500; text-align: center;">
+                            Ready to learn how to create perfect engravings?
                         </p>
                     </div>
 
-                    <div class="privacy-notice" style="text-align: left; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-primary); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                        <h4 style="margin-top: 0; font-size: 0.9rem; color: var(--text-secondary);">🍪 Privacy & Storage</h4>
-                        <p style="margin-bottom: 0; font-size: 0.85rem; color: var(--text-secondary);">
-                            We use Local Storage to save your settings. All processing happens 100% locally in your browser.
-                            Your images never leave your device.
-                        </p>
-                    </div>
-
-                    <p style="margin-bottom: 25px; font-weight: 500;">
-                        Ready to learn how to create perfect engravings?
-                    </p>
-
-                    <div class="modal-actions" style="justify-content: center; gap: 15px;">
-                        <button class="btn btn-secondary" onclick="window.onboarding.skipOnboarding()">Accept & Skip</button>
-                        <button class="btn btn-primary" onclick="window.onboarding.startMainTour()">Accept & Start Tour</button>
+                    <div class="welcome-footer">
+                        <div class="modal-actions" style="justify-content: center; gap: 15px;">
+                            <button class="btn btn-secondary" onclick="window.onboarding.skipOnboarding()">Accept & Skip</button>
+                            <button class="btn btn-primary" onclick="window.onboarding.startMainTour()">Accept & Start Tour</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -161,24 +173,31 @@ export class OnboardingManager {
         const modalHtml = `
             <div class="modal active" id="testGridInfoModal" style="z-index: 10002;">
                 <div class="modal-content welcome-content" style="max-width: 600px;">
-                    <div class="welcome-icon">📏</div>
-                    <h2>Calibration Workflow</h2>
-                    <p>Optimizing colors for stainless steel requires precise settings.</p>
-                    
-                    <div style="text-align: left; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-primary); color: var(--text-primary); padding: 20px; border-radius: 8px; margin: 20px 0;">
-                        <ol style="margin: 0; padding-left: 20px; line-height: 1.8;">
-                            <li><strong>Generate:</strong> Use the <strong>Standard Test Grid</strong> (covers most needs) or configure a custom range. Click <em>"Download XCS"</em>.</li>
-                            <li><strong>Engrave:</strong> Run this file on your laser machine on the target material.</li>
-                            <li><strong>Analyze:</strong> Take a clear photo of the result and upload it in the <strong>"Analyze Grid"</strong> tab.</li>
-                        </ol>
+                    <div class="welcome-header">
+                        <div class="welcome-icon" style="margin-bottom: 10px;">📏</div>
+                        <h2 style="margin: 0;">Calibration Workflow</h2>
                     </div>
                     
-                    <p style="font-size: 0.9em; color: #666;">
-                        The system will then auto-map your image colors to these proven settings!
-                    </p>
+                    <div class="welcome-body" style="padding-top: 10px;">
+                        <p>Optimizing colors for stainless steel requires precise settings.</p>
+                        
+                        <div style="text-align: left; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-primary); color: var(--text-primary); padding: 20px; border-radius: 8px; margin: 20px 0;">
+                            <ol style="margin: 0; padding-left: 20px; line-height: 1.8;">
+                                <li><strong>Generate:</strong> Use the <strong>Standard Test Grid</strong> (covers most needs) or configure a custom range. Click <em>"Download XCS"</em>.</li>
+                                <li><strong>Engrave:</strong> Run this file on your laser machine on the target material.</li>
+                                <li><strong>Analyze:</strong> Take a clear photo of the result and upload it in the <strong>"Analyze Grid"</strong> tab.</li>
+                            </ol>
+                        </div>
+                        
+                        <p style="font-size: 0.9em; color: #666;">
+                            The system will then auto-map your image colors to these proven settings!
+                        </p>
+                    </div>
 
-                    <div class="modal-actions" style="justify-content: center;">
-                        <button class="btn btn-primary" onclick="document.getElementById('testGridInfoModal').remove(); window.onboarding.markTestGridCompleted();">Got it</button>
+                    <div class="welcome-footer">
+                        <div class="modal-actions" style="justify-content: center;">
+                            <button class="btn btn-primary" onclick="document.getElementById('testGridInfoModal').remove(); window.onboarding.markTestGridCompleted();">Got it</button>
+                        </div>
                     </div>
                 </div>
             </div>

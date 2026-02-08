@@ -8,6 +8,8 @@ import QRCode from 'qrcode';
 
 export class TestGridGenerator {
     constructor(settings = {}) {
+        const isMopa = settings.activeDevice && (settings.activeDevice.includes('mopa') || settings.activeDevice.includes('base'));
+
         this.settings = {
             // Business card dimensions
             cardWidth: 85,
@@ -16,16 +18,22 @@ export class TestGridGenerator {
             // Grid parameters
             lpiMin: 500,
             lpiMax: 2000,
-
+            lpi: isMopa ? 3000 : undefined, // Fixed LPC for MOPA default
 
             freqMin: 40,
-            freqMax: 90,
+            freqMax: isMopa ? 40 : 90, // Fixed freq for MOPA default (Power grid)
 
             // Engraving settings
             power: 70,
+            powerMin: isMopa ? 14 : undefined,
+            powerMax: isMopa ? 18 : undefined,
+
             speed: 425,
-            passes: 1,
-            crossHatch: true,
+            speedMin: isMopa ? 400 : undefined,
+            speedMax: isMopa ? 800 : undefined,
+
+            passes: isMopa ? 1 : 1,
+            crossHatch: !isMopa, // False for MOPA
 
             // QR code settings
             qrPower: 75,
@@ -119,12 +127,13 @@ export class TestGridGenerator {
             dpi: lpi,
             power,
             repeat: passes,
-            bitmapScanMode: this.settings.crossHatch ? 'crossMode' : 'lineMode',
+            bitmapScanMode: this.settings.crossHatch ? 'crossMode' : 'zMode', // MOPA uses zMode (Bi-directional)
             frequency,
             crossAngle: this.settings.crossHatch,
             scanAngle: 0,
             angleType: 2,
-            ...extraParams // Inject extra params like pulseWidth, mopaFrequency, processingLightSource
+            processingLightSource: 'red', // Per user confirmation for MOPA IR
+            ...extraParams // Inject extra params like pulseWidth, mopaFrequency
         };
 
         return {
@@ -147,17 +156,46 @@ export class TestGridGenerator {
     encodeSettings(numCols, numRows) {
         const s = this.settings;
         const deviceId = this.settings.activeDevice || 'f2_ultra_uv';
-        const type = (deviceId.includes('mopa') || deviceId.includes('base')) ? 'mopa' : 'uv';
+        const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
+        const type = isMopa ? 'mopa' : 'uv';
 
-        // Use very short keys to reduce QR code density
-        return JSON.stringify({
-            v: 1,
-            l: [s.lpiMax, s.lpiMin, numCols],
-            f: [s.freqMin, s.freqMax, numRows],
-            p: s.power,
-            s: s.speed,
-            t: type
-        });
+        if (isMopa) {
+            // MOPA Mapping:
+            // X-Axis (l): Speed
+            // Y-Axis (f): Varies. If Freq is fixed, we use Power. If Freq varies, we use Freq.
+
+            const freqFixed = (s.freqMin === s.freqMax);
+            let yMin = s.freqMin || 200;
+            let yMax = s.freqMax || 1200;
+
+            if (freqFixed) {
+                yMin = s.powerMin || 14;
+                yMax = s.powerMax || 18;
+            }
+
+            return JSON.stringify({
+                v: 2, // Version bump for MOPA support
+                l: [s.speedMin || 400, s.speedMax || 800, numCols], // X-Axis (Speed)
+                f: [yMin, yMax, numRows], // Y-Axis (Power or Freq)
+                p: s.power || 14,
+                d: s.lpi || 3000, // Density (LPC)
+                pw: s.pulseWidth || 80,
+                t: type
+            });
+        } else {
+            // UV Mapping:
+            // X-Axis (l): LPI
+            // Y-Axis (f): Freq
+            // Fixed: Power (p), Speed (s)
+            return JSON.stringify({
+                v: 1,
+                l: [s.lpiMax, s.lpiMin, numCols],
+                f: [s.freqMin, s.freqMax, numRows],
+                p: s.power,
+                s: s.speed,
+                t: type
+            });
+        }
     }
 
     // Analayze Image for QR Code
@@ -513,58 +551,152 @@ export class TestGridGenerator {
         const displaySettings = [];
         const layerData = {};
 
-        // MOPA Grid Configuration
-        // X-Axis: Speed
-        // Y-Axis: Frequency
-        const speedMin = s.speedMin || 200;
-        const speedMax = s.speedMax || 1200;
-        const freqMin = s.freqMin || 200;
-        const freqMax = s.freqMax || 1200;
+        // Check if we are doing Speed vs Power (standard request) or Speed vs Freq
+        let isPowerGrid = false;
 
-        // Constants (User Confirmed: Power 14, Pulse 80, LPC 5000 LPC)
-        const lpi = s.lpi || 5000;
+        // If user explicitly provides freq min/max that are different, use Freq.
+        // Otherwise, if power min/max differ (or are default), use Power.
+        if (s.freqMin !== undefined && s.freqMax !== undefined && s.freqMin !== s.freqMax) {
+            isPowerGrid = false;
+        } else {
+            // Default to Power grid as per user request (14-18%)
+            isPowerGrid = true;
+        }
+
+        const speedMin = s.speedMin || 400;
+        const speedMax = s.speedMax || 800;
+
+        let freqMin, freqMax, powerMin, powerMax;
+
+        if (isPowerGrid) {
+            // Power on Y-Axis
+            powerMin = s.powerMin || 14;
+            powerMax = s.powerMax || 18;
+            // Fixed Frequency
+            freqMin = s.freqMin || 40; // Default MOPA freq
+            freqMax = freqMin;
+        } else {
+            // Frequency on Y-Axis
+            freqMin = s.freqMin || 200;
+            freqMax = s.freqMax || 1200;
+            // Fixed Power
+            powerMin = s.power || 14;
+            powerMax = powerMin;
+        }
+
+        // Constants (User Confirmed: Pulse 80, 3000 LPC)
+        const lpi = s.lpi || 3000;
         const pulseWidth = s.pulseWidth || 80;
         const passes = s.passes || 1;
-        const power = s.power || 14;
+        // const power = s.power || 14; // Derived inside loop
+
+        // ... existing setup ... (removed duplication of loop logic for clarity, will rewrite loop)
 
         // XCS Structure for MOPA
-        const extId = "GS009-CLASS-1";
-        const extName = "F2 Ultra (MOPA)";
-        const lightSource = "red"; // MOPA IR
+        const extId = "GS004-CLASS-4";
+        const extName = "F2 Ultra"; // Found in user file
+        const lightSource = "infrared"; // MOPA is typically IR
+
+        // FIXED QR CODE LOGIC (17mm x 17mm with 1mm gap)
+        const QR_SIZE_MM = 17;
+        const QR_GAP_MM = 1;
 
         // Layout Config
-        const cols = Math.floor((s.cardWidth - (s.margin * 2)) / (s.cellSize + s.cellGap));
-        const rows = Math.floor((s.cardHeight - (s.margin * 2)) / (s.cellSize + s.cellGap));
+        const availableWidth = s.cardWidth - (s.margin * 2);
+        const availableHeight = s.cardHeight - (s.margin * 2);
+        const totalCellSize = s.cellSize + s.cellGap;
+
+        let numCols = Math.floor((availableWidth + s.cellGap) / totalCellSize);
+        let numRows = Math.floor((availableHeight + s.cellGap) / totalCellSize);
+
+        if (numCols < 1) numCols = 1;
+        if (numRows < 1) numRows = 1;
+
+        // Effective Layout
+        const effectiveGridW = numCols * s.cellSize + (numCols - 1) * s.cellGap;
+        const effectiveGridH = numRows * s.cellSize + (numRows - 1) * s.cellGap;
+
+        // Centering
+        const workspaceSize = 200;
+        const cardOffsetX = (workspaceSize - s.cardWidth) / 2;
+        const cardOffsetY = (workspaceSize - s.cardHeight) / 2;
+        const contentOffsetX = s.margin + (availableWidth - effectiveGridW) / 2;
+        const contentOffsetY = s.margin + (availableHeight - effectiveGridH) / 2;
+        const globalOffsetX = cardOffsetX + contentOffsetX;
+        const globalOffsetY = cardOffsetY + contentOffsetY;
+
+        // QR Quantized Exclusion Logic
+        const qrSpaceW = QR_SIZE_MM + QR_GAP_MM;
+        const qrSpaceH = QR_SIZE_MM + QR_GAP_MM;
+        const colPitch = s.cellSize + s.cellGap;
+        const rowPitch = s.cellSize + s.cellGap;
+
+        const colsReserved = Math.ceil(qrSpaceW / colPitch);
+        const rowsReserved = Math.ceil(qrSpaceH / rowPitch);
+        const excStartCol = numCols - colsReserved;
+        const excStartRow = numRows - rowsReserved;
+
+        const qrX = globalOffsetX + effectiveGridW - QR_SIZE_MM;
+        const qrY = globalOffsetY + effectiveGridH - QR_SIZE_MM;
 
         // Calculate steps
-        const speedStep = cols > 1 ? (speedMax - speedMin) / (cols - 1) : 0;
-        const freqStep = rows > 1 ? (freqMax - freqMin) / (rows - 1) : 0;
+        const speedStep = numCols > 1 ? (speedMax - speedMin) / (numCols - 1) : 0;
+
+        // Y-Axis Step (Power or Freq)
+        const yMin = isPowerGrid ? powerMin : freqMin;
+        const yMax = isPowerGrid ? powerMax : freqMax;
+
+        const yStep = numRows > 1 ? (yMax - yMin) / (numRows - 1) : 0;
+
+        // Generate Axis Values for Metadata
+        const colValues = [];
+        for (let c = 0; c < numCols; c++) {
+            colValues.push(Math.round(speedMin + (c * speedStep)));
+        }
+
+        const rowValues = [];
+        for (let r = 0; r < numRows; r++) {
+            rowValues.push(Math.round(yMin + (r * yStep)));
+        }
 
         let zOrder = 1;
+        let cellCount = 0;
 
-        // Iterate Rows (Frequency: Min to Max, top to bottom)
-        for (let r = 0; r < rows; r++) {
-            const rowFreq = Math.round(freqMin + (r * freqStep));
+        // Iterate Rows (Y Axis: Power or Frequency)
+        for (let r = 0; r < numRows; r++) {
+            const yVal = Math.round(yMin + (r * yStep));
+
+            // Determine Row Settings
+            let rowFreq = isPowerGrid ? freqMin : yVal;
+            let rowPower = isPowerGrid ? yVal : powerMin;
 
             // Iterate Cols (Speed: Min to Max, left to right)
-            for (let c = 0; c < cols; c++) {
+            for (let c = 0; c < numCols; c++) {
+
+                // Exclusion
+                if (c >= excStartCol && r >= excStartRow) {
+                    continue;
+                }
+
                 const colSpeed = Math.round(speedMin + (c * speedStep));
 
                 // ID & Position
                 const id = this.generateUUID();
-                const x = s.margin + (c * (s.cellSize + s.cellGap));
-                const y = s.margin + (r * (s.cellSize + s.cellGap));
+                const x = globalOffsetX + c * colPitch;
+                const y = globalOffsetY + r * rowPitch;
 
                 // Color Helper (Gray Gradient)
-                const grayVal = Math.floor(255 - ((c / cols) * 200));
+                const grayVal = Math.floor(255 - ((c / numCols) * 200));
                 const colorHex = this.colorToHex(grayVal, grayVal, grayVal);
                 const colorInt = (grayVal << 16) | (grayVal << 8) | grayVal;
 
                 // Create Path
                 const path = `M${x} ${y} L${x + s.cellSize} ${y} L${x + s.cellSize} ${y + s.cellSize} L${x} ${y + s.cellSize} Z`;
 
-                // Display Name: "S{speed} F{freq}"
-                const displayName = `S${colSpeed} F${rowFreq}`;
+                // Display Name: "S{speed} F{freq}" or "S{speed} P{power}"
+                const displayName = isPowerGrid
+                    ? `S${colSpeed} P${rowPower}%`
+                    : `S${colSpeed} F${rowFreq}k`;
 
                 const display = this.createPathDisplay(id, displayName, colorHex, colorInt, x, y, s.cellSize, s.cellSize, zOrder, path);
                 displays.push(display);
@@ -573,16 +705,38 @@ export class TestGridGenerator {
                 const extraParams = {
                     pulseWidth: pulseWidth,
                     mopaFrequency: rowFreq, // Specific for MOPA
-                    processingLightSource: lightSource
                 };
 
                 // Pass rowFreq as standard frequency too, though MOPA might use mopaFrequency
-                const settingsStr = this.createDisplaySettings(rowFreq, lpi, power, colSpeed, passes, extraParams);
+                const settingsStr = this.createDisplaySettings(rowFreq, lpi, rowPower, colSpeed, passes, extraParams);
 
                 displaySettings.push([id, settingsStr]);
                 layerData[colorHex] = { name: displayName, order: zOrder++, visible: true };
+                cellCount++;
             }
         }
+
+        // Add QR Code
+        const qrData = this.encodeSettings(numCols, numRows);
+        const qrPath = this.generateQRPath(qrData, 0, 0, QR_SIZE_MM);
+        const qrDisplayId = this.generateUUID();
+        const qrDisplay = this.createPathDisplay(
+            qrDisplayId, 'Settings QR Code',
+            '#000000', 0,
+            qrX, qrY, QR_SIZE_MM, QR_SIZE_MM,
+            zOrder, qrPath,
+            true
+        );
+
+        displays.push(qrDisplay);
+        // QR Settings: Use default engraving for QR (e.g. 100 speed, 75 power? No, use s.qr*)
+        const qrPwr = s.qrPower || 75;
+        const qrSpd = s.qrSpeed || 100;
+        const qrFreq = s.qrFrequency || 45;
+        const qrL = s.qrLpi || 500;
+
+        displaySettings.push([qrDisplayId, this.createDisplaySettings(qrFreq, qrL, qrPwr, qrSpd, 1, { processingLightSource: 'red', mopaFrequency: qrFreq })]);
+        layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
 
         const xcs = {
             canvasId,
@@ -620,13 +774,27 @@ export class TestGridGenerator {
             gridInfo: {
                 width: s.cardWidth,
                 height: s.cardHeight,
-                numCols: cols,
-                numRows: rows,
-                totalCells: cols * rows,
-                qrData: "{}",
-                qrSize: 0,
-                qrX: 0,
-                qrY: 0
+                numCols: numCols,
+                numRows: numRows,
+                totalCells: cellCount,
+                qrData: qrData,
+                qrSize: QR_SIZE_MM,
+                qrX: qrX,
+                qrY: qrY,
+                gapX: s.cellGap,
+                gapY: s.cellGap,
+                effectiveGridW,
+                effectiveGridH,
+                globalOffsetX,
+                globalOffsetY,
+                excStartCol,
+
+                excStartRow,
+                // MOPA Specific Metadata (reusing lpi/freq names for Analyzer compatibility)
+                lpiValues: colValues,
+                freqValues: rowValues,
+                xAxisLabel: 'Speed (mm/s)',
+                yAxisLabel: isPowerGrid ? 'Power (%)' : 'Frequency (kHz)'
             }
         };
     }

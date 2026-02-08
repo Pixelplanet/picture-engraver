@@ -43,7 +43,7 @@ export const DEVICE_PROFILES = {
         settings: {
             // Engraving defaults
             power: 14,
-            speed: 1000,
+            speed: 600,
             passes: 1,
             crossHatch: false,
             pulseWidth: 80,
@@ -51,13 +51,13 @@ export const DEVICE_PROFILES = {
             // Grid Ranges (Speed vs Frequency)
             freqMin: 200,
             freqMax: 1200,
-            speedMin: 200,
-            speedMax: 1200,
+            speedMin: 400,
+            speedMax: 800,
 
             // Lines/cm (LPC) - High Density
             lpiMin: 300,
             lpiMax: 5000,
-            lpi: 5000,
+            lpi: 3000,
 
             // Standard Color Settings (MOPA Defaults)
             blackFreq: 30,
@@ -240,28 +240,41 @@ export const SettingsStorage = {
             // 1. Get User Maps from Storage
             let userMaps = [];
             const stored = localStorage.getItem(STORAGE_KEY + '_maps');
+            const activeDevice = this.load().activeDevice || DEFAULT_PROFILE_ID;
+
             if (stored) {
                 try {
                     const parsed = JSON.parse(stored);
-                    // Filter out any system maps that might have been accidentally saved previously
-                    userMaps = parsed.filter(m => !m.isSystem && !m.id.startsWith('system_default_'));
 
-                    // If we filtered anything out (meaning we had Bloat), let's save the cleaned version immediately
-                    if (userMaps.length < parsed.length) {
-                        console.log('Cleaning up system defaults from local storage...');
-                        localStorage.setItem(STORAGE_KEY + '_maps', JSON.stringify(userMaps));
-                    }
+                    // Filter out system placeholders AND filter by active device
+                    // Migration: If no deviceType, assume UV (default)
+                    userMaps = parsed.filter(m => {
+                        // Skip system placeholders in storage
+                        if (m.isSystem || m.id.startsWith('system_default_')) return false;
+
+                        // Check Device Type Compatibility
+                        const mapDevice = m.deviceType || 'f2_ultra_uv';
+                        return mapDevice === activeDevice;
+                    });
+
+                    // Cleanup system bloat if detected (optional, handled below mostly)
                 } catch (e) {
                     console.error('Error parsing user maps:', e);
                 }
             }
 
             // 2. Mark System Defaults
-            const systemMaps = SYSTEM_DEFAULTS.map(m => ({
-                ...m,
-                isSystem: true,
-                active: true // System defaults always available (activation handled by UI logic mostly, but good to have)
-            }));
+            // Only include system defaults relevant to current device
+            const systemMaps = SYSTEM_DEFAULTS
+                .filter(m => {
+                    const mapDevice = m.deviceType || 'f2_ultra_uv';
+                    return mapDevice === activeDevice;
+                })
+                .map(m => ({
+                    ...m,
+                    isSystem: true,
+                    active: true
+                }));
 
             // 3. Return Combined List
             return [...systemMaps, ...userMaps];
@@ -322,6 +335,7 @@ export const SettingsStorage = {
                 name: name || `Test Grid ${new Date().toLocaleDateString()}`,
                 active: true, // Auto-activate new maps
                 createdAt: new Date().toISOString(),
+                deviceType: data.deviceType || this.load().activeDevice || 'f2_ultra_uv', // Tag with provided device or active device
                 data: data // The actual map data (entries, ranges, etc)
             };
 
@@ -462,6 +476,11 @@ export const SettingsStorage = {
                 importedMap.importedAt = new Date().toISOString();
                 importedMap.active = true;
                 importedMap.isSystem = false; // Ensure imported maps are not system
+
+                // If imported map lacks deviceType, default to current active device
+                if (!importedMap.deviceType) {
+                    importedMap.deviceType = this.load().activeDevice || 'f2_ultra_uv';
+                }
 
                 userMaps.push(importedMap);
                 addedCount++;

@@ -3,13 +3,58 @@
 /* Welcome Modal */
 .welcome-content {
     text-align: center;
-    max-width: 700px;
+    max-width: 600px;
     /* Increased from 500px */
-    padding: 40px;
     background: var(--bg-secondary, #2c2c2e);
     color: var(--text-primary, #ffffff);
     border: 1px solid var(--border-primary, #454545);
     border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    max-height: 85vh;
+    /* Ensure modal fits within viewport */
+    padding: 0;
+    /* Remove padding from container, move to children */
+    overflow: hidden;
+    /* Prevent container scroll */
+}
+
+/* Scrollable Content Area */
+.welcome-body {
+    flex: 1;
+    /* Take remaining space */
+    overflow-y: auto;
+    /* Scrollable if content overflows */
+    padding: 20px 40px;
+    /* Internal padding */
+}
+
+/* Fixed Header/Footer */
+.welcome-header {
+    padding: 30px 40px 10px 40px;
+    flex-shrink: 0;
+}
+
+.welcome-footer {
+    padding: 20px 40px 30px 40px;
+    flex-shrink: 0;
+    /* Optional divider */
+    /* border-top: 1px solid var(--border-primary); */
+}
+
+/* Adjustments for small screens */
+@media (max-width: 600px) {
+    .welcome-content {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    .welcome-body,
+    .welcome-header,
+    .welcome-footer {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
 }
 
 .welcome-icon {
