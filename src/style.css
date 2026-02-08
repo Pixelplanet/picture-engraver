@@ -1025,11 +1025,15 @@ body {
 
 /* Modal Tabs */
 .modal-tabs {
+  position: sticky;
+  top: calc(-1 * var(--spacing-md));
+  z-index: 10;
+  background: var(--bg-secondary);
   display: flex;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
+  margin: calc(-1 * var(--spacing-md)) calc(-1 * var(--spacing-md)) var(--spacing-md) calc(-1 * var(--spacing-md));
+  padding: var(--spacing-md) var(--spacing-md) var(--spacing-xs) var(--spacing-md);
   border-bottom: 1px solid var(--border-primary);
-  padding-bottom: var(--spacing-xs);
 }
 
 .modal-tab {
@@ -2045,4 +2049,171 @@ body {
   background: rgba(244, 67, 54, 0.15);
   border-color: #f44336;
   color: #f44336;
+}
+
+/* ===================================
+   Custom MOPA Grid Layout
+   =================================== */
+
+.custom-grid-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .custom-grid-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.custom-grid-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+
+.custom-grid-settings-panel .input {
+  padding: 6px 10px;
+  font-size: var(--font-size-xs);
+  height: 30px;
+}
+
+.custom-grid-settings-panel .select {
+  padding: 4px 30px 4px 10px;
+  font-size: var(--font-size-xs);
+  height: 30px;
+  background-position: right 8px center;
+}
+
+.custom-grid-preview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-width: 0;
+  position: sticky;
+  top: var(--spacing-md);
+}
+
+.grid-settings-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.setting-group h3 {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-primary);
+  padding-bottom: 4px;
+}
+
+/* Range Inputs Side-by-Side */
+.range-inputs-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* More compact rows for this panel */
+.custom-grid-settings-panel .setting-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.custom-grid-settings-panel .setting-row label {
+  margin-bottom: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.custom-grid-settings-panel .setting-row .input {
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.custom-grid-settings-panel .setting-row .checkbox {
+  margin: 0;
+  width: 18px;
+  height: 18px;
+}
+
+.setting-row label {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+}
+
+.range-label {
+  grid-column: 1 / -1;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+  font-weight: 500;
+}
+
+/* Info Bar */
+.grid-info {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+}
+
+.grid-info p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.grid-info strong {
+  color: var(--text-primary);
+}
+
+/* Preview Canvas Container */
+.grid-preview {
+  flex: 1;
+  background: #0d1117;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  min-height: 200px;
+}
+
+.grid-preview canvas {
+  max-width: 95%;
+  max-height: 95%;
+  object-fit: contain;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Modal Footer Custom */
+.modal-footer-custom {
+  padding-top: var(--spacing-sm);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: auto;
 }

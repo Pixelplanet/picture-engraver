@@ -160,27 +160,31 @@ export class TestGridGenerator {
         const type = isMopa ? 'mopa' : 'uv';
 
         if (isMopa) {
-            // MOPA Mapping:
-            // X-Axis (l): Speed
-            // Y-Axis (f): Varies. If Freq is fixed, we use Power. If Freq varies, we use Freq.
+            // MOPA Flexible Encoding (v3)
+            const mode = s.gridMode || 'frequency';
 
-            const freqFixed = (s.freqMin === s.freqMax);
-            let yMin = s.freqMin || 200;
-            let yMax = s.freqMax || 1200;
+            // Helper to get Range or Fixed
+            const getRange = (minKey, maxKey, fixKey, def) => {
+                if (s[minKey] !== undefined && s[maxKey] !== undefined) return [s[minKey], s[maxKey]];
+                if (s[fixKey] !== undefined) return [s[fixKey], s[fixKey]];
+                return [def, def];
+            };
 
-            if (freqFixed) {
-                yMin = s.powerMin || 14;
-                yMax = s.powerMax || 18;
-            }
+            const fRange = getRange('freqMin', 'freqMax', 'freq', 40);
+            const pRange = getRange('powerMin', 'powerMax', 'power', 14);
+            const sRange = getRange('speedMin', 'speedMax', 'speed', 400);
 
             return JSON.stringify({
-                v: 2, // Version bump for MOPA support
-                l: [s.speedMin || 400, s.speedMax || 800, numCols], // X-Axis (Speed)
-                f: [yMin, yMax, numRows], // Y-Axis (Power or Freq)
-                p: s.power || 14,
-                d: s.lpi || 3000, // Density (LPC)
+                v: 3,
+                ax: mode === 'power' ? 'p' : (mode === 'speed' ? 's' : 'f'),
+                f: fRange,
+                p: pRange,
+                s: sRange,
+                r: numRows,
+                c: numCols,
+                l: s.lpi || 1000, // Density
                 pw: s.pulseWidth || 80,
-                t: type
+                t: 'mopa'
             });
         } else {
             // UV Mapping:
@@ -205,14 +209,49 @@ export class TestGridGenerator {
         if (code) {
             try {
                 const raw = JSON.parse(code.data);
-                // Support both old and new (shorter) keys
+
+                // MOPA v3 Flexible
+                if ((raw.v >= 3 || raw.ax) && raw.t === 'mopa') {
+                    const mode = raw.ax || 'f'; // f, p, s
+                    const rows = raw.r || 9;
+                    const cols = raw.c || 14;
+
+                    let xValues, yValues, xLabel, yLabel;
+
+                    if (mode === 'p') { // Fixed Power, Speed(X) vs Freq(Y)
+                        xValues = this.linspace(raw.s[0], raw.s[1], cols);
+                        yValues = this.linspace(raw.f[0], raw.f[1], rows);
+                        xLabel = 'Speed (mm/s)'; yLabel = 'Frequency (kHz)';
+                    } else if (mode === 's') { // Fixed Speed, Power(X) vs Freq(Y)
+                        xValues = this.linspace(raw.p[0], raw.p[1], cols);
+                        yValues = this.linspace(raw.f[0], raw.f[1], rows);
+                        xLabel = 'Power (%)'; yLabel = 'Frequency (kHz)';
+                    } else { // Fixed Freq, Speed(X) vs Power(Y)
+                        xValues = this.linspace(raw.s[0], raw.s[1], cols);
+                        yValues = this.linspace(raw.p[0], raw.p[1], rows);
+                        xLabel = 'Speed (mm/s)'; yLabel = 'Power (%)';
+                    }
+
+                    return {
+                        found: true,
+                        data: raw,
+                        version: raw.v,
+                        lpiValues: xValues,  // Mapped to X
+                        freqValues: yValues, // Mapped to Y
+                        xAxisLabel: xLabel,
+                        yAxisLabel: yLabel,
+                        gridMode: mode
+                    };
+                }
+
+                // Legacy (UV / Old MOPA)
                 const settings = {
                     v: raw.v,
                     lpi: raw.l || raw.lpi,
                     freq: raw.f || raw.freq,
                     pwr: raw.p || raw.pwr,
                     spd: raw.s || raw.spd,
-                    type: raw.t || 'uv', // Default to UV if missing
+                    type: raw.t || 'uv',
                     ts: raw.ts || Date.now()
                 };
 
@@ -551,66 +590,62 @@ export class TestGridGenerator {
         const displaySettings = [];
         const layerData = {};
 
-        // Check if we are doing Speed vs Power (standard request) or Speed vs Freq
-        let isPowerGrid = false;
+        // Flexible MOPA Grid Logic
+        const mode = s.gridMode || 'frequency';
 
-        // If user explicitly provides freq min/max that are different, use Freq.
-        // Otherwise, if power min/max differ (or are default), use Power.
-        if (s.freqMin !== undefined && s.freqMax !== undefined && s.freqMin !== s.freqMax) {
-            isPowerGrid = false;
-        } else {
-            // Default to Power grid as per user request (14-18%)
-            isPowerGrid = true;
-        }
-
-        const speedMin = s.speedMin || 400;
-        const speedMax = s.speedMax || 800;
-
-        let freqMin, freqMax, powerMin, powerMax;
-
-        if (isPowerGrid) {
-            // Power on Y-Axis
-            powerMin = s.powerMin || 14;
-            powerMax = s.powerMax || 18;
-            // Fixed Frequency
-            freqMin = s.freqMin || 40; // Default MOPA freq
-            freqMax = freqMin;
-        } else {
-            // Frequency on Y-Axis
-            freqMin = s.freqMin || 200;
-            freqMax = s.freqMax || 1200;
-            // Fixed Power
-            powerMin = s.power || 14;
-            powerMax = powerMin;
-        }
-
-        // Constants (User Confirmed: Pulse 80, 3000 LPC)
-        const lpi = s.lpi || 3000;
-        const pulseWidth = s.pulseWidth || 80;
-        const passes = s.passes || 1;
-        // const power = s.power || 14; // Derived inside loop
-
-        // ... existing setup ... (removed duplication of loop logic for clarity, will rewrite loop)
-
-        // XCS Structure for MOPA
-        const extId = "GS004-CLASS-4";
-        const extName = "F2 Ultra"; // Found in user file
-        const lightSource = "infrared"; // MOPA is typically IR
-
-        // FIXED QR CODE LOGIC (17mm x 17mm with 1mm gap)
-        const QR_SIZE_MM = 17;
-        const QR_GAP_MM = 1;
-
-        // Layout Config
+        // Layout Config (Moved Up)
         const availableWidth = s.cardWidth - (s.margin * 2);
         const availableHeight = s.cardHeight - (s.margin * 2);
         const totalCellSize = s.cellSize + s.cellGap;
 
         let numCols = Math.floor((availableWidth + s.cellGap) / totalCellSize);
         let numRows = Math.floor((availableHeight + s.cellGap) / totalCellSize);
-
         if (numCols < 1) numCols = 1;
         if (numRows < 1) numRows = 1;
+
+        // Determine Axes & Fixed Values
+        let xValues, yValues;
+        let fixedFreq = s.freq !== undefined ? s.freq : 40;
+        let fixedPower = s.power !== undefined ? s.power : 70;
+        let fixedSpeed = s.speed !== undefined ? s.speed : 400;
+
+        // Defaults if ranges are missing
+        const defSpeedMin = 400, defSpeedMax = 800;
+        const defPowerMin = 14, defPowerMax = 18;
+        const defFreqMin = 40, defFreqMax = 90;
+
+        if (mode === 'power') {
+            // Fixed Power: Vary Speed (X) & Freq (Y)
+            fixedPower = s.power || 70;
+            xValues = this.linspace(s.speedMin || defSpeedMin, s.speedMax || defSpeedMax, numCols);
+            yValues = this.linspace(s.freqMin || defFreqMin, s.freqMax || defFreqMax, numRows);
+        } else if (mode === 'speed') {
+            // Fixed Speed: Vary Power (X) & Freq (Y)
+            fixedSpeed = s.speed || defSpeedMin;
+            xValues = this.linspace(s.powerMin || defPowerMin, s.powerMax || defPowerMax, numCols);
+            yValues = this.linspace(s.freqMin || defFreqMin, s.freqMax || defFreqMax, numRows);
+        } else {
+            // Fixed Frequency (Default): Vary Speed (X) & Power (Y)
+            fixedFreq = s.freq || 40;
+            xValues = this.linspace(s.speedMin || defSpeedMin, s.speedMax || defSpeedMax, numCols);
+            yValues = this.linspace(s.powerMin || defPowerMin, s.powerMax || defPowerMax, numRows);
+        }
+
+        // Constants
+        const pulseWidth = s.pulseWidth || 80;
+        const passes = s.passes || 1;
+        const mopaLpi = s.lpi || 1000;
+
+        // XCS Structure for MOPA
+        const extId = "GS004-CLASS-4";
+        const extName = "F2 Ultra";
+        const lightSource = "red";
+
+        // FIXED QR CODE LOGIC (17mm x 17mm with 1mm gap)
+        const QR_SIZE_MM = 17;
+        const QR_GAP_MM = 1;
+
+        // Layout Config (Moved to Top)
 
         // Effective Layout
         const effectiveGridW = numCols * s.cellSize + (numCols - 1) * s.cellGap;
@@ -639,64 +674,48 @@ export class TestGridGenerator {
         const qrX = globalOffsetX + effectiveGridW - QR_SIZE_MM;
         const qrY = globalOffsetY + effectiveGridH - QR_SIZE_MM;
 
-        // Calculate steps
-        const speedStep = numCols > 1 ? (speedMax - speedMin) / (numCols - 1) : 0;
 
-        // Y-Axis Step (Power or Freq)
-        const yMin = isPowerGrid ? powerMin : freqMin;
-        const yMax = isPowerGrid ? powerMax : freqMax;
 
-        const yStep = numRows > 1 ? (yMax - yMin) / (numRows - 1) : 0;
 
-        // Generate Axis Values for Metadata
-        const colValues = [];
-        for (let c = 0; c < numCols; c++) {
-            colValues.push(Math.round(speedMin + (c * speedStep)));
-        }
-
-        const rowValues = [];
-        for (let r = 0; r < numRows; r++) {
-            rowValues.push(Math.round(yMin + (r * yStep)));
-        }
 
         let zOrder = 1;
         let cellCount = 0;
 
-        // Iterate Rows (Y Axis: Power or Frequency)
-        for (let r = 0; r < numRows; r++) {
-            const yVal = Math.round(yMin + (r * yStep));
+        for (let row = 0; row < numRows; row++) {
+            for (let col = 0; col < numCols; col++) {
 
-            // Determine Row Settings
-            let rowFreq = isPowerGrid ? freqMin : yVal;
-            let rowPower = isPowerGrid ? yVal : powerMin;
+                // Determine Cell Parameters based on Axis
+                let cellFreq = fixedFreq;
+                let cellPower = fixedPower;
+                let cellSpeed = fixedSpeed;
 
-            // Iterate Cols (Speed: Min to Max, left to right)
-            for (let c = 0; c < numCols; c++) {
+                if (mode === 'power') {
+                    cellSpeed = isNaN(xValues[col]) ? fixedSpeed : xValues[col];
+                    cellFreq = isNaN(yValues[row]) ? fixedFreq : yValues[row];
+                } else if (mode === 'speed') {
+                    cellPower = isNaN(xValues[col]) ? fixedPower : xValues[col];
+                    cellFreq = isNaN(yValues[row]) ? fixedFreq : yValues[row];
+                } else { // frequency
+                    cellSpeed = isNaN(xValues[col]) ? fixedSpeed : xValues[col];
+                    cellPower = isNaN(yValues[row]) ? fixedPower : yValues[row];
+                }
 
-                // Exclusion
-                if (c >= excStartCol && r >= excStartRow) {
+                // Check exclusion
+                if (col >= excStartCol && row >= excStartRow) {
                     continue;
                 }
 
-                const colSpeed = Math.round(speedMin + (c * speedStep));
+                const x = globalOffsetX + col * colPitch;
+                const y = globalOffsetY + row * rowPitch;
 
-                // ID & Position
-                const id = this.generateUUID();
-                const x = globalOffsetX + c * colPitch;
-                const y = globalOffsetY + r * rowPitch;
+                // Visual Color (Approximate)
+                // Red scale for power
+                const colorHex = this.colorToHex(Math.floor((cellPower / 100) * 255), 0, 0);
+                const colorInt = parseInt(colorHex.replace('#', ''), 16);
 
-                // Color Helper (Gray Gradient)
-                const grayVal = Math.floor(255 - ((c / numCols) * 200));
-                const colorHex = this.colorToHex(grayVal, grayVal, grayVal);
-                const colorInt = (grayVal << 16) | (grayVal << 8) | grayVal;
-
-                // Create Path
                 const path = `M${x} ${y} L${x + s.cellSize} ${y} L${x + s.cellSize} ${y + s.cellSize} L${x} ${y + s.cellSize} Z`;
-
-                // Display Name: "S{speed} F{freq}" or "S{speed} P{power}"
-                const displayName = isPowerGrid
-                    ? `S${colSpeed} P${rowPower}%`
-                    : `S${colSpeed} F${rowFreq}k`;
+                const id = this.generateUUID();
+                const displayName = `MOPA S${cellSpeed} P${cellPower} F${cellFreq}`;
 
                 const display = this.createPathDisplay(id, displayName, colorHex, colorInt, x, y, s.cellSize, s.cellSize, zOrder, path);
                 displays.push(display);
@@ -704,11 +723,11 @@ export class TestGridGenerator {
                 // Settings Injection
                 const extraParams = {
                     pulseWidth: pulseWidth,
-                    mopaFrequency: rowFreq, // Specific for MOPA
+                    mopaFrequency: cellFreq,
                 };
 
-                // Pass rowFreq as standard frequency too, though MOPA might use mopaFrequency
-                const settingsStr = this.createDisplaySettings(rowFreq, lpi, rowPower, colSpeed, passes, extraParams);
+                // Create Settings
+                const settingsStr = this.createDisplaySettings(cellFreq, mopaLpi, cellPower, cellSpeed, passes, extraParams);
 
                 displaySettings.push([id, settingsStr]);
                 layerData[colorHex] = { name: displayName, order: zOrder++, visible: true };
@@ -742,7 +761,7 @@ export class TestGridGenerator {
             canvasId,
             canvas: [{
                 id: canvasId,
-                title: `MOPA Grid S${speedMin}-${speedMax} F${freqMin}-${freqMax}`,
+                title: `MOPA ${mode.toUpperCase()} X${xValues[0]}-${xValues[xValues.length - 1]} Y${yValues[0]}-${yValues[yValues.length - 1]}`,
                 layerData,
                 groupData: {},
                 displays
@@ -788,13 +807,14 @@ export class TestGridGenerator {
                 globalOffsetX,
                 globalOffsetY,
                 excStartCol,
-
                 excStartRow,
+
                 // MOPA Specific Metadata (reusing lpi/freq names for Analyzer compatibility)
-                lpiValues: colValues,
-                freqValues: rowValues,
-                xAxisLabel: 'Speed (mm/s)',
-                yAxisLabel: isPowerGrid ? 'Power (%)' : 'Frequency (kHz)'
+                lpiValues: xValues,
+                freqValues: yValues,
+                xAxisLabel: mode === 'speed' ? 'Power (%)' : 'Speed (mm/s)',
+                yAxisLabel: mode === 'frequency' ? 'Power (%)' : 'Frequency (kHz)',
+                gridMode: mode
             }
         };
     }
