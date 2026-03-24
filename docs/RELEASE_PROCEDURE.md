@@ -34,4 +34,4 @@ Use the interactive controller for all remote actions. This ensures consistency 
 - **Health**: Check `http://lasertools.org/health` or `http://test.lasertools.org/health` for uptime and status.
 
 ---
-**Agent Note**: Do NOT attempt to build Docker images locally or use `docker-compose` for development unless explicitly requested. Always prioritize the `DEPLOY.bat` workflow for remote operations.
+> **Note**: Do NOT attempt to build Docker images locally or use `docker-compose` for development unless explicitly requested. Always prioritize the `DEPLOY.bat` workflow for remote operations.
