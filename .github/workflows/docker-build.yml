@@ -36,3 +36,10 @@ jobs:
             pixelplanet/picture-engraver:sha-${{ steps.sha.outputs.short }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Portainer redeploy
+        run: curl -s -X POST "${{ secrets.PORTAINER_WEBHOOK_PICTURE_ENGRAVER }}"
