@@ -73,8 +73,19 @@ For fast development cycles, we run the app directly on the host without Docker.
    npm run build
    ```
 
----
-Built for the maker community. 🛠️✨
+## 🧪 Testing
+
+The project has two layers of automated tests.
+
+**Unit Tests** (Vitest):
+```bash
+npm run test:unit
+```
+
+**End-to-End Tests** (Playwright – requires a running server):
+```bash
+npm run test:e2e
+```
 
 ---
 Built for the maker community. 🛠️✨
