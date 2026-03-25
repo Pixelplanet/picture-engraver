@@ -39,10 +39,41 @@ jobs:
 
   deploy:
     needs: build
-    uses: Pixelplanet/lasertools/.github/workflows/portainer-deploy.yml@main
-    with:
-      container-name: engraver-test
-    secrets:
-      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
-      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
-      PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find container and recreate
+        run: |
+          CONTAINER_NAME="engraver-test"
+          PORTAINER_URL="${{ secrets.PORTAINER_URL }}"
+          ENDPOINT_ID="${{ secrets.PORTAINER_ENDPOINT_ID }}"
+          API_KEY="${{ secrets.PORTAINER_API_KEY }}"
+
+          echo "Looking up container: ${CONTAINER_NAME}"
+
+          CONTAINERS=$(curl -sf \
+            -H "X-API-Key: ${API_KEY}" \
+            "${PORTAINER_URL}/api/endpoints/${ENDPOINT_ID}/docker/containers/json?all=true&filters=%7B%22name%22%3A%5B%22${CONTAINER_NAME}%22%5D%7D")
+
+          CONTAINER_ID=$(echo "$CONTAINERS" | jq -r '.[0].Id // empty')
+
+          if [ -z "$CONTAINER_ID" ]; then
+            echo "::error::Container '${CONTAINER_NAME}' not found"
+            exit 1
+          fi
+
+          echo "Found container ID: ${CONTAINER_ID:0:12}"
+
+          HTTP_CODE=$(curl -s -o /tmp/response.txt -w "%{http_code}" \
+            -X POST \
+            -H "X-API-Key: ${API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"PullImage": true}' \
+            "${PORTAINER_URL}/api/docker/${ENDPOINT_ID}/containers/${CONTAINER_ID}/recreate")
+
+          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+            echo "Successfully recreated ${CONTAINER_NAME} (HTTP ${HTTP_CODE})"
+          else
+            echo "::error::Failed to recreate container (HTTP ${HTTP_CODE})"
+            cat /tmp/response.txt
+            exit 1
+          fi
