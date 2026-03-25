@@ -29,6 +29,17 @@ cleanup_log.txt
 
 # Test Artifacts
 tests/*.png
+*.png
+!public/**/*.png
+
+# Temp / one-off files
+temp_view.txt
+Img2svg_xcs.html
+test_ui_layout.cjs
+verify_sticky_tabs.cjs
+
+# Obsolete docs
+docs/SERVER_MIGRATION_PLAN.md
 
 # Shortcuts
 DEPLOY.bat
