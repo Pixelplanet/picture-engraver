@@ -39,7 +39,10 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger Portainer redeploy
-        run: curl -s -X POST "${{ secrets.PORTAINER_WEBHOOK_PICTURE_ENGRAVER }}"
+    uses: Pixelplanet/lasertools/.github/workflows/portainer-deploy.yml@main
+    with:
+      container-name: engraver-test
+    secrets:
+      PORTAINER_URL: ${{ secrets.PORTAINER_URL }}
+      PORTAINER_API_KEY: ${{ secrets.PORTAINER_API_KEY }}
+      PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
