@@ -363,7 +363,8 @@
                 <div class="grid-settings-columns">
                   <!-- Frequency Settings (Axis 1 or Fixed) -->
                   <div class="setting-group" id="groupFreq">
-                    <h3 id="gridHeaderFreq">Frequency (kHz)</h3>
+                    <h3 id="gridHeaderFreq">Frequency (kHz) <span class="info-icon"
+                        title="Standard UV lasers are limited to 40kHz minimum by XCS software.">ⓘ</span></h3>
                     <!-- Range Inputs -->
                     <div id="cntFreqRange" class="range-inputs-row">
                       <div class="setting-row">
@@ -832,18 +833,19 @@
     </div>
 
     <!-- Footer -->
-    <footer class="footer">
-      <div class="footer-left">
+    <footer class="app-footer">
+      <div id="donation-tracker"></div>
+      <script src="https://lasertools.org/api/widget.js"></script>
+      <div class="footer-links">
+        <a href="https://lasertools.org" class="footer-link">← Back to LaserTools</a>
+        <span class="footer-sep">·</span>
         &copy; 2026 Thomas Winnerl
-        <a href="https://github.com/Pixelplanet/picture-engraver" target="_blank" rel="noopener">GitHub</a>
-        <a href="./privacy.html">Datenschutz</a>
-        <a href="./privacy-en.html">Privacy Policy</a>
-      </div>
-      <div class="footer-right">
-        <span class="donate-label">Help keep this website running:</span>
-        <a href="https://www.paypal.com/donate/?hosted_button_id=KSPSCWTMFXSR4" target="_blank" class="donate-link">
-          <span>❤️</span> Donate via PayPal
-        </a>
+        <span class="footer-sep">·</span>
+        <a href="https://github.com/Pixelplanet/picture-engraver" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+        <span class="footer-sep">·</span>
+        <a href="./privacy.html" class="footer-link">Datenschutz</a>
+        <span class="footer-sep">·</span>
+        <a href="./privacy-en.html" class="footer-link">Privacy Policy</a>
       </div>
     </footer>
 

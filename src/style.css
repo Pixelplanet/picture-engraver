@@ -2217,3 +2217,108 @@ body {
   gap: 10px;
   margin-top: auto;
 }
+
+/* Info Icon Tooltip */
+.info-icon {
+  display: inline-block;
+  margin-left: 6px;
+  cursor: help;
+  color: var(--text-tertiary);
+  font-size: 0.8em;
+  position: relative;
+  vertical-align: middle;
+}
+
+.info-icon:hover {
+  color: var(--accent-primary);
+}
+
+/* Tooltip Text */
+.info-icon::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 110%;
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  border: 1px solid var(--border-primary);
+  z-index: 1000;
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  visibility: hidden;
+}
+
+.info-icon:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Tooltip Arrow */
+.info-icon::before {
+  content: '';
+  position: absolute;
+  bottom: 110%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: var(--border-primary) transparent transparent transparent;
+  width: 0;
+  height: 0;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.2s;
+  visibility: hidden;
+  transform: translateY(10px);
+  /* Match text movement */
+}
+
+.info-icon:hover::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   App Footer
+═══════════════════════════════════════════════════════════════ */
+.app-footer {
+  text-align: center;
+  padding: 1rem 1rem 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #94a3b8);
+  border-top: 1px solid var(--border-primary, rgba(148,163,184,0.12));
+  margin-top: auto;
+}
+.app-footer #donation-tracker {
+  max-width: 480px;
+  margin: 0 auto 0.75rem;
+}
+.footer-links {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.footer-link {
+  color: var(--text-secondary, #94a3b8);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.footer-link:hover {
+  color: var(--accent-primary, #c084fc);
+}
+.footer-sep {
+  margin: 0 0.4rem;
+  color: var(--border-primary, rgba(148,163,184,0.25));
+}

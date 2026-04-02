@@ -139,8 +139,8 @@ export class TestGridGenerator {
         return {
             isFill: true, type: 'PATH', processingType: 'FILL_VECTOR_ENGRAVING',
             data: {
-                VECTOR_CUTTING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, frequency: 40 } } },
-                VECTOR_ENGRAVING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, frequency: 40 } } },
+                VECTOR_CUTTING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize } } },
+                VECTOR_ENGRAVING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize } } },
                 FILL_VECTOR_ENGRAVING: {
                     materialType: 'customize', planType: 'dot_cloud',
                     parameter: { customize }
@@ -171,7 +171,7 @@ export class TestGridGenerator {
             };
 
             const fRange = getRange('freqMin', 'freqMax', 'freq', 40);
-            const pRange = getRange('powerMin', 'powerMax', 'power', 14);
+            const pRange = getRange('powerMax', 'powerMin', 'power', 14);
             const sRange = getRange('speedMin', 'speedMax', 'speed', 400);
 
             return JSON.stringify({
@@ -578,7 +578,9 @@ export class TestGridGenerator {
                 globalOffsetX,
                 globalOffsetY,
                 excStartCol,
-                excStartRow
+                excStartRow,
+                lpiValues,
+                freqValues
             }
         };
     }
@@ -622,13 +624,13 @@ export class TestGridGenerator {
         } else if (mode === 'speed') {
             // Fixed Speed: Vary Power (X) & Freq (Y)
             fixedSpeed = s.speed || defSpeedMin;
-            xValues = this.linspace(s.powerMin || defPowerMin, s.powerMax || defPowerMax, numCols);
+            xValues = this.linspace(s.powerMax || defPowerMax, s.powerMin || defPowerMin, numCols);
             yValues = this.linspace(s.freqMin || defFreqMin, s.freqMax || defFreqMax, numRows);
         } else {
             // Fixed Frequency (Default): Vary Speed (X) & Power (Y)
             fixedFreq = s.freq || 40;
             xValues = this.linspace(s.speedMin || defSpeedMin, s.speedMax || defSpeedMax, numCols);
-            yValues = this.linspace(s.powerMin || defPowerMin, s.powerMax || defPowerMax, numRows);
+            yValues = this.linspace(s.powerMax || defPowerMax, s.powerMin || defPowerMin, numRows);
         }
 
         // Constants

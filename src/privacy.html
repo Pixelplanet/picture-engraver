@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="./style.css">
     <style>
         .privacy-container {
-            max-width: 800px;
+            max-width: 1000px;
             margin: 40px auto;
             padding: 40px;
             background: var(--bg-secondary);
@@ -66,6 +66,16 @@
 
         .back-link:hover {
             text-decoration: underline;
+        }
+
+        /* Override global app overflow hidden for this page */
+        @media (min-width: 1024px) {
+            body { overflow: auto !important; }
+            .app { 
+                height: auto !important; 
+                max-height: none !important; 
+                overflow: auto !important; 
+            }
         }
     </style>
 </head>

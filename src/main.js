@@ -23,6 +23,7 @@ import { OnboardingManager } from './lib/onboarding.js';
 import { GridDetector } from './lib/grid-detector.js';
 import { multiGridPalette, initializeMultiGridPalette } from './lib/multi-grid-palette.js';
 import { GridImagePicker } from './lib/grid-image-picker.js';
+import { initFrequencyLimiter } from './lib/ui-enhancements.js';
 
 
 
@@ -5834,3 +5835,6 @@ function setupLightbox() {
         }
     });
 }
+
+// Initialize UI Enhancements
+initFrequencyLimiter();
