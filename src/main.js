@@ -2845,6 +2845,20 @@ function updateTestGridUI() {
 
     const isMopa = s.activeDevice.includes('mopa') || s.activeDevice.includes('base');
 
+    // Update Standard Grid tab description based on device
+    const elVar1 = document.getElementById('stdGridVar1');
+    const elVar2 = document.getElementById('stdGridVar2');
+    const elPasses = document.getElementById('stdGridPasses');
+    if (isMopa) {
+        if (elVar1) elVar1.innerHTML = '<strong>Speed:</strong> 200 - 1200 mm/s (X axis)';
+        if (elVar2) elVar2.innerHTML = '<strong>Frequency:</strong> 200 - 1200 kHz (Y axis)';
+        if (elPasses) elPasses.innerHTML = '<strong>Fixed:</strong> Power 14%, LPC 5000, Pulse 80ns';
+    } else {
+        if (elVar1) elVar1.innerHTML = '<strong>Frequency:</strong> 40kHz - 90kHz (Optimized range)';
+        if (elVar2) elVar2.innerHTML = '<strong>Lines/cm:</strong> 800 - 300 (High to Low)';
+        if (elPasses) elPasses.innerHTML = '<strong>Passes:</strong> 1';
+    }
+
     // UI Elements
     const elMopaControl = document.getElementById('mopaFixedControl');
     const elFixedParam = document.getElementById('gridFixedParam');
@@ -2950,7 +2964,7 @@ function saveSettings() {
         blackFreq: parseInt(document.getElementById('settingBlackFreq').value),
         blackLpi: parseInt(document.getElementById('settingBlackLpi').value),
         blackSpeed: parseInt(document.getElementById('settingBlackSpeed').value),
-        blackPower: parseInt(document.getElementById('settingBlackPower').value),
+        blackPower: parseFloat(document.getElementById('settingBlackPower').value),
 
         whiteFreq: parseInt(document.getElementById('settingWhiteFreq').value),
         whiteLpi: parseInt(document.getElementById('settingWhiteLpi').value),
@@ -4465,39 +4479,39 @@ function getCustomGridSettings() {
             fillGaps: false,
 
             // Read Fixed LPI/Density from UI
-            lpi: parseInt(document.getElementById('gridLpiFixed').value) || 1000
+            lpi: parseInt(document.getElementById('gridLpiFixed').value) || 5000
         };
 
         // Populate Ranges/Fixed based on mode
         if (fixedMode === 'frequency') {
             // Fixed Frequency, Vary Power & Speed
-            settings.freq = parseInt(document.getElementById('gridFreqFixed').value) || 40;
+            settings.freq = parseInt(document.getElementById('gridFreqFixed').value) || 200;
 
             settings.powerMin = parseInt(document.getElementById('gridPowerMin').value) || 14;
-            settings.powerMax = parseInt(document.getElementById('gridPowerMax').value) || 18;
+            settings.powerMax = parseInt(document.getElementById('gridPowerMax').value) || 14;
 
-            settings.speedMin = parseInt(document.getElementById('gridSpeedMin').value) || 400;
-            settings.speedMax = parseInt(document.getElementById('gridSpeedMax').value) || 800;
+            settings.speedMin = parseInt(document.getElementById('gridSpeedMin').value) || 200;
+            settings.speedMax = parseInt(document.getElementById('gridSpeedMax').value) || 1200;
 
         } else if (fixedMode === 'power') {
             // Fixed Power, Vary Freq & Speed
-            settings.power = parseInt(document.getElementById('gridPower').value) || 70;
+            settings.power = parseInt(document.getElementById('gridPower').value) || 14;
 
-            settings.freqMin = parseInt(document.getElementById('gridFreqMin').value) || 40;
-            settings.freqMax = parseInt(document.getElementById('gridFreqMax').value) || 90;
+            settings.freqMin = parseInt(document.getElementById('gridFreqMin').value) || 200;
+            settings.freqMax = parseInt(document.getElementById('gridFreqMax').value) || 1200;
 
-            settings.speedMin = parseInt(document.getElementById('gridSpeedMin').value) || 400;
-            settings.speedMax = parseInt(document.getElementById('gridSpeedMax').value) || 800;
+            settings.speedMin = parseInt(document.getElementById('gridSpeedMin').value) || 200;
+            settings.speedMax = parseInt(document.getElementById('gridSpeedMax').value) || 1200;
 
         } else if (fixedMode === 'speed') {
             // Fixed Speed, Vary Freq & Power
             settings.speed = parseInt(document.getElementById('gridSpeed').value) || 400;
 
-            settings.freqMin = parseInt(document.getElementById('gridFreqMin').value) || 40;
-            settings.freqMax = parseInt(document.getElementById('gridFreqMax').value) || 90;
+            settings.freqMin = parseInt(document.getElementById('gridFreqMin').value) || 200;
+            settings.freqMax = parseInt(document.getElementById('gridFreqMax').value) || 1200;
 
             settings.powerMin = parseInt(document.getElementById('gridPowerMin').value) || 14;
-            settings.powerMax = parseInt(document.getElementById('gridPowerMax').value) || 18;
+            settings.powerMax = parseInt(document.getElementById('gridPowerMax').value) || 14;
         }
         return settings;
     } else {
@@ -4625,16 +4639,18 @@ function generateStandardGridXCS() {
     };
 
     if (isMopa) {
-        // MOPA Defaults: Speed 400-800, Power 14-18, Freq 40, LPC 3000
-        fixedSettings.speedMin = 400;
-        fixedSettings.speedMax = 800;
-        fixedSettings.powerMin = 14;
-        fixedSettings.powerMax = 18;
-        fixedSettings.freqMin = 40; // Fixed Freq
-        fixedSettings.freqMax = 40;
-        fixedSettings.lpi = 3000;
+        // MOPA Defaults: Speed 200-1200, Freq 200-1200, Power 14%, LPC 5000
+        fixedSettings.speedMin = 200;
+        fixedSettings.speedMax = 1200;
+        fixedSettings.powerMin = undefined;
+        fixedSettings.powerMax = undefined;
+        fixedSettings.power = 14;
+        fixedSettings.freqMin = 200;
+        fixedSettings.freqMax = 1200;
+        fixedSettings.lpi = 5000;
         fixedSettings.passes = 1;
         fixedSettings.crossHatch = false;
+        fixedSettings.gridMode = 'power';
     } else {
         // UV Defaults
         fixedSettings.lpiMin = 300;
@@ -4770,19 +4786,29 @@ function drawGridToCanvas(canvasId, settings) {
 
 function updateStandardPreview() {
     // FIXED settings matching the generator
+    const currentSettings = SettingsStorage.load();
+    const deviceId = currentSettings.activeDevice || 'f2_ultra_uv';
+    const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
+
     const fixedSettings = {
-        lpiMin: 300,
-        lpiMax: 800,
-        freqMin: 40,
-        freqMax: 90,
         cellSize: 5,
-        cellGap: 1
+        cellGap: 1,
+        activeDevice: deviceId
     };
 
-    // Merge with device ID if needed for MOPA/UV logic inside generator (although drawGridToCanvas mainly uses layout)
-    const currentSettings = SettingsStorage.load();
-    if (currentSettings.activeDevice) {
-        fixedSettings.activeDevice = currentSettings.activeDevice;
+    if (isMopa) {
+        fixedSettings.speedMin = 200;
+        fixedSettings.speedMax = 1200;
+        fixedSettings.power = 14;
+        fixedSettings.freqMin = 200;
+        fixedSettings.freqMax = 1200;
+        fixedSettings.lpi = 5000;
+        fixedSettings.gridMode = 'power';
+    } else {
+        fixedSettings.lpiMin = 300;
+        fixedSettings.lpiMax = 800;
+        fixedSettings.freqMin = 40;
+        fixedSettings.freqMax = 90;
     }
 
     drawGridToCanvas('standardPreviewCanvas', fixedSettings);
@@ -4863,7 +4889,7 @@ async function analyzeGridImage(img) {
             analyzerState.xAxisLabel = qrResult.xAxisLabel;
             analyzerState.yAxisLabel = qrResult.yAxisLabel;
             analyzerState.isMopa = true;
-            analyzerState.mopaLpc = s.l || 1000;
+            analyzerState.mopaLpc = s.l || 5000;
 
             const xRange = `${qrResult.lpiValues[0]} - ${qrResult.lpiValues[qrResult.lpiValues.length - 1]}`;
             const yRange = `${qrResult.freqValues[0]} - ${qrResult.freqValues[qrResult.freqValues.length - 1]}`;
@@ -4883,7 +4909,7 @@ async function analyzeGridImage(img) {
             analyzerState.numRows = s.freq ? s.freq[2] : 9;
 
             if (analyzerState.isMopa) {
-                analyzerState.mopaLpc = s.d || s.l || 3000;
+                analyzerState.mopaLpc = s.d || s.l || 5000;
                 analyzerState.mopaPower = s.pwr || s.p || 14;
             }
 
@@ -5111,7 +5137,7 @@ function saveColorMap() {
                     color: color,
                     frequency: freq,
                     // Dynamic Mapping based on Device Type
-                    lpi: analyzerState.isMopa ? (analyzerState.mopaLpc || 3000) : lpi,
+                    lpi: analyzerState.isMopa ? (analyzerState.mopaLpc || 5000) : lpi,
                     speed: analyzerState.isMopa ? lpi : (SettingsStorage.getDefaults().speed || 425),
                     power: analyzerState.isMopa ? (analyzerState.mopaPower || 14) : (SettingsStorage.getDefaults().power || 70),
 

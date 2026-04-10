@@ -18,29 +18,32 @@ export class TestGridGenerator {
             // Grid parameters
             lpiMin: 500,
             lpiMax: 2000,
-            lpi: isMopa ? 3000 : undefined, // Fixed LPC for MOPA default
+            lpi: isMopa ? 5000 : undefined, // Fixed LPC for MOPA default
 
-            freqMin: 40,
-            freqMax: isMopa ? 40 : 90, // Fixed freq for MOPA default (Power grid)
+            freqMin: isMopa ? 200 : 40,
+            freqMax: isMopa ? 1200 : 90,
 
             // Engraving settings
-            power: 70,
-            powerMin: isMopa ? 14 : undefined,
-            powerMax: isMopa ? 18 : undefined,
+            power: isMopa ? 14 : 70,
+            powerMin: undefined,
+            powerMax: undefined,
 
             speed: 425,
-            speedMin: isMopa ? 400 : undefined,
-            speedMax: isMopa ? 800 : undefined,
+            speedMin: isMopa ? 200 : undefined,
+            speedMax: isMopa ? 1200 : undefined,
 
             passes: isMopa ? 1 : 1,
             crossHatch: !isMopa, // False for MOPA
 
+            // MOPA grid mode: 'power' = fixed power, vary speed & frequency
+            gridMode: isMopa ? 'power' : undefined,
+
             // QR code settings
-            qrPower: 75,
-            qrSpeed: 100,
+            qrPower: 17.5,
+            qrSpeed: 150,
             qrSize: 12,
-            qrFrequency: 45,
-            qrLpi: 500,
+            qrFrequency: 90,
+            qrLpi: 2500,
 
             // Layout
             cellSize: 5,
@@ -120,6 +123,7 @@ export class TestGridGenerator {
     }
 
     createDisplaySettings(frequency, lpi, power, speed, passes, extraParams = {}) {
+        const isMopa = !!extraParams.mopaFrequency;
         const customize = {
             bitmapEngraveMode: 'normal',
             speed,
@@ -136,18 +140,36 @@ export class TestGridGenerator {
             ...extraParams // Inject extra params like pulseWidth, mopaFrequency
         };
 
-        return {
-            isFill: true, type: 'PATH', processingType: 'FILL_VECTOR_ENGRAVING',
-            data: {
-                VECTOR_CUTTING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize } } },
-                VECTOR_ENGRAVING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize } } },
-                FILL_VECTOR_ENGRAVING: {
-                    materialType: 'customize', planType: 'dot_cloud',
-                    parameter: { customize }
-                },
-                INTAGLIO: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, speed: 80, density: 300, power: 1, repeat: 1, frequency: 40 } } },
-                INNER_THREE_D: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, subdivide: 0.1, speed: 80, power: 1, repeat: 1, frequency: 40 } } }
+        const processingType = isMopa ? 'COLOR_FILL_ENGRAVE' : 'FILL_VECTOR_ENGRAVING';
+
+        const data = {
+            VECTOR_CUTTING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize } } },
+            VECTOR_ENGRAVING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize } } },
+            FILL_VECTOR_ENGRAVING: {
+                materialType: 'customize', planType: 'dot_cloud',
+                parameter: { customize }
             },
+            INTAGLIO: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, speed: 80, density: 300, power: 1, repeat: 1, frequency: 40 } } },
+            INNER_THREE_D: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, subdivide: 0.1, speed: 80, power: 1, repeat: 1, frequency: 40 } } }
+        };
+
+        // Add COLOR_FILL_ENGRAVE section for MOPA devices
+        if (isMopa) {
+            data.COLOR_FILL_ENGRAVE = {
+                materialType: 'customize', planType: 'red',
+                parameter: {
+                    customize: {
+                        ...customize,
+                        dotDuration: 100,
+                        notResize: true
+                    }
+                }
+            };
+        }
+
+        return {
+            isFill: true, type: 'PATH', processingType,
+            data,
             processIgnore: false
         };
     }
@@ -170,9 +192,9 @@ export class TestGridGenerator {
                 return [def, def];
             };
 
-            const fRange = getRange('freqMin', 'freqMax', 'freq', 40);
+            const fRange = getRange('freqMin', 'freqMax', 'freq', 200);
             const pRange = getRange('powerMax', 'powerMin', 'power', 14);
-            const sRange = getRange('speedMin', 'speedMax', 'speed', 400);
+            const sRange = getRange('speedMin', 'speedMax', 'speed', 200);
 
             return JSON.stringify({
                 v: 3,
@@ -182,7 +204,7 @@ export class TestGridGenerator {
                 s: sRange,
                 r: numRows,
                 c: numCols,
-                l: s.lpi || 1000, // Density
+                l: s.lpi || 5000, // Density
                 pw: s.pulseWidth || 80,
                 t: 'mopa'
             });
@@ -607,14 +629,14 @@ export class TestGridGenerator {
 
         // Determine Axes & Fixed Values
         let xValues, yValues;
-        let fixedFreq = s.freq !== undefined ? s.freq : 40;
-        let fixedPower = s.power !== undefined ? s.power : 70;
+        let fixedFreq = s.freq !== undefined ? s.freq : 200;
+        let fixedPower = s.power !== undefined ? s.power : 14;
         let fixedSpeed = s.speed !== undefined ? s.speed : 400;
 
         // Defaults if ranges are missing
-        const defSpeedMin = 400, defSpeedMax = 800;
-        const defPowerMin = 14, defPowerMax = 18;
-        const defFreqMin = 40, defFreqMax = 90;
+        const defSpeedMin = 200, defSpeedMax = 1200;
+        const defPowerMin = 14, defPowerMax = 14;
+        const defFreqMin = 200, defFreqMax = 1200;
 
         if (mode === 'power') {
             // Fixed Power: Vary Speed (X) & Freq (Y)
@@ -636,7 +658,7 @@ export class TestGridGenerator {
         // Constants
         const pulseWidth = s.pulseWidth || 80;
         const passes = s.passes || 1;
-        const mopaLpi = s.lpi || 1000;
+        const mopaLpi = s.lpi || 5000;
 
         // XCS Structure for MOPA
         const extId = "GS004-CLASS-4";
@@ -751,12 +773,12 @@ export class TestGridGenerator {
 
         displays.push(qrDisplay);
         // QR Settings: Use default engraving for QR (e.g. 100 speed, 75 power? No, use s.qr*)
-        const qrPwr = s.qrPower || 75;
-        const qrSpd = s.qrSpeed || 100;
-        const qrFreq = s.qrFrequency || 45;
-        const qrL = s.qrLpi || 500;
+        const qrPwr = s.qrPower || 17.5;
+        const qrSpd = s.qrSpeed || 150;
+        const qrFreq = s.qrFrequency || 90;
+        const qrL = s.qrLpi || 2500;
 
-        displaySettings.push([qrDisplayId, this.createDisplaySettings(qrFreq, qrL, qrPwr, qrSpd, 1, { processingLightSource: 'red', mopaFrequency: qrFreq })]);
+        displaySettings.push([qrDisplayId, this.createDisplaySettings(qrFreq, qrL, qrPwr, qrSpd, 1, { processingLightSource: 'red', mopaFrequency: qrFreq, pulseWidth: s.pulseWidth || 80 })]);
         layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
 
         const xcs = {

@@ -33,7 +33,7 @@ describe('Flexible MOPA Grid Generator', () => {
 
         // Check ranges
         expect(info.lpiValues[0]).toBe(400); // Speed Min
-        expect(info.freqValues[0]).toBe(14); // Power Min
+        expect(info.freqValues[0]).toBe(18); // Power Max (linspace descends from max to min)
     });
 
     it('should generate MOPA grid in Fixed Power mode', () => {
@@ -76,7 +76,7 @@ describe('Flexible MOPA Grid Generator', () => {
         expect(info.yAxisLabel).toContain('Freq');
 
         // Check ranges
-        expect(info.lpiValues[0]).toBe(10); // Power
+        expect(info.lpiValues[0]).toBe(90); // Power Max (linspace descends from max to min)
         expect(info.freqValues[0]).toBe(30); // Freq
     });
 

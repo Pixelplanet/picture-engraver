@@ -30,10 +30,6 @@ export class LandingPage {
     }
 
     render() {
-        // Check for Dev Mode (URL param or localStorage)
-        const urlParams = new URLSearchParams(window.location.search);
-        const isDevMode = urlParams.get('mode') === 'dev' || localStorage.getItem('dev_mode') === 'true';
-
         this.overlay.innerHTML = `
             <div style="text-align: center; color: white; max-width: 600px; padding: 40px; background: #252525; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
                 <img src="./logo.png" alt="Logo" style="width: 80px; margin-bottom: 20px;">
@@ -59,7 +55,7 @@ export class LandingPage {
                     </button>
 
                     <!-- Base Model Button (Conditional) -->
-                    ${isDevMode ? `
+                    <!-- MOPA Button (Always available) -->
                     <button class="device-btn" data-id="f2_ultra_mopa" style="
                         background: linear-gradient(135deg, #2b5876, #4e4376);
                         border: none;
@@ -71,11 +67,10 @@ export class LandingPage {
                         display: flex; flex-direction: column; align-items: center; gap: 10px;
                         color: white;
                     ">
-                        <span style="font-size: 3em;">🔵</span>
+                        <span style="font-size: 3em;">🔴</span>
                         <span style="font-size: 1.2em; font-weight: 600;">F2 Ultra MOPA</span>
                         <span style="font-size: 0.8em; opacity: 0.8;">Diode / Fiber</span>
                     </button>
-                    ` : ''}
 
                     <!-- SVG Export Option (Always available) -->
                     <button class="device-btn" data-id="svg_export" style="
@@ -95,7 +90,6 @@ export class LandingPage {
                     </button>
                 </div>
 
-                ${!isDevMode ? '' : ''}
             </div>
         `;
 

@@ -10,6 +10,8 @@ dist
 *.xcs
 public/*.xcs
 !public/default_test_grid.xcs
+!public/default_test_grid_MOPA.xcs
+!public/default_test_grid_UV.xcs
 tasks/*
 test-results/
 playwright-report/

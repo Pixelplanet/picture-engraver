@@ -51,19 +51,19 @@ export const DEVICE_PROFILES = {
             // Grid Ranges (Speed vs Frequency)
             freqMin: 200,
             freqMax: 1200,
-            speedMin: 400,
-            speedMax: 800,
+            speedMin: 200,
+            speedMax: 1200,
 
             // Lines/cm (LPC) - High Density
             lpiMin: 300,
             lpiMax: 5000,
-            lpi: 3000,
+            lpi: 5000,
 
             // Standard Color Settings (MOPA Defaults)
-            blackFreq: 30,
-            blackLpi: 300,
-            blackSpeed: 1000,
-            blackPower: 80,
+            blackFreq: 90,
+            blackLpi: 2500,
+            blackSpeed: 150,
+            blackPower: 17.5,
             whiteFreq: 50,
             whiteLpi: 300,
             whiteSpeed: 1000,

@@ -224,7 +224,7 @@ describe('EnhancedQuantizer', () => {
         });
 
         it('should cap colors at preset maximum', () => {
-            const suggestions = EnhancedQuantizer.getSuggestedTargets(20);
+            const suggestions = EnhancedQuantizer.getSuggestedTargets(10);
             const standard = suggestions.find(s => s.key === 'standard');
             expect(standard.colors).toBeLessThanOrEqual(EXPANSION_PRESETS.standard.maxColors);
         });

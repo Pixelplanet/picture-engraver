@@ -170,21 +170,36 @@ export class XCSGenerator {
 
             const isWarning = s.isWarning === true;
 
+            const processingType = isMopa ? "COLOR_FILL_ENGRAVE" : "FILL_VECTOR_ENGRAVING";
+
+            const data = {
+                "FILL_VECTOR_ENGRAVING": {
+                    "materialType": "customize",
+                    "planType": "dot_cloud",
+                    "parameter": {
+                        "customize": customize
+                    }
+                }
+            };
+
+            // Add COLOR_FILL_ENGRAVE section for MOPA devices
+            if (isMopa) {
+                data["COLOR_FILL_ENGRAVE"] = {
+                    "materialType": "customize",
+                    "planType": "red",
+                    "parameter": {
+                        "customize": { ...customize }
+                    }
+                };
+            }
+
             return [
                 display.id,
                 {
                     "isFill": true,
                     "type": isWarning ? "TEXT" : "PATH",
-                    "processingType": "FILL_VECTOR_ENGRAVING",
-                    "data": {
-                        "FILL_VECTOR_ENGRAVING": {
-                            "materialType": "customize",
-                            "planType": "dot_cloud",
-                            "parameter": {
-                                "customize": customize
-                            }
-                        }
-                    },
+                    "processingType": processingType,
+                    "data": data,
                     "processIgnore": isWarning,
                     "isWhiteModel": true
                 }
