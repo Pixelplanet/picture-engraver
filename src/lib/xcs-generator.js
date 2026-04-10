@@ -217,7 +217,7 @@ export class XCSGenerator {
                 "mode": "LASER_PLANE",
                 "data": {
                     "LASER_PLANE": {
-                        "material": 0,
+                        "material": 1323,
                         "lightSourceMode": lightSource,
                         "thickness": 0,
                         "isProcessByLayer": false,

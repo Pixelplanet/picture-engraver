@@ -569,7 +569,7 @@ export class TestGridGenerator {
                     dataType: 'Map',
                     value: [[canvasId, {
                         mode: 'LASER_PLANE',
-                        data: { LASER_PLANE: { material: 0, lightSourceMode: lightSource, thickness: 117, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
+                        data: { LASER_PLANE: { material: 1323, lightSourceMode: lightSource, thickness: 117, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
                         displays: { dataType: 'Map', value: displaySettings }
                     }]]
                 },
@@ -732,10 +732,12 @@ export class TestGridGenerator {
                 const x = globalOffsetX + col * colPitch;
                 const y = globalOffsetY + row * rowPitch;
 
-                // Visual Color (Approximate)
-                // Red scale for power
-                const colorHex = this.colorToHex(Math.floor((cellPower / 100) * 255), 0, 0);
-                const colorInt = parseInt(colorHex.replace('#', ''), 16);
+                // Visual Color - HSL gradient matching UV grid for visibility in xTool Studio
+                const hue = (col / numCols) * 0.7;
+                const lightness = 0.3 + (row / numRows) * 0.4;
+                const rgb = this.hslToRgb(hue, 0.8, lightness);
+                const colorHex = this.colorToHex(rgb.r, rgb.g, rgb.b);
+                const colorInt = this.colorToInt(rgb.r, rgb.g, rgb.b);
 
                 const path = `M${x} ${y} L${x + s.cellSize} ${y} L${x + s.cellSize} ${y + s.cellSize} L${x} ${y + s.cellSize} Z`;
                 const id = this.generateUUID();
@@ -802,7 +804,7 @@ export class TestGridGenerator {
                     dataType: 'Map',
                     value: [[canvasId, {
                         mode: 'LASER_PLANE',
-                        data: { LASER_PLANE: { material: 0, lightSourceMode: lightSource, thickness: 0, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
+                        data: { LASER_PLANE: { material: 1323, lightSourceMode: lightSource, thickness: 0, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
                         displays: { dataType: 'Map', value: displaySettings }
                     }]]
                 },

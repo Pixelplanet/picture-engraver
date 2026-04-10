@@ -2924,9 +2924,35 @@ function updateTestGridUI() {
         if (cntLpiRange) cntLpiRange.style.display = 'none';
         if (cntLpiFixed) cntLpiFixed.style.display = '';
 
+        // Populate MOPA default values into custom grid inputs
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        setVal('gridFreqMin', 200);
+        setVal('gridFreqMax', 1200);
+        setVal('gridFreqFixed', 200);
+        setVal('gridLpiFixed', 5000);
+        setVal('gridPowerMin', 12);
+        setVal('gridPowerMax', 16);
+        setVal('gridPower', 14);
+        setVal('gridSpeedMin', 200);
+        setVal('gridSpeedMax', 1200);
+        setVal('gridSpeed', 400);
+
     } else {
         // UV Mode
         if (elMopaControl) elMopaControl.style.display = 'none';
+
+        // Restore UV default values into custom grid inputs
+        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+        setVal('gridFreqMin', 40);
+        setVal('gridFreqMax', 90);
+        setVal('gridFreqFixed', 40);
+        setVal('gridLpiFixed', 1000);
+        setVal('gridPowerMin', 10);
+        setVal('gridPowerMax', 20);
+        setVal('gridPower', 70);
+        setVal('gridSpeedMin', 200);
+        setVal('gridSpeedMax', 1500);
+        setVal('gridSpeed', 425);
 
         // Headers
         if (hFreq) hFreq.textContent = 'Frequency (kHz)';
