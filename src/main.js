@@ -24,6 +24,7 @@ import { GridDetector } from './lib/grid-detector.js';
 import { multiGridPalette, initializeMultiGridPalette } from './lib/multi-grid-palette.js';
 import { GridImagePicker } from './lib/grid-image-picker.js';
 import { initFrequencyLimiter } from './lib/ui-enhancements.js';
+import { getMaterialsForLaser, getMaterialById, DEFAULT_MATERIAL_ID } from './lib/material-registry.js';
 
 
 
@@ -38,6 +39,7 @@ const state = {
     outputSize: { width: 200, height: 200 },
     settings: null,
     editingLayerId: null,
+    originalImageName: null, // Original uploaded file name (without extension)
     gridPicker: null, // GridImagePicker instance
     currentMiniPickerMapId: null // Current grid in picker
 };
@@ -984,6 +986,46 @@ async function init() {
     // For now, let's just make the title in header clickable if in dev mode?
     // Or add a small indicator.
     setupDeviceSwitching(landingPage);
+    initDevMode();
+}
+
+/**
+ * Dev mode: activated via ?dev=1 URL param or localStorage flag `pe_dev_mode=true`.
+ * Reveals [DEV] UI elements (material selector, etc.) for testing before public release.
+ * Enable via browser console: localStorage.setItem('pe_dev_mode','true'); location.reload();
+ */
+function isDevMode() {
+    return new URLSearchParams(location.search).get('dev') === '1' ||
+        localStorage.getItem('pe_dev_mode') === 'true';
+}
+
+function initDevMode() {
+    if (!isDevMode()) return;
+    document.querySelectorAll('.dev-only').forEach(el => { el.style.display = ''; });
+    populateMaterialDropdowns();
+    // Sync material dropdowns to persisted value
+    const saved = state.settings?.material || DEFAULT_MATERIAL_ID;
+    const ids = ['settingMaterial', 'gridMaterial'];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = saved;
+    });
+}
+
+function populateMaterialDropdowns() {
+    const deviceId = state.settings?.activeDevice || 'f2_ultra_uv';
+    const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
+    const laserType = isMopa ? 'mopa' : 'uv';
+    const materials = getMaterialsForLaser(laserType);
+    const current = state.settings?.material || DEFAULT_MATERIAL_ID;
+    const ids = ['settingMaterial', 'gridMaterial'];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.innerHTML = materials
+            .map(m => `<option value="${m.id}"${m.id === current ? ' selected' : ''}>${m.name}</option>`)
+            .join('');
+    });
 }
 
 function updateDeviceUI(deviceId) {
@@ -1027,6 +1069,9 @@ function updateDeviceUI(deviceId) {
 
     // Update Test Grid UI based on device
     updateTestGridUI();
+
+    // Refresh material dropdowns if dev mode is active
+    if (isDevMode()) populateMaterialDropdowns();
 }
 
 /**
@@ -1178,6 +1223,9 @@ function handleFile(file) {
         showToast('Invalid file type. Please use PNG, JPG, or WebP.', 'error');
         return;
     }
+
+    // Store base filename (no extension) for use in exported filenames
+    state.originalImageName = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 40);
 
     // Load image
     const reader = new FileReader();
@@ -2651,12 +2699,19 @@ async function downloadXCS() {
         const generator = new XCSGenerator(state.settings);
         const xcsContent = generator.generate(state.processedImage, state.layers, getOutputSize());
 
-        // Download immediately
+        // Download immediately — filename includes image name, laser type, material
+        const deviceId = state.settings?.activeDevice || 'f2_ultra_uv';
+        const laserLabel = (deviceId.includes('mopa') || deviceId.includes('base')) ? 'MOPA' : 'UV';
+        const materialId = state.settings?.material || DEFAULT_MATERIAL_ID;
+        const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
+        const imgLabel = state.originalImageName ? `_${state.originalImageName}` : '';
+        const xcsFilename = `engraving${imgLabel}_F2_${laserLabel}_${materialLabel}.xcs`;
+
         const blob = new Blob([xcsContent], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `engraving_${Date.now()}.xcs`;
+        a.download = xcsFilename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -2974,6 +3029,7 @@ function updateTestGridUI() {
 }
 
 function saveSettings() {
+    const matEl = document.getElementById('settingMaterial');
     state.settings = {
         ...state.settings,
         power: parseInt(elements.settingPower.value),
@@ -2985,6 +3041,7 @@ function saveSettings() {
         freqMax: parseInt(elements.settingFreqMax.value),
         lpiMin: parseInt(elements.settingLpiMin.value),
         lpiMax: parseInt(elements.settingLpiMax.value),
+        material: matEl ? matEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID),
 
         // Standard Colors
         blackFreq: parseInt(document.getElementById('settingBlackFreq').value),
@@ -3287,6 +3344,20 @@ function setupTestGrid() {
         fixedParam.addEventListener('change', () => {
             updateTestGridUI();
             updateGridPreview();
+        });
+    }
+
+    // Material dropdown (dev mode only) — persist selection to settings
+    const gridMaterialEl = document.getElementById('gridMaterial');
+    if (gridMaterialEl) {
+        gridMaterialEl.addEventListener('change', () => {
+            if (state.settings) {
+                state.settings.material = gridMaterialEl.value;
+                SettingsStorage.save(state.settings);
+                // Sync the settings modal dropdown too
+                const settingMatEl = document.getElementById('settingMaterial');
+                if (settingMatEl) settingMatEl.value = gridMaterialEl.value;
+            }
         });
     }
 
@@ -4539,8 +4610,12 @@ function getCustomGridSettings() {
             settings.powerMin = parseInt(document.getElementById('gridPowerMin').value) || 14;
             settings.powerMax = parseInt(document.getElementById('gridPowerMax').value) || 14;
         }
+        // Include selected material (dev mode; falls back to default)
+        const gridMatEl = document.getElementById('gridMaterial');
+        settings.material = gridMatEl ? gridMatEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID);
         return settings;
     } else {
+        const gridMatEl = document.getElementById('gridMaterial');
         // Standard UV Mapping
         return {
             freqMin: parseInt(document.getElementById('gridFreqMin').value),
@@ -4559,6 +4634,7 @@ function getCustomGridSettings() {
             crossHatch: document.getElementById('gridCrossHatch').checked,
             fillGaps: false,
 
+            material: gridMatEl ? gridMatEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID),
             activeDevice: deviceId
         };
     }
@@ -4642,13 +4718,14 @@ function unused_updateGridPreview() {
 
 function getSmartGridFilename(prefix, settings, deviceId) {
     const devLabel = deviceId.includes('mopa') || deviceId.includes('base') ? 'MOPA' : 'UV';
-    let name = `${prefix}_F2_${devLabel}`;
+    const materialId = settings.material || DEFAULT_MATERIAL_ID;
+    const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
+    let name = `${prefix}_F2_${devLabel}_${materialLabel}`;
 
     if (devLabel === 'MOPA') {
         name += `_S${settings.speedMin}-${settings.speedMax}_F${settings.freqMin}-${settings.freqMax}`;
     } else {
-        const lpiUnit = settings.highLpiMode ? 'LPC' : 'LPC';
-        name += `_${lpiUnit}${settings.lpiMin}-${settings.lpiMax}_F${settings.freqMin}-${settings.freqMax}`;
+        name += `_LPC${settings.lpiMin}-${settings.lpiMax}_F${settings.freqMin}-${settings.freqMax}`;
     }
     return name;
 }

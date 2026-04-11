@@ -90,6 +90,7 @@ const COMMON_DEFAULTS = {
     defaultWidth: 200,
     defaultHeight: 200,
     activeDevice: null, // Will be set by user
+    material: 'stainless_304', // Selected material ID (see material-registry.js)
     _version: 2.0 // Increment this when defaults change to force update
 };
 

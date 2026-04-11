@@ -3,6 +3,8 @@
  * Generates .xcs files for xTool Creative Space
  */
 
+import { getXtoolMaterialId, DEFAULT_MATERIAL_ID } from './material-registry.js';
+
 export class XCSGenerator {
     constructor(settings) {
         this.settings = settings || {};
@@ -217,7 +219,7 @@ export class XCSGenerator {
                 "mode": "LASER_PLANE",
                 "data": {
                     "LASER_PLANE": {
-                        "material": 1323,
+                        "material": getXtoolMaterialId(this.settings.material || DEFAULT_MATERIAL_ID),
                         "lightSourceMode": lightSource,
                         "thickness": 0,
                         "isProcessByLayer": false,

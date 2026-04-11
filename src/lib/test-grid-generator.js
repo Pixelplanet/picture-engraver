@@ -5,6 +5,7 @@
 
 import jsQR from 'jsqr';
 import QRCode from 'qrcode';
+import { getXtoolMaterialId, DEFAULT_MATERIAL_ID } from './material-registry.js';
 
 export class TestGridGenerator {
     constructor(settings = {}) {
@@ -180,9 +181,10 @@ export class TestGridGenerator {
         const deviceId = this.settings.activeDevice || 'f2_ultra_uv';
         const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
         const type = isMopa ? 'mopa' : 'uv';
+        const material = s.material || 'stainless_304';
 
         if (isMopa) {
-            // MOPA Flexible Encoding (v3)
+            // MOPA Flexible Encoding (v4 — adds material)
             const mode = s.gridMode || 'frequency';
 
             // Helper to get Range or Fixed
@@ -197,7 +199,7 @@ export class TestGridGenerator {
             const sRange = getRange('speedMin', 'speedMax', 'speed', 200);
 
             return JSON.stringify({
-                v: 3,
+                v: 4,
                 ax: mode === 'power' ? 'p' : (mode === 'speed' ? 's' : 'f'),
                 f: fRange,
                 p: pRange,
@@ -206,19 +208,18 @@ export class TestGridGenerator {
                 c: numCols,
                 l: s.lpi || 5000, // Density
                 pw: s.pulseWidth || 80,
+                m: material,
                 t: 'mopa'
             });
         } else {
-            // UV Mapping:
-            // X-Axis (l): LPI
-            // Y-Axis (f): Freq
-            // Fixed: Power (p), Speed (s)
+            // UV Encoding (v2 — adds material)
             return JSON.stringify({
-                v: 1,
+                v: 2,
                 l: [s.lpiMax, s.lpiMin, numCols],
                 f: [s.freqMin, s.freqMax, numRows],
                 p: s.power,
                 s: s.speed,
+                m: material,
                 t: type
             });
         }
@@ -232,11 +233,12 @@ export class TestGridGenerator {
             try {
                 const raw = JSON.parse(code.data);
 
-                // MOPA v3 Flexible
+                // MOPA v3/v4 Flexible
                 if ((raw.v >= 3 || raw.ax) && raw.t === 'mopa') {
                     const mode = raw.ax || 'f'; // f, p, s
                     const rows = raw.r || 9;
                     const cols = raw.c || 14;
+                    const material = raw.m || 'stainless_304'; // v4+ includes material
 
                     let xValues, yValues, xLabel, yLabel;
 
@@ -258,6 +260,7 @@ export class TestGridGenerator {
                         found: true,
                         data: raw,
                         version: raw.v,
+                        material,
                         lpiValues: xValues,  // Mapped to X
                         freqValues: yValues, // Mapped to Y
                         xAxisLabel: xLabel,
@@ -569,7 +572,7 @@ export class TestGridGenerator {
                     dataType: 'Map',
                     value: [[canvasId, {
                         mode: 'LASER_PLANE',
-                        data: { LASER_PLANE: { material: 1323, lightSourceMode: lightSource, thickness: 117, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
+                        data: { LASER_PLANE: { material: getXtoolMaterialId(this.settings.material || DEFAULT_MATERIAL_ID), lightSourceMode: lightSource, thickness: 117, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
                         displays: { dataType: 'Map', value: displaySettings }
                     }]]
                 },
@@ -804,7 +807,7 @@ export class TestGridGenerator {
                     dataType: 'Map',
                     value: [[canvasId, {
                         mode: 'LASER_PLANE',
-                        data: { LASER_PLANE: { material: 1323, lightSourceMode: lightSource, thickness: 0, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
+                        data: { LASER_PLANE: { material: getXtoolMaterialId(this.settings.material || DEFAULT_MATERIAL_ID), lightSourceMode: lightSource, thickness: 0, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
                         displays: { dataType: 'Map', value: displaySettings }
                     }]]
                 },

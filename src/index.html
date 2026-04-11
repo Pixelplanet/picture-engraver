@@ -202,6 +202,17 @@
             </div>
           </div>
 
+          <!-- Material Selection — dev mode only -->
+          <div class="setting-group dev-only" id="settingMaterialGroup" style="display:none;">
+            <h3>Material <span style="font-size:0.75em; color:#f90; font-weight:normal;">[DEV]</span></h3>
+            <div class="setting-row">
+              <label>Material</label>
+              <select class="input" id="settingMaterial">
+                <!-- Populated dynamically from material-registry -->
+              </select>
+            </div>
+          </div>
+
 
 
           <div class="setting-group">
@@ -359,7 +370,13 @@
                     <option value="speed">Fixed Speed (Vary Power & Freq)</option>
                   </select>
                 </div>
-
+                <!-- Material Selection — dev mode only -->
+                <div class="setting-group dev-only" id="gridMaterialGroup" style="display:none;">
+                  <h3>Material <span style="font-size:0.75em; color:#f90; font-weight:normal;">[DEV]</span></h3>
+                  <select class="input" id="gridMaterial">
+                    <!-- Populated dynamically from material-registry -->
+                  </select>
+                </div>
                 <div class="grid-settings-columns">
                   <!-- Frequency Settings (Axis 1 or Fixed) -->
                   <div class="setting-group" id="groupFreq">

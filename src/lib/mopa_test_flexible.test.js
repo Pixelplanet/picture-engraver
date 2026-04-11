@@ -94,11 +94,12 @@ describe('Flexible MOPA Grid Generator', () => {
         const json = generator.encodeSettings(14, 9);
         const data = JSON.parse(json);
 
-        expect(data.v).toBe(3);
+        expect(data.v).toBe(4);
         expect(data.ax).toBe('p'); // Fixed Power
         expect(data.p).toEqual([50, 50]); // Fixed Value
         expect(data.s).toEqual([500, 1500]); // Range
         expect(data.f).toEqual([30, 70]); // Range
+        expect(data.m).toBe('stainless_304'); // Default material
     });
 
     it('should decode v3 settings correctly in analyzeImage', async () => {
