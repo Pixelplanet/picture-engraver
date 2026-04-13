@@ -7,6 +7,8 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 import rateLimit from 'express-rate-limit';
+import { AdminSettings } from './src/lib/admin-settings.js';
+import { createAdminRouter } from './admin-routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -137,6 +139,11 @@ app.use(morgan(':real-ip - :method :url :status :res[content-length] - :response
 app.use(cors());
 app.use(express.json({ limit: '10kb' })); // Limit JSON body size to preventing flooding
 
+// Admin Settings & Routes
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const adminSettings = new AdminSettings(DATA_DIR);
+app.use(createAdminRouter(adminSettings));
+
 // Serve static files from the build directory
 app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -190,6 +197,11 @@ app.use((req, res, next) => {
 // Health check
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', uptime: process.uptime() });
+});
+
+// Admin UI page
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'admin.html'));
 });
 
 // Fallback to index.html for SPA routing

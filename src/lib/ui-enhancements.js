@@ -1,5 +1,6 @@
 
 import { SettingsStorage } from './settings-storage.js';
+import { getActiveLaserConfig } from './device-registry.js';
 
 /**
  * Initializes listeners for frequency limits based on active device.
@@ -32,10 +33,12 @@ export function initFrequencyLimiter() {
 
 function checkFrequencyLimit(input) {
     const settings = SettingsStorage.load();
-    const isMopa = settings.activeDevice && (settings.activeDevice.includes('mopa') || settings.activeDevice.includes('base'));
+    const laser = getActiveLaserConfig(settings);
+    const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
+    const laserLabel = laser ? laser.name : 'UV';
 
     // UV lasers have a hard 40kHz limit in XCS
-    const limit = isMopa ? 1 : 40;
+    const limit = isMopaLike ? 1 : 40;
 
     // Update min attribute on the input element
     if (input.getAttribute('min') !== String(limit)) {
@@ -54,7 +57,7 @@ function checkFrequencyLimit(input) {
     if (!isNaN(val) && val < limit) {
         val = limit;
         corrected = true;
-        message = `Minimum ${limit}kHz enforced for ${isMopa ? 'MOPA' : 'UV'} laser.`;
+        message = `Minimum ${limit}kHz enforced for ${laserLabel} laser.`;
     }
 
     // Enforce upper bound constraint (must be at least 1kHz less than max)

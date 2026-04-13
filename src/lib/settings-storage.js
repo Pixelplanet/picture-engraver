@@ -38,8 +38,8 @@ export const DEVICE_PROFILES = {
     },
     'f2_ultra_mopa': {
         id: 'f2_ultra_mopa',
-        name: 'XTool F2 Ultra (MOPA)',
-        description: 'Standard Fiber/Diode usage (MOPA)',
+        name: 'F2 Ultra Dual',
+        description: 'MOPA + Blue Diode Laser',
         settings: {
             // Engraving defaults
             power: 14,
@@ -70,6 +70,61 @@ export const DEVICE_PROFILES = {
             whitePower: 40
         }
     },
+    'f2_ultra_single': {
+        id: 'f2_ultra_single',
+        name: 'F2 Ultra Single',
+        description: 'MOPA Laser Only',
+        settings: {
+            // Shares MOPA defaults
+            power: 14,
+            speed: 600,
+            passes: 1,
+            crossHatch: false,
+            pulseWidth: 80,
+            freqMin: 200,
+            freqMax: 1200,
+            speedMin: 200,
+            speedMax: 1200,
+            lpiMin: 300,
+            lpiMax: 5000,
+            lpi: 5000,
+            blackFreq: 90,
+            blackLpi: 2500,
+            blackSpeed: 150,
+            blackPower: 17.5,
+            whiteFreq: 50,
+            whiteLpi: 300,
+            whiteSpeed: 1000,
+            whitePower: 40
+        }
+    },
+    'f2': {
+        id: 'f2',
+        name: 'F2',
+        description: 'Infrared + Blue Diode Laser',
+        settings: {
+            // TBD — no calibrated defaults yet, using safe starting points
+            power: 50,
+            speed: 200,
+            passes: 1,
+            crossHatch: false,
+            freqMin: 20,
+            freqMax: 100,
+            speedMin: 50,
+            speedMax: 500,
+            lpiMin: 100,
+            lpiMax: 1000,
+            lpi: 500,
+            blackFreq: 50,
+            blackLpi: 500,
+            blackSpeed: 100,
+            blackPower: 50,
+            whiteFreq: 50,
+            whiteLpi: 300,
+            whiteSpeed: 300,
+            whitePower: 20
+        }
+    },
     'svg_export': {
         id: 'svg_export',
         name: 'SVG Vector Export',
@@ -90,8 +145,9 @@ const COMMON_DEFAULTS = {
     defaultWidth: 200,
     defaultHeight: 200,
     activeDevice: null, // Will be set by user
+    activeLaserType: null, // Active laser type for multi-laser devices (see device-registry.js)
     material: 'stainless_304', // Selected material ID (see material-registry.js)
-    _version: 2.0 // Increment this when defaults change to force update
+    _version: 2.1 // Increment this when defaults change to force update
 };
 
 export const SettingsStorage = {
@@ -228,9 +284,42 @@ export const SettingsStorage = {
     // Multi Color Map Storage
     // ===================================
 
+    // Cache for server-provided color maps
+    _serverColorMaps: null,
+    _serverMapsLoaded: false,
+
+    /**
+     * Fetch admin-managed color maps from the server for a device type.
+     * Caches the result so getColorMaps() can use it synchronously.
+     * Call this once during app init.
+     * @param {string} [deviceType] - If omitted, uses active device
+     * @returns {Promise<Array>}
+     */
+    async fetchServerColorMaps(deviceType) {
+        try {
+            const device = deviceType || this.load().activeDevice || DEFAULT_PROFILE_ID;
+            const res = await fetch(`/api/colormaps/${device}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const maps = await res.json();
+            this._serverColorMaps = maps.map(m => ({
+                ...m,
+                isSystem: true,
+                isServerManaged: true,
+                active: true,
+            }));
+            this._serverMapsLoaded = true;
+            return this._serverColorMaps;
+        } catch (err) {
+            console.warn('[SettingsStorage] Could not fetch server color maps:', err.message);
+            this._serverColorMaps = [];
+            this._serverMapsLoaded = true;
+            return [];
+        }
+    },
+
     /**
      * Get all saved color maps
-     * Combines immutable System Defaults with User Saved Maps
+     * Combines Server-managed defaults + Code defaults + User Saved Maps
      * @returns {Array} Array of color map objects
      */
     getColorMaps() {
@@ -264,7 +353,7 @@ export const SettingsStorage = {
                 }
             }
 
-            // 2. Mark System Defaults
+            // 2. Mark System Defaults (code-bundled)
             // Only include system defaults relevant to current device
             const systemMaps = SYSTEM_DEFAULTS
                 .filter(m => {
@@ -277,8 +366,18 @@ export const SettingsStorage = {
                     active: true
                 }));
 
-            // 3. Return Combined List
-            return [...systemMaps, ...userMaps];
+            // 3. Server-managed maps (admin-uploaded, cached from fetchServerColorMaps)
+            const serverMaps = (this._serverColorMaps || []).filter(m => {
+                const mapDevice = m.deviceType || 'f2_ultra_uv';
+                return mapDevice === activeDevice;
+            });
+
+            // 4. Deduplicate: server maps override code defaults with same id
+            const serverIds = new Set(serverMaps.map(m => m.id));
+            const filteredSystemMaps = systemMaps.filter(m => !serverIds.has(m.id));
+
+            // 5. Return Combined List: server-managed first, then code defaults, then user maps
+            return [...serverMaps, ...filteredSystemMaps, ...userMaps];
         } catch (error) {
             console.warn('Failed to load color maps:', error);
             // Fallback to just system defaults if storage fails

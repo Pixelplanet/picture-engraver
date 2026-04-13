@@ -36,16 +36,32 @@ The Docker image supports **both AMD64 (x86) and ARM64** architectures, making i
 Run the application using Docker:
 
 ```bash
-docker run -d --name picture-engraver --restart always -p 3002:80 pixelplanet/picture-engraver:latest
+docker run -d --name picture-engraver --restart always \
+  -p 3002:80 \
+  -e ADMIN_TOKEN=your-secret-token \
+  -v picture-engraver-data:/app/data \
+  pixelplanet/picture-engraver:latest
 ```
 
-Or using Docker Compose:
+Or using Docker Compose (set `ADMIN_TOKEN` in your environment or `.env` file):
 
 ```bash
-docker-compose up -d
+ADMIN_TOKEN=your-secret-token docker-compose up -d
 ```
 
 > 📖 **For developers:** See [docs/RELEASE_PROCEDURE.md](docs/RELEASE_PROCEDURE.md) for the modern deployment workflow and [docs/DOCKER_BUILD.md](docs/DOCKER_BUILD.md) for manual multi-arch build instructions.
+
+## 🔐 Admin Portal
+
+The admin portal lets you manage default test grid settings and color maps for all users. Access it at `/admin`.
+
+**Features:**
+- **Test Grid Defaults** — Configure default frequency, LPI, power, and speed ranges per laser type.
+- **Color Map Management** — Upload, replace, and set default color mappings from analyzer export packages.
+
+**Setup:** Set the `ADMIN_TOKEN` environment variable to enable authentication. Without it, the admin panel is inaccessible.
+
+> 📖 See [docs/ADMIN_PORTAL.md](docs/ADMIN_PORTAL.md) for full usage documentation.
 
 ## 🏗️ Local Development
 

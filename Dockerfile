@@ -16,7 +16,15 @@ COPY package*.json ./
 # We don't need build tools for canvas here as it's a devDep and not used in prod server
 RUN npm install --omit=dev
 COPY server.js .
+COPY admin-routes.js .
 COPY --from=build /app/dist ./dist
+COPY src/lib/admin-settings.js ./src/lib/
+COPY src/lib/test-grid-generator.js ./src/lib/
+COPY src/lib/device-registry.js ./src/lib/
+COPY src/lib/material-registry.js ./src/lib/
+
+# Create data directory for persistent settings/color maps
+RUN mkdir -p /app/data
 
 # Security: Run as non-root user
 RUN chown -R node:node /app

@@ -6,10 +6,17 @@
 import jsQR from 'jsqr';
 import QRCode from 'qrcode';
 import { getXtoolMaterialId, DEFAULT_MATERIAL_ID } from './material-registry.js';
+import { getLaserConfig, getDeviceConfig, resolveDeviceId } from './device-registry.js';
 
 export class TestGridGenerator {
     constructor(settings = {}) {
-        const isMopa = settings.activeDevice && (settings.activeDevice.includes('mopa') || settings.activeDevice.includes('base'));
+        // Resolve device + laser config from registry
+        const deviceId = resolveDeviceId(settings.activeDevice || 'f2_ultra_uv');
+        const laserTypeId = settings.activeLaserType || null;
+        const laser = getLaserConfig(deviceId, laserTypeId);
+
+        // A laser is "MOPA-like" if it has pulseWidth and mopaFrequency capabilities
+        const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
 
         this.settings = {
             // Business card dimensions
@@ -19,25 +26,25 @@ export class TestGridGenerator {
             // Grid parameters
             lpiMin: 500,
             lpiMax: 2000,
-            lpi: isMopa ? 5000 : undefined, // Fixed LPC for MOPA default
+            lpi: isMopaLike ? 5000 : undefined, // Fixed LPC for MOPA-like default
 
-            freqMin: isMopa ? 200 : 40,
-            freqMax: isMopa ? 1200 : 90,
+            freqMin: isMopaLike ? 200 : 40,
+            freqMax: isMopaLike ? 1200 : 90,
 
             // Engraving settings
-            power: isMopa ? 14 : 70,
+            power: isMopaLike ? 14 : 70,
             powerMin: undefined,
             powerMax: undefined,
 
             speed: 425,
-            speedMin: isMopa ? 200 : undefined,
-            speedMax: isMopa ? 1200 : undefined,
+            speedMin: isMopaLike ? 200 : undefined,
+            speedMax: isMopaLike ? 1200 : undefined,
 
-            passes: isMopa ? 1 : 1,
-            crossHatch: !isMopa, // False for MOPA
+            passes: 1,
+            crossHatch: !isMopaLike, // False for MOPA-like
 
             // MOPA grid mode: 'power' = fixed power, vary speed & frequency
-            gridMode: isMopa ? 'power' : undefined,
+            gridMode: isMopaLike ? 'power' : undefined,
 
             // QR code settings
             qrPower: 17.5,
@@ -124,7 +131,14 @@ export class TestGridGenerator {
     }
 
     createDisplaySettings(frequency, lpi, power, speed, passes, extraParams = {}) {
-        const isMopa = !!extraParams.mopaFrequency;
+        // Determine laser capabilities from extraParams or active laser config
+        const hasMopaFreq = !!extraParams.mopaFrequency;
+        const processingLightSource = extraParams.processingLightSource || 'red';
+        const planType = extraParams._planType || (hasMopaFreq ? 'red' : 'dot_cloud');
+
+        // Strip internal-only keys before spreading into XCS data
+        const { _planType, ...xcsParams } = extraParams;
+
         const customize = {
             bitmapEngraveMode: 'normal',
             speed,
@@ -132,16 +146,16 @@ export class TestGridGenerator {
             dpi: lpi,
             power,
             repeat: passes,
-            bitmapScanMode: this.settings.crossHatch ? 'crossMode' : 'zMode', // MOPA uses zMode (Bi-directional)
+            bitmapScanMode: this.settings.crossHatch ? 'crossMode' : 'zMode',
             frequency,
             crossAngle: this.settings.crossHatch,
             scanAngle: 0,
             angleType: 2,
-            processingLightSource: 'red', // Per user confirmation for MOPA IR
-            ...extraParams // Inject extra params like pulseWidth, mopaFrequency
+            processingLightSource,
+            ...xcsParams
         };
 
-        const processingType = isMopa ? 'COLOR_FILL_ENGRAVE' : 'FILL_VECTOR_ENGRAVING';
+        const processingType = hasMopaFreq ? 'COLOR_FILL_ENGRAVE' : 'FILL_VECTOR_ENGRAVING';
 
         const data = {
             VECTOR_CUTTING: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize } } },
@@ -154,10 +168,10 @@ export class TestGridGenerator {
             INNER_THREE_D: { materialType: 'customize', planType: 'dot_cloud', parameter: { customize: { ...customize, subdivide: 0.1, speed: 80, power: 1, repeat: 1, frequency: 40 } } }
         };
 
-        // Add COLOR_FILL_ENGRAVE section for MOPA devices
-        if (isMopa) {
+        // Add COLOR_FILL_ENGRAVE section for non-UV lasers
+        if (hasMopaFreq) {
             data.COLOR_FILL_ENGRAVE = {
-                materialType: 'customize', planType: 'red',
+                materialType: 'customize', planType,
                 parameter: {
                     customize: {
                         ...customize,
@@ -178,12 +192,14 @@ export class TestGridGenerator {
     // Encode settings for QR code
     encodeSettings(numCols, numRows) {
         const s = this.settings;
-        const deviceId = this.settings.activeDevice || 'f2_ultra_uv';
-        const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
-        const type = isMopa ? 'mopa' : 'uv';
+        const deviceId = resolveDeviceId(this.settings.activeDevice || 'f2_ultra_uv');
+        const laserTypeId = this.settings.activeLaserType || null;
+        const laser = getLaserConfig(deviceId, laserTypeId);
+        const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
+        const type = isMopaLike ? 'mopa' : 'uv';
         const material = s.material || 'stainless_304';
 
-        if (isMopa) {
+        if (isMopaLike) {
             // MOPA Flexible Encoding (v4 — adds material)
             const mode = s.gridMode || 'frequency';
 
@@ -539,17 +555,19 @@ export class TestGridGenerator {
         displaySettings.push([qrDisplayId, this.createDisplaySettings(s.qrFrequency, s.qrLpi, s.qrPower, s.qrSpeed, 1)]);
         layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
 
-        // Build XCS
-        const deviceId = this.settings.activeDevice || 'f2_ultra_uv';
-        const isMopa = deviceId === 'f2_ultra_mopa' || deviceId === 'f2_ultra_base';
+        // Build XCS — resolve device + laser config
+        const deviceId = resolveDeviceId(this.settings.activeDevice || 'f2_ultra_uv');
+        const laserTypeId = this.settings.activeLaserType || null;
+        const laser = getLaserConfig(deviceId, laserTypeId);
+        const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
 
-        if (isMopa) {
+        if (isMopaLike) {
             return this.generateMopaGrid(canvasId, now);
         }
 
-        const extId = "GS009-CLASS-4";
-        const extName = "F2 Ultra UV";
-        const lightSource = "uv";
+        const extId = laser ? laser.extId : 'GS009-CLASS-4';
+        const extName = laser ? laser.extName : 'F2 Ultra UV';
+        const lightSource = laser ? laser.lightSource : 'uv';
 
         const xcs = {
             canvasId,
@@ -567,7 +585,7 @@ export class TestGridGenerator {
             modify: now,
             device: {
                 id: extId,
-                power: [5],
+                power: laser ? laser.powerLevels : [5],
                 data: {
                     dataType: 'Map',
                     value: [[canvasId, {
@@ -663,10 +681,13 @@ export class TestGridGenerator {
         const passes = s.passes || 1;
         const mopaLpi = s.lpi || 5000;
 
-        // XCS Structure for MOPA
-        const extId = "GS004-CLASS-4";
-        const extName = "F2 Ultra";
-        const lightSource = "red";
+        // XCS Structure — from device registry
+        const deviceId = resolveDeviceId(this.settings.activeDevice || 'f2_ultra_mopa');
+        const laserTypeId = this.settings.activeLaserType || null;
+        const laser = getLaserConfig(deviceId, laserTypeId);
+        const extId = laser ? laser.extId : 'GS009-CLASS-1';
+        const extName = laser ? laser.extName : 'F2 Ultra';
+        const lightSource = laser ? laser.lightSource : 'red';
 
         // FIXED QR CODE LOGIC (17mm x 17mm with 1mm gap)
         const QR_SIZE_MM = 17;
@@ -753,6 +774,8 @@ export class TestGridGenerator {
                 const extraParams = {
                     pulseWidth: pulseWidth,
                     mopaFrequency: cellFreq,
+                    processingLightSource: laser ? laser.lightSource : 'red',
+                    _planType: laser ? laser.planType : 'red',
                 };
 
                 // Create Settings
@@ -802,7 +825,7 @@ export class TestGridGenerator {
             modify: now,
             device: {
                 id: extId,
-                power: [20],
+                power: laser ? laser.powerLevels : [20],
                 data: {
                     dataType: 'Map',
                     value: [[canvasId, {

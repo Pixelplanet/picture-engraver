@@ -6,4 +6,11 @@ services:
     container_name: picture-engraver
     ports:
       - "3002:80"
+    environment:
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+    volumes:
+      - picture-engraver-data:/app/data
     restart: unless-stopped
+
+volumes:
+  picture-engraver-data:

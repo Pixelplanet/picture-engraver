@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Picture Engraver — Admin Panel</title>
+<style>
+  :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --accent: #3b82f6; --text: #e2e8f0; --muted: #94a3b8; --danger: #ef4444; --success: #22c55e; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .container { max-width: 900px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 1.4rem; margin-bottom: 8px; }
+  .subtitle { color: var(--muted); font-size: 0.85rem; margin-bottom: 24px; }
+
+  /* Auth */
+  #auth-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 32px; text-align: center; max-width: 400px; margin: 80px auto; }
+  #auth-panel input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font-size: 0.95rem; margin: 12px 0; }
+  #auth-panel button { background: var(--accent); color: #fff; border: none; padding: 10px 24px; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab { padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px 6px 0 0; background: var(--surface); color: var(--muted); cursor: pointer; font-size: 0.85rem; border-bottom: none; }
+  .tab.active { background: var(--bg); color: var(--accent); border-color: var(--accent); border-bottom: 2px solid var(--bg); }
+
+  /* Form */
+  .settings-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 0 8px 8px 8px; padding: 24px; }
+  .field-group { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .field-group h3 { grid-column: 1 / -1; font-size: 0.9rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 4px; }
+  .field { display: flex; flex-direction: column; }
+  .field label { font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; }
+  .field input, .field select { padding: 7px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 0.9rem; }
+
+  .actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+  .btn { padding: 8px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 500; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-danger { background: var(--danger); color: #fff; }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 6px; color: #fff; font-size: 0.85rem; z-index: 100; opacity: 0; transition: opacity 0.3s; }
+  .toast.show { opacity: 1; }
+  .toast.success { background: var(--success); }
+  .toast.error { background: var(--danger); }
+
+  #main-panel { display: none; }
+
+  /* Top nav */
+  .top-nav { display: flex; gap: 8px; margin-bottom: 20px; }
+  .top-nav .nav-btn { padding: 10px 20px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; font-size: 0.9rem; font-weight: 500; }
+  .top-nav .nav-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  /* Color maps */
+  .map-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+  .map-card .map-info { flex: 1; }
+  .map-card .map-name { font-weight: 600; font-size: 0.95rem; }
+  .map-card .map-meta { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+  .map-card .map-actions { display: flex; gap: 6px; align-items: center; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; }
+  .badge-default { background: var(--accent); color: #fff; }
+  .badge-device { background: var(--border); color: var(--text); }
+  .upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 32px; text-align: center; color: var(--muted); cursor: pointer; margin-bottom: 16px; transition: border-color 0.2s; }
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); color: var(--text); }
+  .upload-zone input[type=file] { display: none; }
+  .filter-bar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+  .filter-bar select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 0.85rem; }
+  .filter-bar label { font-size: 0.85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div id="auth-panel">
+  <h1>Admin Login</h1>
+  <p style="color:var(--muted); font-size:0.85rem">Enter administrator token</p>
+  <input type="password" id="token-input" placeholder="Admin token" autocomplete="off">
+  <br><button onclick="authenticate()">Login</button>
+  <p id="auth-error" style="color:var(--danger); font-size:0.8rem; margin-top:8px; display:none"></p>
+</div>
+
+<div id="main-panel" class="container">
+  <h1>Picture Engraver Admin</h1>
+  <p class="subtitle">Manage test grid settings and default color mappings</p>
+
+  <div class="top-nav">
+    <button class="nav-btn active" onclick="switchSection('testgrid')">Test Grids</button>
+    <button class="nav-btn" onclick="switchSection('colormaps')">Color Maps</button>
+  </div>
+
+  <!-- Test Grids Section -->
+  <div class="section active" id="section-testgrid">
+    <div class="tabs" id="laser-tabs"></div>
+    <div class="settings-panel" id="settings-form"></div>
+
+    <div class="actions">
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+      <button class="btn btn-secondary" onclick="previewGrid()">Preview Grid Info</button>
+      <button class="btn btn-secondary" onclick="downloadGrid()">Download Test Grid</button>
+      <button class="btn btn-danger" onclick="resetAll()">Reset All to Defaults</button>
+    </div>
+  </div>
+
+  <!-- Color Maps Section -->
+  <div class="section" id="section-colormaps">
+    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('map-file-input').click()">
+      <input type="file" id="map-file-input" accept=".json" onchange="handleMapUpload(event)">
+      <p style="font-size:1.1rem; margin-bottom:6px;">📁 Upload Color Map Package</p>
+      <p style="font-size:0.8rem;">Drop a JSON export from the Analyzer, or click to browse</p>
+    </div>
+
+    <div class="filter-bar">
+      <label>Filter by device:</label>
+      <select id="map-device-filter" onchange="loadColorMaps()">
+        <option value="">All Devices</option>
+        <option value="f2_ultra_uv">F2 Ultra UV</option>
+        <option value="f2_ultra_mopa">F2 Ultra MOPA</option>
+        <option value="f2_ultra_single">F2 Ultra Single</option>
+        <option value="f2">F2</option>
+      </select>
+      <span id="map-count" style="margin-left:auto; font-size:0.8rem; color:var(--muted)"></span>
+    </div>
+
+    <div id="color-maps-list"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const LASER_TYPES = ['uv','mopa','mopa_single','blue_ultra','ir','blue_f2'];
+const LASER_LABELS = { uv:'UV', mopa:'MOPA', mopa_single:'MOPA Single', blue_ultra:'Blue Ultra', ir:'Infrared', blue_f2:'Blue F2' };
+
+// MOPA-like lasers have different field sets
+const MOPA_LIKE = ['mopa','mopa_single','blue_ultra'];
+
+const COMMON_FIELDS = [
+  { key:'cardWidth', label:'Card Width (mm)', type:'number', step:1 },
+  { key:'cardHeight', label:'Card Height (mm)', type:'number', step:1 },
+  { key:'cellSize', label:'Cell Size (mm)', type:'number', step:0.5 },
+  { key:'cellGap', label:'Cell Gap (mm)', type:'number', step:0.5 },
+  { key:'margin', label:'Margin (mm)', type:'number', step:0.5 },
+  { key:'passes', label:'Passes', type:'number', step:1 },
+  { key:'material', label:'Material', type:'text' },
+];
+
+const UV_FIELDS = [
+  { key:'lpiMin', label:'LPI Min', type:'number', step:10 },
+  { key:'lpiMax', label:'LPI Max', type:'number', step:10 },
+  { key:'freqMin', label:'Freq Min (kHz)', type:'number', step:1 },
+  { key:'freqMax', label:'Freq Max (kHz)', type:'number', step:1 },
+  { key:'power', label:'Power (%)', type:'number', step:1 },
+  { key:'speed', label:'Speed (mm/s)', type:'number', step:5 },
+  { key:'crossHatch', label:'Cross Hatch', type:'checkbox' },
+];
+
+const MOPA_FIELDS = [
+  { key:'gridMode', label:'Grid Mode', type:'select', options:['frequency','power','speed'] },
+  { key:'lpi', label:'LPI (Density)', type:'number', step:100 },
+  { key:'freqMin', label:'Freq Min (kHz)', type:'number', step:10 },
+  { key:'freqMax', label:'Freq Max (kHz)', type:'number', step:10 },
+  { key:'power', label:'Power (%)', type:'number', step:1 },
+  { key:'speedMin', label:'Speed Min (mm/s)', type:'number', step:10 },
+  { key:'speedMax', label:'Speed Max (mm/s)', type:'number', step:10 },
+  { key:'pulseWidth', label:'Pulse Width (ns)', type:'number', step:10 },
+];
+
+const QR_FIELDS = [
+  { key:'qrPower', label:'QR Power (%)', type:'number', step:0.5 },
+  { key:'qrSpeed', label:'QR Speed (mm/s)', type:'number', step:5 },
+  { key:'qrFrequency', label:'QR Freq (kHz)', type:'number', step:1 },
+  { key:'qrLpi', label:'QR LPI', type:'number', step:100 },
+];
+
+let token = '';
+let allSettings = {};
+let activeLaser = 'uv';
+
+function toast(msg, type='success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + type;
+  setTimeout(() => el.className = 'toast', 3000);
+}
+
+async function apiFetch(path, opts={}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json', ...(opts.headers||{}) },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+async function authenticate() {
+  token = document.getElementById('token-input').value.trim();
+  if (!token) return;
+  try {
+    allSettings = await apiFetch('/admin/api/settings');
+    document.getElementById('auth-panel').style.display = 'none';
+    document.getElementById('main-panel').style.display = 'block';
+    sessionStorage.setItem('_adminToken', token);
+    renderTabs();
+    renderForm();
+  } catch(e) {
+    document.getElementById('auth-error').textContent = e.message;
+    document.getElementById('auth-error').style.display = 'block';
+  }
+}
+
+function renderTabs() {
+  const tabsEl = document.getElementById('laser-tabs');
+  tabsEl.innerHTML = LASER_TYPES.map(lt =>
+    `<div class="tab ${lt===activeLaser?'active':''}" onclick="switchTab('${lt}')">${LASER_LABELS[lt]}</div>`
+  ).join('');
+}
+
+function switchTab(lt) {
+  activeLaser = lt;
+  renderTabs();
+  renderForm();
+}
+
+function renderForm() {
+  const defs = allSettings.testGridDefaults?.[activeLaser] || {};
+  const isMopa = MOPA_LIKE.includes(activeLaser);
+  const laserFields = isMopa ? MOPA_FIELDS : UV_FIELDS;
+
+  let html = '';
+  html += renderFieldGroup('Card & Layout', COMMON_FIELDS, defs);
+  html += renderFieldGroup('Laser Parameters', laserFields, defs);
+  html += renderFieldGroup('QR Code Settings', QR_FIELDS, defs);
+
+  document.getElementById('settings-form').innerHTML = html;
+}
+
+function renderFieldGroup(title, fields, data) {
+  let html = `<div class="field-group"><h3>${title}</h3>`;
+  for (const f of fields) {
+    const val = data[f.key] ?? '';
+    if (f.type === 'checkbox') {
+      html += `<div class="field"><label>${f.label}</label><input type="checkbox" data-key="${f.key}" ${val?'checked':''}></div>`;
+    } else if (f.type === 'select') {
+      html += `<div class="field"><label>${f.label}</label><select data-key="${f.key}">${f.options.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}</select></div>`;
+    } else {
+      html += `<div class="field"><label>${f.label}</label><input type="${f.type}" data-key="${f.key}" value="${val}" step="${f.step||1}"></div>`;
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+function collectFormData() {
+  const data = {};
+  document.querySelectorAll('#settings-form [data-key]').forEach(el => {
+    const key = el.dataset.key;
+    if (el.type === 'checkbox') {
+      data[key] = el.checked;
+    } else if (el.type === 'number') {
+      data[key] = el.value === '' ? undefined : parseFloat(el.value);
+    } else {
+      data[key] = el.value;
+    }
+  });
+  return data;
+}
+
+async function saveSettings() {
+  try {
+    const formData = collectFormData();
+    const result = await apiFetch(`/admin/api/settings/testgrid/${activeLaser}`, {
+      method: 'PATCH',
+      body: JSON.stringify(formData),
+    });
+    allSettings.testGridDefaults[activeLaser] = result;
+    toast('Settings saved');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function previewGrid() {
+  try {
+    const result = await apiFetch(`/admin/api/settings/testgrid/${activeLaser}/preview`);
+    const info = result.gridInfo;
+    toast(`Grid: ${info.numCols}x${info.numRows} = ${info.totalCells} cells, XCS: ${(result.xcsLength/1024).toFixed(1)}KB`);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function downloadGrid() {
+  window.open(`/api/testgrid/${activeLaser}`, '_blank');
+}
+
+async function resetAll() {
+  if (!confirm('Reset ALL laser type defaults to hardcoded values?')) return;
+  try {
+    allSettings = await apiFetch('/admin/api/settings/reset', { method: 'POST' });
+    renderForm();
+    toast('All settings reset to defaults');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// Auto-login from session
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = sessionStorage.getItem('_adminToken');
+  if (saved) {
+    document.getElementById('token-input').value = saved;
+    authenticate();
+  }
+
+  // Drag and drop for color maps
+  const zone = document.getElementById('upload-zone');
+  if (zone) {
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) handleMapFile(e.dataTransfer.files[0]);
+    });
+  }
+});
+
+// ── Section Navigation ──────────────────────────────────────────────────────
+
+function switchSection(section) {
+  document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.top-nav .nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('section-' + section).classList.add('active');
+  event.target.classList.add('active');
+
+  if (section === 'colormaps') loadColorMaps();
+}
+
+// ── Color Map Management ────────────────────────────────────────────────────
+
+let colorMaps = [];
+
+async function loadColorMaps() {
+  try {
+    const filter = document.getElementById('map-device-filter').value;
+    const query = filter ? `?deviceType=${filter}` : '';
+    colorMaps = await apiFetch('/admin/api/colormaps' + query);
+    renderColorMaps();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function renderColorMaps() {
+  const listEl = document.getElementById('color-maps-list');
+  const countEl = document.getElementById('map-count');
+  countEl.textContent = `${colorMaps.length} color map${colorMaps.length !== 1 ? 's' : ''}`;
+
+  if (colorMaps.length === 0) {
+    listEl.innerHTML = '<div style="text-align:center; padding:40px; color:var(--muted)">No color maps uploaded yet. Upload an Analyzer export to get started.</div>';
+    return;
+  }
+
+  listEl.innerHTML = colorMaps.map(m => `
+    <div class="map-card">
+      <div class="map-info">
+        <div class="map-name">
+          ${esc(m.name)}
+          ${m.isDefault ? '<span class="badge badge-default" style="margin-left:8px">DEFAULT</span>' : ''}
+        </div>
+        <div class="map-meta">
+          <span class="badge badge-device">${esc(m.deviceType)}</span>
+          &nbsp;·&nbsp;${m.entryCount} colors
+          ${m.description ? '&nbsp;·&nbsp;' + esc(m.description) : ''}
+          ${m.updatedAt ? '&nbsp;·&nbsp;' + new Date(m.updatedAt).toLocaleDateString() : ''}
+        </div>
+      </div>
+      <div class="map-actions">
+        ${!m.isDefault ? `<button class="btn btn-secondary" onclick="setMapDefault('${esc(m.id)}')" title="Set as default for this device">★ Default</button>` : ''}
+        <button class="btn btn-secondary" onclick="downloadMap('${esc(m.id)}', '${esc(m.name)}')" title="Download JSON">⬇</button>
+        <button class="btn btn-danger" onclick="deleteMap('${esc(m.id)}', '${esc(m.name)}')" title="Delete">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function esc(str) {
+  if (!str) return '';
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function handleMapUpload(event) {
+  const file = event.target.files[0];
+  if (file) handleMapFile(file);
+  event.target.value = ''; // Reset so same file can be re-uploaded
+}
+
+async function handleMapFile(file) {
+  if (!file.name.endsWith('.json')) {
+    toast('Only JSON files are accepted', 'error');
+    return;
+  }
+
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+
+    // Detect format: export package (maps/grids array) vs direct map
+    let mapData;
+    let mapCount = 0;
+    if (parsed.maps && Array.isArray(parsed.maps)) {
+      mapCount = parsed.maps.length;
+      // Upload each map individually
+      for (const m of parsed.maps) {
+        await apiFetch('/admin/api/colormaps', { method: 'POST', body: JSON.stringify(m) });
+      }
+    } else if (parsed.grids && Array.isArray(parsed.grids)) {
+      mapCount = parsed.grids.length;
+      for (const m of parsed.grids) {
+        await apiFetch('/admin/api/colormaps', { method: 'POST', body: JSON.stringify(m) });
+      }
+    } else if (parsed.data && parsed.data.entries) {
+      // Direct map object
+      mapCount = 1;
+      await apiFetch('/admin/api/colormaps', { method: 'POST', body: JSON.stringify(parsed) });
+    } else if (parsed.entries && Array.isArray(parsed.entries)) {
+      // Raw data object — wrap it
+      mapCount = 1;
+      const name = file.name.replace('.json', '') || 'Uploaded Map';
+      const wrapped = { name, deviceType: 'f2_ultra_uv', data: parsed };
+      await apiFetch('/admin/api/colormaps', { method: 'POST', body: JSON.stringify(wrapped) });
+    } else {
+      toast('Unrecognized format. Expected an Analyzer export JSON.', 'error');
+      return;
+    }
+
+    toast(`Uploaded ${mapCount} color map${mapCount > 1 ? 's' : ''}`);
+    loadColorMaps();
+  } catch(e) {
+    toast('Upload failed: ' + e.message, 'error');
+  }
+}
+
+async function setMapDefault(id) {
+  try {
+    await apiFetch(`/admin/api/colormaps/${id}/set-default`, { method: 'POST' });
+    toast('Default updated');
+    loadColorMaps();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function downloadMap(id, name) {
+  try {
+    const map = await apiFetch(`/admin/api/colormaps/${id}`);
+    const blob = new Blob([JSON.stringify(map, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (name || id) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteMap(id, name) {
+  if (!confirm(`Delete color map "${name}"?`)) return;
+  try {
+    await apiFetch(`/admin/api/colormaps/${id}`, { method: 'DELETE' });
+    toast('Color map deleted');
+    loadColorMaps();
+  } catch(e) { toast(e.message, 'error'); }
+}
+</script>
+</body>
+</html>

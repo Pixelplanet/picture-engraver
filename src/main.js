@@ -25,6 +25,7 @@ import { multiGridPalette, initializeMultiGridPalette } from './lib/multi-grid-p
 import { GridImagePicker } from './lib/grid-image-picker.js';
 import { initFrequencyLimiter } from './lib/ui-enhancements.js';
 import { getMaterialsForLaser, getMaterialById, DEFAULT_MATERIAL_ID } from './lib/material-registry.js';
+import { resolveDeviceId, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey } from './lib/device-registry.js';
 
 
 
@@ -936,6 +937,9 @@ async function init() {
     // 1. Initialize Settings Storage & Defaults
     SettingsStorage.ensureSystemDefaultMap();
 
+    // 1a. Fetch server-managed color maps (non-blocking, background)
+    SettingsStorage.fetchServerColorMaps().catch(() => {});
+
     // 1b. Initialize Multi-Grid Palette with k-d tree index
     await initializeMultiGridPalette(SettingsStorage);
 
@@ -1013,10 +1017,10 @@ function initDevMode() {
 }
 
 function populateMaterialDropdowns() {
-    const deviceId = state.settings?.activeDevice || 'f2_ultra_uv';
-    const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
-    const laserType = isMopa ? 'mopa' : 'uv';
-    const materials = getMaterialsForLaser(laserType);
+    const deviceId = resolveDeviceId(state.settings?.activeDevice || 'f2_ultra_uv');
+    const laserTypeId = state.settings?.activeLaserType || null;
+    const settingsKey = getSettingsKey(deviceId, laserTypeId);
+    const materials = getMaterialsForLaser(settingsKey);
     const current = state.settings?.material || DEFAULT_MATERIAL_ID;
     const ids = ['settingMaterial', 'gridMaterial'];
     ids.forEach(id => {
@@ -1038,7 +1042,19 @@ function updateDeviceUI(deviceId) {
         const titleContainer = document.querySelector('.title-container .brand-subtitle');
         if (titleContainer) {
             const badgeColor = isVirtual ? 'rgba(100,200,100,0.2)' : 'rgba(255,255,255,0.1)';
-            titleContainer.innerHTML = `by lasertools.org &nbsp; <span class="device-badge" style="background: ${badgeColor}; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; cursor:pointer;" title="Click to switch device">📍 ${profile.name}</span>`;
+            let badgeHTML = `by lasertools.org &nbsp; <span class="device-badge" style="background: ${badgeColor}; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; cursor:pointer;" title="Click to switch device">📍 ${profile.name}</span>`;
+
+            // Add laser type selector for multi-laser devices
+            if (isMultiLaserDevice(deviceId)) {
+                const options = getLaserTypeOptions(deviceId);
+                const currentLaser = state.settings?.activeLaserType || null;
+                const optionsHTML = options.map(opt =>
+                    `<option value="${opt.id}"${opt.id === currentLaser ? ' selected' : ''}>${opt.name}</option>`
+                ).join('');
+                badgeHTML += ` <select id="laserTypeSelector" style="background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 4px; font-size: 0.85em; cursor: pointer;" title="Switch laser type">${optionsHTML}</select>`;
+            }
+
+            titleContainer.innerHTML = badgeHTML;
 
             // Add click listener to the badge to re-open landing page
             const badge = titleContainer.querySelector('.device-badge');
@@ -1049,18 +1065,32 @@ function updateDeviceUI(deviceId) {
                 // We'll leave the click handling to setupDeviceSwitching mostly, 
                 // but here we just render the visual.
             });
+
+            // Add laser type change handler
+            const laserSelector = document.getElementById('laserTypeSelector');
+            if (laserSelector) {
+                laserSelector.addEventListener('change', (e) => {
+                    const newLaserType = e.target.value;
+                    state.settings.activeLaserType = newLaserType;
+                    SettingsStorage.save(state.settings);
+                    // Re-apply UI for the new laser type
+                    applySettingsToUI();
+                    updateTestGridUI();
+                    if (isDevMode()) populateMaterialDropdowns();
+                });
+            }
         }
     }
 
     // Toggle UI elements based on virtual device mode
     toggleVirtualModeUI(isVirtual);
 
-    // Enforce MOPA/Virtual logic for Focus Warnings
-    // Hide if MOPA or Virtual, Show if UV
-    const isMopa = deviceId === 'f2_ultra_mopa' || deviceId === 'f2_ultra_base';
+    // Enforce focus warning visibility based on laser config
+    const laser = getLaserConfig(deviceId);
+    const showFocusWarning = laser ? laser.addFocusWarning : false;
     const focusWarnings = document.querySelectorAll('.focus-warning-block');
     focusWarnings.forEach(el => {
-        if (isMopa || isVirtual) {
+        if (!showFocusWarning || isVirtual) {
             el.style.setProperty('display', 'none', 'important');
         } else {
             el.style.display = 'block';
@@ -2700,8 +2730,9 @@ async function downloadXCS() {
         const xcsContent = generator.generate(state.processedImage, state.layers, getOutputSize());
 
         // Download immediately — filename includes image name, laser type, material
-        const deviceId = state.settings?.activeDevice || 'f2_ultra_uv';
-        const laserLabel = (deviceId.includes('mopa') || deviceId.includes('base')) ? 'MOPA' : 'UV';
+        const deviceId = resolveDeviceId(state.settings?.activeDevice || 'f2_ultra_uv');
+        const laserConfig = getLaserConfig(deviceId, state.settings?.activeLaserType);
+        const laserLabel = laserConfig ? laserConfig.name : 'UV';
         const materialId = state.settings?.material || DEFAULT_MATERIAL_ID;
         const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
         const imgLabel = state.originalImageName ? `_${state.originalImageName}` : '';
@@ -2858,23 +2889,21 @@ function applySettingsToUI() {
     elements.settingLpiMin.value = s.lpiMin;
     elements.settingLpiMax.value = s.lpiMax;
 
-    // Default pass count logic
-    if (s.deviceType && (s.deviceType.includes('mopa') || s.deviceType.includes('base'))) {
-        // MOPA usually single pass
-    }
-    // Separation Logic: Pulse Width
-    const isMopa = s.activeDevice === 'f2_ultra_mopa' || s.activeDevice === 'f2_ultra_base'; // Support legacy
+    // Separation Logic: Pulse Width — show for lasers with pulse width capability
+    const activeLaser = getActiveLaserConfig(s);
+    const isMopaLike = activeLaser ? (activeLaser.hasPulseWidth && activeLaser.hasMopaFrequency) : false;
     if (elements.rowPulseWidth) {
-        elements.rowPulseWidth.style.display = isMopa ? 'flex' : 'none';
-        if (isMopa) {
+        elements.rowPulseWidth.style.display = isMopaLike ? 'flex' : 'none';
+        if (isMopaLike) {
             elements.settingPulseWidth.value = s.pulseWidth || 80;
         }
     }
 
     // Toggle Focus Warning Blocks
+    const showFocusWarning = activeLaser ? activeLaser.addFocusWarning : false;
     const focusWarnings = document.querySelectorAll('.focus-warning-block');
     focusWarnings.forEach(el => {
-        el.style.display = isMopa ? 'none' : 'block';
+        el.style.display = showFocusWarning ? 'block' : 'none';
     });
 
     // Standard Colors (Black & White)
@@ -2898,13 +2927,14 @@ function updateTestGridUI() {
     const s = state.settings;
     if (!s || !s.activeDevice) return;
 
-    const isMopa = s.activeDevice.includes('mopa') || s.activeDevice.includes('base');
+    const laser = getActiveLaserConfig(s);
+    const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
 
     // Update Standard Grid tab description based on device
     const elVar1 = document.getElementById('stdGridVar1');
     const elVar2 = document.getElementById('stdGridVar2');
     const elPasses = document.getElementById('stdGridPasses');
-    if (isMopa) {
+    if (isMopaLike) {
         if (elVar1) elVar1.innerHTML = '<strong>Speed:</strong> 200 - 1200 mm/s (X axis)';
         if (elVar2) elVar2.innerHTML = '<strong>Frequency:</strong> 200 - 1200 kHz (Y axis)';
         if (elPasses) elPasses.innerHTML = '<strong>Fixed:</strong> Power 14%, LPC 5000, Pulse 80ns';
@@ -2933,7 +2963,7 @@ function updateTestGridUI() {
     const hFreq = document.getElementById('gridHeaderFreq');
     const hLpi = document.getElementById('gridHeaderLPI');
 
-    if (isMopa) {
+    if (isMopaLike) {
         if (elMopaControl) elMopaControl.style.display = '';
 
         const mode = elFixedParam ? elFixedParam.value : 'frequency';
@@ -4557,14 +4587,17 @@ function drawSamplingMarkers(ctx, corners, numCols, numRows, qrStartCol, qrStart
 }
 
 function getCustomGridSettings() {
-    const deviceId = state.settings.activeDevice || 'f2_ultra_uv';
-    const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
+    const deviceId = resolveDeviceId(state.settings.activeDevice || 'f2_ultra_uv');
+    const laserTypeId = state.settings.activeLaserType || null;
+    const laser = getLaserConfig(deviceId, laserTypeId);
+    const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
 
-    if (isMopa) {
+    if (isMopaLike) {
         const fixedMode = document.getElementById('gridFixedParam') ? document.getElementById('gridFixedParam').value : 'frequency';
 
         const settings = {
             activeDevice: deviceId,
+            activeLaserType: laserTypeId,
             gridMode: fixedMode,
             cellSize: Math.max(1, Math.min(10, parseInt(document.getElementById('gridCellSize').value) || 5)),
             cellGap: (() => {
@@ -4717,12 +4750,15 @@ function unused_updateGridPreview() {
 
 
 function getSmartGridFilename(prefix, settings, deviceId) {
-    const devLabel = deviceId.includes('mopa') || deviceId.includes('base') ? 'MOPA' : 'UV';
+    const resolvedId = resolveDeviceId(deviceId);
+    const laser = getLaserConfig(resolvedId, settings.activeLaserType);
+    const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
+    const devLabel = laser ? laser.name : 'UV';
     const materialId = settings.material || DEFAULT_MATERIAL_ID;
     const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
     let name = `${prefix}_F2_${devLabel}_${materialLabel}`;
 
-    if (devLabel === 'MOPA') {
+    if (isMopaLike) {
         name += `_S${settings.speedMin}-${settings.speedMax}_F${settings.freqMin}-${settings.freqMax}`;
     } else {
         name += `_LPC${settings.lpiMin}-${settings.lpiMax}_F${settings.freqMin}-${settings.freqMax}`;
@@ -4732,56 +4768,52 @@ function getSmartGridFilename(prefix, settings, deviceId) {
 
 function generateStandardGridXCS() {
     const currentSettings = SettingsStorage.load();
-    const deviceId = currentSettings.activeDevice || 'f2_ultra_uv';
-    const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
+    const deviceId = resolveDeviceId(currentSettings.activeDevice || 'f2_ultra_uv');
+    const laserTypeId = currentSettings.activeLaserType || null;
+    const laser = getLaserConfig(deviceId, laserTypeId);
+    const settingsKey = laser ? laser.settingsKey : 'uv';
+    const laserLabel = laser ? laser.name : 'UV';
+    const filename = `Standard_Test_Grid_${laserLabel}.xcs`;
 
-    // Fixed settings as requested
-    const fixedSettings = {
-        cellSize: 5,
-        cellGap: 1
-    };
+    // Try server-generated grid first (uses admin-configured defaults)
+    fetch(`/api/testgrid/${settingsKey}`)
+        .then(res => {
+            if (!res.ok) throw new Error('Server unavailable');
+            return res.text();
+        })
+        .then(xcs => downloadTestGridXCS(xcs, filename))
+        .catch(() => {
+            // Fallback: generate client-side with hardcoded defaults
+            const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
+            const fixedSettings = { cellSize: 5, cellGap: 1 };
 
-    if (isMopa) {
-        // MOPA Defaults: Speed 200-1200, Freq 200-1200, Power 14%, LPC 5000
-        fixedSettings.speedMin = 200;
-        fixedSettings.speedMax = 1200;
-        fixedSettings.powerMin = undefined;
-        fixedSettings.powerMax = undefined;
-        fixedSettings.power = 14;
-        fixedSettings.freqMin = 200;
-        fixedSettings.freqMax = 1200;
-        fixedSettings.lpi = 5000;
-        fixedSettings.passes = 1;
-        fixedSettings.crossHatch = false;
-        fixedSettings.gridMode = 'power';
-    } else {
-        // UV Defaults
-        fixedSettings.lpiMin = 300;
-        fixedSettings.lpiMax = 800;
-        fixedSettings.freqMin = 40;
-        fixedSettings.freqMax = 90;
-        fixedSettings.power = 70; // Standard UV power
-        fixedSettings.speed = 425; // Standard UV Speed
-        fixedSettings.passes = 1;
-        fixedSettings.crossHatch = true;
-    }
+            if (isMopaLike) {
+                fixedSettings.speedMin = 200;
+                fixedSettings.speedMax = 1200;
+                fixedSettings.power = 14;
+                fixedSettings.freqMin = 200;
+                fixedSettings.freqMax = 1200;
+                fixedSettings.lpi = 5000;
+                fixedSettings.passes = 1;
+                fixedSettings.crossHatch = false;
+                fixedSettings.gridMode = 'power';
+            } else {
+                fixedSettings.lpiMin = 300;
+                fixedSettings.lpiMax = 800;
+                fixedSettings.freqMin = 40;
+                fixedSettings.freqMax = 90;
+                fixedSettings.power = 70;
+                fixedSettings.speed = 425;
+                fixedSettings.passes = 1;
+                fixedSettings.crossHatch = true;
+            }
 
-    const generator = new TestGridGenerator(fixedSettings);
-
-    // Check if MOPA to alert user or handle differently?
-    // The previous logic had a separate file for MOPA. 
-    // generator.generateBusinessCardGrid() handles MOPA internally via generateMopaGrid if activeDevice is mopa.
-    // However, we just instantiated generator with fixed settings. 
-    // We need to make sure the generator knows about the device type if it relies on 'activeDevice' in settings.
-    // The TestGridGenerator constructor merges settings.
-
-    generator.settings.activeDevice = deviceId; // Ensure generator knows the device
-
-    const { xcs } = generator.generateBusinessCardGrid();
-
-    const filename = isMopa ? 'Standard_Test_Grid_MOPA.xcs' : 'Standard_Test_Grid_UV.xcs';
-
-    downloadTestGridXCS(xcs, filename);
+            const generator = new TestGridGenerator(fixedSettings);
+            generator.settings.activeDevice = deviceId;
+            generator.settings.activeLaserType = laserTypeId;
+            const { xcs } = generator.generateBusinessCardGrid();
+            downloadTestGridXCS(xcs, filename);
+        });
 }
 
 function generateCustomGridXCS() {
@@ -4890,16 +4922,19 @@ function drawGridToCanvas(canvasId, settings) {
 function updateStandardPreview() {
     // FIXED settings matching the generator
     const currentSettings = SettingsStorage.load();
-    const deviceId = currentSettings.activeDevice || 'f2_ultra_uv';
-    const isMopa = deviceId.includes('mopa') || deviceId.includes('base');
+    const deviceId = resolveDeviceId(currentSettings.activeDevice || 'f2_ultra_uv');
+    const laserTypeId = currentSettings.activeLaserType || null;
+    const laser = getLaserConfig(deviceId, laserTypeId);
+    const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
 
     const fixedSettings = {
         cellSize: 5,
         cellGap: 1,
-        activeDevice: deviceId
+        activeDevice: deviceId,
+        activeLaserType: laserTypeId
     };
 
-    if (isMopa) {
+    if (isMopaLike) {
         fixedSettings.speedMin = 200;
         fixedSettings.speedMax = 1200;
         fixedSettings.power = 14;

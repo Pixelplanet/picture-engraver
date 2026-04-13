@@ -4,6 +4,7 @@
  */
 
 import { getXtoolMaterialId, DEFAULT_MATERIAL_ID } from './material-registry.js';
+import { getLaserConfig, getDeviceConfig, resolveDeviceId } from './device-registry.js';
 
 export class XCSGenerator {
     constructor(settings) {
@@ -77,11 +78,12 @@ export class XCSGenerator {
         });
 
         // Top-level Structure matching Documentation
-        const deviceId = this.settings.activeDevice || 'f2_ultra_uv';
-        const isMopa = deviceId === 'f2_ultra_mopa' || deviceId === 'f2_ultra_base';
+        const deviceId = resolveDeviceId(this.settings.activeDevice || 'f2_ultra_uv');
+        const laserTypeId = this.settings.activeLaserType || null;
+        const laser = getLaserConfig(deviceId, laserTypeId);
 
-        // Add Focus Warning (UV only)
-        if (!isMopa) {
+        // Add Focus Warning (laser types that need it, e.g. UV)
+        if (laser && laser.addFocusWarning) {
             const warningId = this.generateUUID();
             const maxZOrder = displays.length + 100; // Ensure warning is always on top
             const warningDisplay = this.createFocusWarning(warningId, size, maxZOrder);
@@ -89,11 +91,9 @@ export class XCSGenerator {
             displaySettingsMap.set(warningId, { isWarning: true });
         }
 
-        // Device Identifiers
-        // "GS009-CLASS-4" is definitely the UV module
-        // "GS009-CLASS-1" is a guess for the Base/Blue module, or we use a safe fallback
-        const extId = isMopa ? "GS009-CLASS-1" : "GS009-CLASS-4";
-        const extName = isMopa ? "F2 Ultra (MOPA)" : "F2 Ultra UV";
+        // Device Identifiers from registry
+        const extId = laser ? laser.extId : 'GS009-CLASS-4';
+        const extName = laser ? laser.extName : 'F2 Ultra UV';
 
         const fileContent = {
             "canvasId": canvasId,
@@ -109,7 +109,7 @@ export class XCSGenerator {
             "version": "1.3.6",
             "created": timestamp,
             "modify": timestamp,
-            "device": this.generateDeviceData(canvasId, displays, displaySettingsMap, isMopa)
+            "device": this.generateDeviceData(canvasId, displays, displaySettingsMap, laser)
         };
 
         // Return minified JSON as per spec
@@ -138,7 +138,14 @@ export class XCSGenerator {
         return data;
     }
 
-    generateDeviceData(canvasId, displays, displaySettingsMap, isMopa) {
+    generateDeviceData(canvasId, displays, displaySettingsMap, laser) {
+        // Laser config provides all device-specific properties
+        const hasPulseWidth = laser ? laser.hasPulseWidth : false;
+        const hasMopaFreq = laser ? laser.hasMopaFrequency : false;
+        const lightSource = laser ? laser.lightSource : 'uv';
+        const processingType = laser ? laser.processingType : 'FILL_VECTOR_ENGRAVING';
+        const planType = laser ? laser.planType : 'dot_cloud';
+
         // Build map of display settings
         const displayEntries = displays.map(display => {
             // Get settings for this specific display
@@ -163,16 +170,16 @@ export class XCSGenerator {
                 "scanAngle": 0
             };
 
-            // Inject MOPA-specific parameters if active
-            if (isMopa) {
+            // Inject pulse/mopa parameters based on laser capabilities
+            if (hasPulseWidth) {
                 customize.pulseWidth = parseInt(s.pulseWidth) || 80;
-                customize.mopaFrequency = parseInt(s.frequency); // Map standard freq to mopaFreq
-                customize.processingLightSource = "red";
             }
+            if (hasMopaFreq) {
+                customize.mopaFrequency = parseInt(s.frequency);
+            }
+            customize.processingLightSource = lightSource === 'uv' ? 'red' : lightSource;
 
             const isWarning = s.isWarning === true;
-
-            const processingType = isMopa ? "COLOR_FILL_ENGRAVE" : "FILL_VECTOR_ENGRAVING";
 
             const data = {
                 "FILL_VECTOR_ENGRAVING": {
@@ -184,11 +191,11 @@ export class XCSGenerator {
                 }
             };
 
-            // Add COLOR_FILL_ENGRAVE section for MOPA devices
-            if (isMopa) {
+            // Add COLOR_FILL_ENGRAVE section for non-UV lasers
+            if (processingType === 'COLOR_FILL_ENGRAVE') {
                 data["COLOR_FILL_ENGRAVE"] = {
                     "materialType": "customize",
-                    "planType": "red",
+                    "planType": planType,
                     "parameter": {
                         "customize": { ...customize }
                     }
@@ -207,11 +214,6 @@ export class XCSGenerator {
                 }
             ];
         });
-
-        // Build canvas settings map
-        // Base implies Fiber/MOPA (Red/Infrared) for F2 Ultra Base
-        // UV is 'uv'
-        const lightSource = isMopa ? "red" : "uv";
 
         const canvasEntry = [
             canvasId,
@@ -240,8 +242,8 @@ export class XCSGenerator {
         ];
 
         return {
-            "id": isMopa ? "GS009-CLASS-1" : "GS009-CLASS-4",
-            "power": [20],
+            "id": laser ? laser.extId : "GS009-CLASS-4",
+            "power": laser ? laser.powerLevels : [20],
             "data": {
                 "dataType": "Map",
                 "value": [canvasEntry]
