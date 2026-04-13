@@ -1051,7 +1051,7 @@ function updateDeviceUI(deviceId) {
                 const optionsHTML = options.map(opt =>
                     `<option value="${opt.id}"${opt.id === currentLaser ? ' selected' : ''}>${opt.name}</option>`
                 ).join('');
-                badgeHTML += ` <select id="laserTypeSelector" style="background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px 4px; font-size: 0.85em; cursor: pointer;" title="Switch laser type">${optionsHTML}</select>`;
+                badgeHTML += ` <select id="laserTypeSelector" class="laser-type-selector" title="Switch laser type">${optionsHTML}</select>`;
             }
 
             titleContainer.innerHTML = badgeHTML;
@@ -3124,9 +3124,17 @@ function renderColorGridsList() {
 
     // Render grid list
     if (maps.length === 0) {
+        const deviceName = state.settings?.activeDevice || 'this device';
+        const laserType = state.settings?.activeLaserType;
+        const label = laserType ? `${laserType} laser on ${deviceName}` : deviceName;
         elements.colorGridsList.innerHTML = `
-            <div style="text-align: center; padding: 20px; color: var(--text-tertiary);">
-                No color grids saved yet. Use the <strong>Test Grid</strong> tool to create one.
+            <div class="no-colormaps-warning">
+                <div style="font-size: 1.4em; margin-bottom: 8px;">⚠️</div>
+                <strong>No color mappings available for ${label}</strong>
+                <p style="margin-top: 6px; font-size: 0.85em; color: var(--text-secondary);">
+                    This laser type does not have default color mappings yet.<br>
+                    Generate and analyze a <strong>Test Grid</strong> to create one, or ask your admin to upload a default mapping.
+                </p>
             </div>
         `;
         return;

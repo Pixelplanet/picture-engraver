@@ -522,6 +522,11 @@ body {
   padding-right: 36px;
 }
 
+select option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 /* Slider */
 .slider {
   -webkit-appearance: none;
@@ -1234,6 +1239,16 @@ body {
   border-color: var(--text-primary);
 }
 
+/* No color maps warning */
+.no-colormaps-warning {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--accent-warning);
+  background: rgba(210, 153, 34, 0.08);
+  border: 1px dashed rgba(210, 153, 34, 0.3);
+  border-radius: var(--radius-md);
+}
+
 .color-cell.selected,
 .color-cell.active-match {
   border-color: var(--accent-primary);
@@ -1889,6 +1904,40 @@ body {
 
 .zoom-btn.zoom-reset {
   font-size: 14px;
+}
+
+/* Laser type selector in header */
+.laser-type-selector {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  padding: 3px 24px 3px 8px;
+  font-size: 0.85em;
+  font-family: inherit;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M3 4.5L6 8l3-3.5H3z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  transition: border-color var(--transition-fast);
+}
+
+.laser-type-selector:hover {
+  border-color: var(--accent-primary);
+}
+
+.laser-type-selector:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.15);
+}
+
+.laser-type-selector option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 4px 8px;
 }
 
 /* Grid dropdown in picker */
