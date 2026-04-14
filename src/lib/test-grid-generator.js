@@ -136,8 +136,11 @@ export class TestGridGenerator {
         const processingLightSource = extraParams.processingLightSource || 'red';
         const planType = extraParams._planType || (hasMopaFreq ? 'red' : 'dot_cloud');
 
+        // Resolve crossHatch: use explicit override if provided, else fall back to global setting
+        const crossHatch = extraParams._crossHatch !== undefined ? extraParams._crossHatch : !!this.settings.crossHatch;
+
         // Strip internal-only keys before spreading into XCS data
-        const { _planType, ...xcsParams } = extraParams;
+        const { _planType, _crossHatch, ...xcsParams } = extraParams;
 
         const customize = {
             bitmapEngraveMode: 'normal',
@@ -146,9 +149,9 @@ export class TestGridGenerator {
             dpi: lpi,
             power,
             repeat: passes,
-            bitmapScanMode: this.settings.crossHatch ? 'crossMode' : 'zMode',
+            bitmapScanMode: crossHatch ? 'crossMode' : 'zMode',
             frequency,
-            crossAngle: this.settings.crossHatch,
+            crossAngle: crossHatch,
             scanAngle: 0,
             angleType: 2,
             processingLightSource,
@@ -552,7 +555,7 @@ export class TestGridGenerator {
         );
 
         displays.push(qrDisplay);
-        displaySettings.push([qrDisplayId, this.createDisplaySettings(s.qrFrequency, s.qrLpi, s.qrPower, s.qrSpeed, 1)]);
+        displaySettings.push([qrDisplayId, this.createDisplaySettings(s.qrFrequency, s.qrLpi, s.qrPower, s.qrSpeed, 1, { _crossHatch: !!s.qrCrossHatch })]);
         layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
 
         // Build XCS — resolve device + laser config
@@ -806,7 +809,7 @@ export class TestGridGenerator {
         const qrFreq = s.qrFrequency || 90;
         const qrL = s.qrLpi || 2500;
 
-        displaySettings.push([qrDisplayId, this.createDisplaySettings(qrFreq, qrL, qrPwr, qrSpd, 1, { processingLightSource: 'red', mopaFrequency: qrFreq, pulseWidth: s.pulseWidth || 80 })]);
+        displaySettings.push([qrDisplayId, this.createDisplaySettings(qrFreq, qrL, qrPwr, qrSpd, 1, { processingLightSource: 'red', mopaFrequency: qrFreq, pulseWidth: s.pulseWidth || 80, _crossHatch: !!s.qrCrossHatch })]);
         layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
 
         const xcs = {

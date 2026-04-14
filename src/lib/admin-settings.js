@@ -22,8 +22,9 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         power: 70, speed: 425,
         passes: 1, crossHatch: true,
         material: 'stainless_304',
-        qrPower: 17.5, qrSpeed: 150,
-        qrSize: 12, qrFrequency: 90, qrLpi: 2500,
+        qrPower: 75, qrSpeed: 100,
+        qrSize: 12, qrFrequency: 45, qrLpi: 500,
+        qrCrossHatch: true,
     },
     mopa: {
         cardWidth: 86, cardHeight: 54,
@@ -36,6 +37,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         material: 'stainless_304',
         qrPower: 17.5, qrSpeed: 150,
         qrFrequency: 90, qrLpi: 2500,
+        qrCrossHatch: false,
     },
     mopa_single: {
         cardWidth: 86, cardHeight: 54,
@@ -48,6 +50,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         material: 'stainless_304',
         qrPower: 17.5, qrSpeed: 150,
         qrFrequency: 90, qrLpi: 2500,
+        qrCrossHatch: false,
     },
     blue_ultra: {
         cardWidth: 86, cardHeight: 54,
@@ -60,6 +63,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         material: 'stainless_304',
         qrPower: 17.5, qrSpeed: 150,
         qrFrequency: 90, qrLpi: 2500,
+        qrCrossHatch: false,
     },
     ir: {
         cardWidth: 86, cardHeight: 54,
@@ -71,6 +75,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         material: 'stainless_304',
         qrPower: 17.5, qrSpeed: 150,
         qrSize: 12, qrFrequency: 90, qrLpi: 2500,
+        qrCrossHatch: true,
     },
     blue_f2: {
         cardWidth: 86, cardHeight: 54,
@@ -82,6 +87,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         material: 'stainless_304',
         qrPower: 17.5, qrSpeed: 150,
         qrSize: 12, qrFrequency: 90, qrLpi: 2500,
+        qrCrossHatch: true,
     },
 };
 
