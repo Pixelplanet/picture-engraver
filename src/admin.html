@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Picture Engraver — Admin Panel</title>
 <style>
-  :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --accent: #3b82f6; --text: #e2e8f0; --muted: #94a3b8; --danger: #ef4444; --success: #22c55e; }
+  :root { --bg: #0f172a; --surface: #1e293b; --border: #334155; --accent: #3b82f6; --text: #e2e8f0; --muted: #94a3b8; --danger: #ef4444; --success: #22c55e; --warning: #f59e0b; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
   .container { max-width: 900px; margin: 0 auto; padding: 24px; }
@@ -84,6 +84,18 @@
   .filter-bar { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
   .filter-bar select { padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 0.85rem; }
   .filter-bar label { font-size: 0.85rem; color: var(--muted); }
+
+  /* Dirty state & change indicators */
+  .field.changed { border-left: 3px solid var(--warning); background: rgba(245,158,11,0.04); padding-left: 8px; }
+  .field .field-revert { display: none; cursor: pointer; background: none; border: none; color: var(--warning); font-size: 0.7rem; padding: 0; margin-left: 6px; opacity: 0.7; vertical-align: middle; }
+  .field .field-revert:hover { opacity: 1; }
+  .field.changed .field-revert { display: inline; }
+  .field.just-saved { animation: save-flash 0.8s ease; }
+  @keyframes save-flash { 0%,20% { background: rgba(34,197,94,0.12); } 100% { background: transparent; } }
+  .laser-tab.dirty { position: relative; }
+  .laser-tab.dirty::after { content: '●'; position: absolute; top: 2px; right: 2px; font-size: 0.45rem; color: var(--warning); line-height: 1; }
+  .device-group-header.dirty .device-name::after { content: ' ●'; color: var(--warning); font-size: 0.55rem; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -110,7 +122,8 @@
     <div id="device-groups"></div>
 
     <div class="actions">
-      <button class="btn btn-primary" onclick="saveSettings()">💾 Save Current</button>
+      <button class="btn btn-primary" id="btn-save" onclick="saveSettings()" disabled>💾 Save Current</button>
+      <button class="btn btn-warning" id="btn-revert" onclick="revertAllFields()" style="display:none">↩ Revert Changes</button>
       <button class="btn btn-secondary" onclick="previewGrid()">📊 Preview Grid Info</button>
       <button class="btn btn-secondary" onclick="downloadGrid()">⬇ Download Test Grid</button>
       <button class="btn btn-danger" onclick="resetAll()">↺ Reset All to Defaults</button>
@@ -200,6 +213,73 @@ const QR_FIELDS = [
 let token = '';
 let allSettings = {};
 let activeLaser = 'uv';
+let savedSettings = {};
+
+function snapshotSettings() {
+  savedSettings = JSON.parse(JSON.stringify(allSettings.testGridDefaults || {}));
+}
+
+function valuesEqual(a, b) {
+  if ((a === false || a === undefined || a === null) && (b === false || b === undefined || b === null)) return true;
+  if ((a === undefined || a === null || a === '') && (b === undefined || b === null || b === '')) return true;
+  if (typeof a === 'number' || typeof b === 'number') return Number(a) === Number(b);
+  return String(a) === String(b);
+}
+
+function isDirty() {
+  const form = document.getElementById('settings-form');
+  if (!form) return false;
+  const current = collectFormData();
+  const saved = savedSettings[activeLaser] || {};
+  for (const key of Object.keys(current)) {
+    if (!valuesEqual(current[key], saved[key])) return true;
+  }
+  return false;
+}
+
+function updateDirtyIndicators() {
+  const dirty = isDirty();
+  document.querySelectorAll('.laser-tab.active').forEach(t => t.classList.toggle('dirty', dirty));
+  for (const [id, dev] of Object.entries(DEVICES)) {
+    if (dev.lasers.includes(activeLaser)) {
+      const hdr = document.querySelector('#dg-' + id + ' .device-group-header');
+      if (hdr) hdr.classList.toggle('dirty', dirty);
+    }
+  }
+  const saveBtn = document.getElementById('btn-save');
+  const revertBtn = document.getElementById('btn-revert');
+  if (saveBtn) saveBtn.disabled = !dirty;
+  if (revertBtn) revertBtn.style.display = dirty ? '' : 'none';
+}
+
+function handleFieldInput() {
+  const form = document.getElementById('settings-form');
+  if (!form) return;
+  const saved = savedSettings[activeLaser] || {};
+  form.querySelectorAll('[data-key]').forEach(el => {
+    const key = el.dataset.key;
+    let val;
+    if (el.type === 'checkbox') val = el.checked;
+    else if (el.type === 'number') val = el.value === '' ? undefined : parseFloat(el.value);
+    else val = el.value;
+    const fld = el.closest('.field');
+    if (fld) fld.classList.toggle('changed', !valuesEqual(val, saved[key]));
+  });
+  updateDirtyIndicators();
+}
+
+function revertField(key) {
+  const saved = savedSettings[activeLaser] || {};
+  const el = document.querySelector('#settings-form [data-key="' + key + '"]');
+  if (!el) return;
+  if (el.type === 'checkbox') el.checked = !!saved[key];
+  else el.value = saved[key] ?? '';
+  handleFieldInput();
+}
+
+function revertAllFields() {
+  renderForm();
+}
 
 function toast(msg, type='success') {
   const el = document.getElementById('toast');
@@ -225,6 +305,7 @@ async function authenticate() {
   if (!token) return;
   try {
     allSettings = await apiFetch('/admin/api/settings');
+    snapshotSettings();
     document.getElementById('auth-panel').style.display = 'none';
     document.getElementById('main-panel').style.display = 'block';
     sessionStorage.setItem('_adminToken', token);
@@ -282,12 +363,16 @@ function toggleDeviceGroup(deviceId) {
 
   const wasCollapsed = group.classList.contains('collapsed');
   if (wasCollapsed) {
-    group.classList.remove('collapsed');
-    // If opening a group, select its first laser
     const device = DEVICES[deviceId];
     if (device && !device.lasers.includes(activeLaser)) {
+      if (isDirty()) {
+        if (!confirm('You have unsaved changes for ' + LASER_LABELS[activeLaser] + '. Discard and switch?')) return;
+      }
+      group.classList.remove('collapsed');
       activeLaser = device.lasers[0];
       renderTabs();
+    } else {
+      group.classList.remove('collapsed');
     }
   } else {
     group.classList.add('collapsed');
@@ -295,6 +380,10 @@ function toggleDeviceGroup(deviceId) {
 }
 
 function switchTab(lt) {
+  if (lt === activeLaser) return;
+  if (isDirty()) {
+    if (!confirm('You have unsaved changes for ' + LASER_LABELS[activeLaser] + '. Discard and switch?')) return;
+  }
   activeLaser = lt;
   renderTabs();
 }
@@ -310,18 +399,20 @@ function renderForm() {
   html += renderFieldGroup('QR Code Settings', QR_FIELDS, defs);
 
   document.getElementById('settings-form').innerHTML = html;
+  updateDirtyIndicators();
 }
 
 function renderFieldGroup(title, fields, data) {
   let html = `<div class="field-group"><h3>${title}</h3>`;
   for (const f of fields) {
     const val = data[f.key] ?? '';
+    const revert = `<button type="button" class="field-revert" onclick="revertField('${f.key}')" title="Revert to saved">↩</button>`;
     if (f.type === 'checkbox') {
-      html += `<div class="field"><label>${f.label}</label><input type="checkbox" data-key="${f.key}" ${val?'checked':''}></div>`;
+      html += `<div class="field"><label>${f.label}${revert}</label><input type="checkbox" data-key="${f.key}" ${val?'checked':''}></div>`;
     } else if (f.type === 'select') {
-      html += `<div class="field"><label>${f.label}</label><select data-key="${f.key}">${f.options.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}</select></div>`;
+      html += `<div class="field"><label>${f.label}${revert}</label><select data-key="${f.key}">${f.options.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}</select></div>`;
     } else {
-      html += `<div class="field"><label>${f.label}</label><input type="${f.type}" data-key="${f.key}" value="${val}" step="${f.step||1}"></div>`;
+      html += `<div class="field"><label>${f.label}${revert}</label><input type="${f.type}" data-key="${f.key}" value="${val}" step="${f.step||1}"></div>`;
     }
   }
   html += '</div>';
@@ -351,6 +442,10 @@ async function saveSettings() {
       body: JSON.stringify(formData),
     });
     allSettings.testGridDefaults[activeLaser] = result;
+    savedSettings[activeLaser] = JSON.parse(JSON.stringify(result));
+    document.querySelectorAll('#settings-form .field').forEach(f => f.classList.add('just-saved'));
+    setTimeout(() => document.querySelectorAll('#settings-form .field.just-saved').forEach(f => f.classList.remove('just-saved')), 800);
+    handleFieldInput();
     toast('Settings saved');
   } catch(e) { toast(e.message, 'error'); }
 }
@@ -368,9 +463,13 @@ function downloadGrid() {
 }
 
 async function resetAll() {
-  if (!confirm('Reset ALL laser type defaults to hardcoded values?')) return;
+  const msg = isDirty()
+    ? 'You have unsaved changes. Reset ALL laser type defaults to hardcoded values? This cannot be undone.'
+    : 'Reset ALL laser type defaults to hardcoded values?';
+  if (!confirm(msg)) return;
   try {
     allSettings = await apiFetch('/admin/api/settings/reset', { method: 'POST' });
+    snapshotSettings();
     renderTabs();
     toast('All settings reset to defaults');
   } catch(e) { toast(e.message, 'error'); }
@@ -383,6 +482,18 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('token-input').value = saved;
     authenticate();
   }
+
+  // Delegated input handler for dirty tracking
+  const tgSection = document.getElementById('section-testgrid');
+  if (tgSection) {
+    tgSection.addEventListener('input', handleFieldInput);
+    tgSection.addEventListener('change', handleFieldInput);
+  }
+
+  // Warn on page unload with unsaved changes
+  window.addEventListener('beforeunload', e => {
+    if (isDirty()) { e.preventDefault(); e.returnValue = ''; }
+  });
 
   // Drag and drop for color maps
   const zone = document.getElementById('upload-zone');
@@ -400,6 +511,9 @@ window.addEventListener('DOMContentLoaded', () => {
 // ── Section Navigation ──────────────────────────────────────────────────────
 
 function switchSection(section) {
+  if (section !== 'testgrid' && isDirty()) {
+    if (!confirm('You have unsaved changes for ' + LASER_LABELS[activeLaser] + '. Discard and switch?')) return;
+  }
   document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.top-nav .nav-btn').forEach(el => el.classList.remove('active'));
   document.getElementById('section-' + section).classList.add('active');
