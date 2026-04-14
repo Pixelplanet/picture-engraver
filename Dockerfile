@@ -23,13 +23,19 @@ COPY src/lib/test-grid-generator.js ./src/lib/
 COPY src/lib/device-registry.js ./src/lib/
 COPY src/lib/material-registry.js ./src/lib/
 
-# Create data directory for persistent settings/color maps
-RUN mkdir -p /app/data
+# Create data and log directories for persistent storage
+RUN mkdir -p /app/data /app/logs
 
-# Security: Run as non-root user
+# Install su-exec for stepping down from root in entrypoint
+RUN apk add --no-cache su-exec
+
+# Copy entrypoint script
+COPY docker-entrypoint.sh /app/
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Security: Set ownership to node user
 RUN chown -R node:node /app
-USER node
 
 ENV PORT=80
 EXPOSE 80
-CMD ["node", "server.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
