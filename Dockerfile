@@ -26,16 +26,6 @@ COPY src/lib/material-registry.js ./src/lib/
 # Create data and log directories for persistent storage
 RUN mkdir -p /app/data /app/logs
 
-# Install su-exec for stepping down from root in entrypoint
-RUN apk add --no-cache su-exec
-
-# Copy entrypoint script
-COPY docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh
-
-# Security: Set ownership to node user
-RUN chown -R node:node /app
-
 ENV PORT=80
 EXPOSE 80
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["node", "server.js"]
