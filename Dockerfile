@@ -24,7 +24,8 @@ COPY src/lib/device-registry.js ./src/lib/
 COPY src/lib/material-registry.js ./src/lib/
 
 # Create data and log directories for persistent storage
-RUN mkdir -p /app/data /app/logs
+# chmod 777 so any UID (Unraid DockerUser, Portainer user mapping, etc.) can write
+RUN mkdir -p /app/data /app/logs && chmod 777 /app/data /app/logs
 
 ENV PORT=80
 EXPOSE 80

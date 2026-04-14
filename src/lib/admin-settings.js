@@ -163,6 +163,17 @@ export class AdminSettings {
      */
     seedDefaults() {
         try {
+            // Log process identity and directory state for debugging permission issues
+            try {
+                const uid = process.getuid ? process.getuid() : 'N/A';
+                const gid = process.getgid ? process.getgid() : 'N/A';
+                console.log(`[AdminSettings] Process running as uid=${uid} gid=${gid}`);
+                if (fs.existsSync(this.dataDir)) {
+                    const stat = fs.statSync(this.dataDir);
+                    console.log(`[AdminSettings] ${this.dataDir} owner uid=${stat.uid} gid=${stat.gid} mode=${(stat.mode & 0o777).toString(8)}`);
+                }
+            } catch { /* diagnostics only */ }
+
             if (!fs.existsSync(this.dataDir)) {
                 fs.mkdirSync(this.dataDir, { recursive: true });
             }
@@ -175,6 +186,8 @@ export class AdminSettings {
             }
         } catch (err) {
             console.error(`[AdminSettings] Failed to seed defaults: ${err.message}`);
+            console.error(`[AdminSettings] The data volume at ${this.dataDir} is not writable by this process.`);
+            console.error(`[AdminSettings] Fix: delete the Docker volume and recreate the container, or run: docker exec -u 0 picture-engraver chmod -R 777 ${this.dataDir}`);
         }
     }
 
