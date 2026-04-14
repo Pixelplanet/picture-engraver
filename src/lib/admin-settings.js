@@ -158,6 +158,27 @@ export class AdminSettings {
     }
 
     /**
+     * Seed defaults to disk if no settings file exists yet.
+     * Called once on server startup to ensure the data volume is populated.
+     */
+    seedDefaults() {
+        try {
+            if (!fs.existsSync(this.dataDir)) {
+                fs.mkdirSync(this.dataDir, { recursive: true });
+            }
+            if (!fs.existsSync(this.settingsPath)) {
+                const defaults = this._getDefaults();
+                fs.writeFileSync(this.settingsPath, JSON.stringify(defaults, null, 2), 'utf-8');
+                console.log(`[AdminSettings] Seeded default settings to ${this.settingsPath}`);
+            } else {
+                console.log(`[AdminSettings] Settings file exists: ${this.settingsPath}`);
+            }
+        } catch (err) {
+            console.error(`[AdminSettings] Failed to seed defaults: ${err.message}`);
+        }
+    }
+
+    /**
      * Load settings from file, falling back to hardcoded defaults.
      */
     load() {

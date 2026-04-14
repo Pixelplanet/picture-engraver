@@ -142,6 +142,7 @@ app.use(express.json({ limit: '10kb' })); // Limit JSON body size to preventing 
 // Admin Settings & Routes
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const adminSettings = new AdminSettings(DATA_DIR);
+adminSettings.seedDefaults();  // Ensure data volume has settings on first boot
 app.use(createAdminRouter(adminSettings));
 
 // Serve static files from the build directory

@@ -13,12 +13,12 @@ import { AdminSettings, VALID_LASER_TYPES, validateTestGridSettings, validateCol
 // ── Device → laser type mapping (for test grid generation) ──────────────────────
 // Maps settingsKey to the device/laser pair needed by TestGridGenerator
 const LASER_TYPE_TO_DEVICE = {
-    uv:          { activeDevice: 'f2_ultra_uv',    activeLaserType: null },
-    mopa:        { activeDevice: 'f2_ultra_mopa',  activeLaserType: 'mopa' },
-    mopa_single: { activeDevice: 'f2_ultra_single', activeLaserType: 'mopa_single' },
-    blue_ultra:  { activeDevice: 'f2_ultra_mopa',  activeLaserType: 'blue_ultra' },
-    ir:          { activeDevice: 'f2',              activeLaserType: 'ir' },
-    blue_f2:     { activeDevice: 'f2',              activeLaserType: 'blue_f2' },
+    uv:          { activeDevice: 'f2_ultra_uv',    activeLaserType: null,          deviceLabel: 'F2_Ultra_UV',     laserLabel: 'UV' },
+    mopa:        { activeDevice: 'f2_ultra_mopa',  activeLaserType: 'mopa',        deviceLabel: 'F2_Ultra_Dual',   laserLabel: 'MOPA' },
+    mopa_single: { activeDevice: 'f2_ultra_single', activeLaserType: 'mopa_single', deviceLabel: 'F2_Ultra_Single', laserLabel: 'MOPA' },
+    blue_ultra:  { activeDevice: 'f2_ultra_mopa',  activeLaserType: 'blue_ultra',  deviceLabel: 'F2_Ultra_Dual',   laserLabel: 'BlueDiode' },
+    ir:          { activeDevice: 'f2',              activeLaserType: 'ir',          deviceLabel: 'F2',              laserLabel: 'Infrared' },
+    blue_f2:     { activeDevice: 'f2',              activeLaserType: 'blue_f2',     deviceLabel: 'F2',              laserLabel: 'BlueDiode' },
 };
 
 // ── Lazy-loaded TestGridGenerator (ESM import from bundled code) ────────────────
@@ -109,17 +109,21 @@ export function createAdminRouter(adminSettings) {
         }
 
         try {
+            // Build filename from device mapping
+            const deviceInfo = LASER_TYPE_TO_DEVICE[laserType];
+            const { deviceLabel, laserLabel } = deviceInfo;
+            const gridFilename = `Standard_Test_Grid_${deviceLabel}_${laserLabel}.xcs`;
+
             // Check cache
             const cached = xcsCache.get(laserType);
             if (cached) {
                 res.set('Content-Type', 'application/json');
-                res.set('Content-Disposition', `attachment; filename="Standard_Test_Grid_${laserType}.xcs"`);
+                res.set('Content-Disposition', `attachment; filename="${gridFilename}"`);
                 res.set('X-Cache', 'HIT');
                 return res.send(cached);
             }
 
             const defaults = adminSettings.getTestGridDefaults(laserType);
-            const deviceInfo = LASER_TYPE_TO_DEVICE[laserType];
 
             const TestGridGenerator = await getTestGridGenerator();
             const generator = new TestGridGenerator({
@@ -134,7 +138,7 @@ export function createAdminRouter(adminSettings) {
             xcsCache.set(laserType, xcs);
 
             res.set('Content-Type', 'application/json');
-            res.set('Content-Disposition', `attachment; filename="Standard_Test_Grid_${laserType}.xcs"`);
+            res.set('Content-Disposition', `attachment; filename="${gridFilename}"`);
             res.set('X-Cache', 'MISS');
             res.send(xcs);
         } catch (err) {

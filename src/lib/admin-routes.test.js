@@ -301,7 +301,7 @@ describe('GET /api/testgrid/:laserType', () => {
         const res = await request(app).get('/api/testgrid/uv');
         expect(res.status).toBe(200);
         // XCS is JSON-based
-        expect(res.headers['content-disposition']).toContain('Standard_Test_Grid_uv.xcs');
+        expect(res.headers['content-disposition']).toContain('Standard_Test_Grid_F2_Ultra_UV_UV.xcs');
         expect(res.headers['x-cache']).toBe('MISS');
     });
 
@@ -316,7 +316,7 @@ describe('GET /api/testgrid/:laserType', () => {
     it('should generate XCS for MOPA', async () => {
         const res = await request(app).get('/api/testgrid/mopa');
         expect(res.status).toBe(200);
-        expect(res.headers['content-disposition']).toContain('Standard_Test_Grid_mopa.xcs');
+        expect(res.headers['content-disposition']).toContain('Standard_Test_Grid_F2_Ultra_Dual_MOPA.xcs');
     });
 
     it('should generate XCS for all laser types', async () => {

@@ -25,7 +25,7 @@ import { multiGridPalette, initializeMultiGridPalette } from './lib/multi-grid-p
 import { GridImagePicker } from './lib/grid-image-picker.js';
 import { initFrequencyLimiter } from './lib/ui-enhancements.js';
 import { getMaterialsForLaser, getMaterialById, DEFAULT_MATERIAL_ID } from './lib/material-registry.js';
-import { resolveDeviceId, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey } from './lib/device-registry.js';
+import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey } from './lib/device-registry.js';
 
 
 
@@ -2729,14 +2729,16 @@ async function downloadXCS() {
         const generator = new XCSGenerator(state.settings);
         const xcsContent = generator.generate(state.processedImage, state.layers, getOutputSize());
 
-        // Download immediately — filename includes image name, laser type, material
+        // Download immediately — filename includes device, image name, laser type, material
         const deviceId = resolveDeviceId(state.settings?.activeDevice || 'f2_ultra_uv');
+        const deviceConfig = getDeviceConfig(deviceId);
+        const deviceLabel = deviceConfig ? deviceConfig.name.replace(/[\s()]+/g, '_') : 'F2';
         const laserConfig = getLaserConfig(deviceId, state.settings?.activeLaserType);
-        const laserLabel = laserConfig ? laserConfig.name : 'UV';
+        const laserLabel = laserConfig ? laserConfig.name.replace(/\s+/g, '') : 'UV';
         const materialId = state.settings?.material || DEFAULT_MATERIAL_ID;
         const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
         const imgLabel = state.originalImageName ? `_${state.originalImageName}` : '';
-        const xcsFilename = `engraving${imgLabel}_F2_${laserLabel}_${materialLabel}.xcs`;
+        const xcsFilename = `engraving${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.xcs`;
 
         const blob = new Blob([xcsContent], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -2817,7 +2819,8 @@ async function downloadSVG() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `vector_${Date.now()}.svg`;
+        const svgImgLabel = state.originalImageName || 'vector';
+        a.download = `${svgImgLabel}_${Date.now()}.svg`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -4759,12 +4762,14 @@ function unused_updateGridPreview() {
 
 function getSmartGridFilename(prefix, settings, deviceId) {
     const resolvedId = resolveDeviceId(deviceId);
+    const deviceConfig = getDeviceConfig(resolvedId);
+    const deviceLabel = deviceConfig ? deviceConfig.name.replace(/[\s()]+/g, '_') : 'F2';
     const laser = getLaserConfig(resolvedId, settings.activeLaserType);
     const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
-    const devLabel = laser ? laser.name : 'UV';
+    const laserLabel = laser ? laser.name.replace(/\s+/g, '') : 'UV';
     const materialId = settings.material || DEFAULT_MATERIAL_ID;
     const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
-    let name = `${prefix}_F2_${devLabel}_${materialLabel}`;
+    let name = `${prefix}_${deviceLabel}_${laserLabel}_${materialLabel}`;
 
     if (isMopaLike) {
         name += `_S${settings.speedMin}-${settings.speedMax}_F${settings.freqMin}-${settings.freqMax}`;
@@ -4780,8 +4785,10 @@ function generateStandardGridXCS() {
     const laserTypeId = currentSettings.activeLaserType || null;
     const laser = getLaserConfig(deviceId, laserTypeId);
     const settingsKey = laser ? laser.settingsKey : 'uv';
-    const laserLabel = laser ? laser.name : 'UV';
-    const filename = `Standard_Test_Grid_${laserLabel}.xcs`;
+    const laserLabel = laser ? laser.name.replace(/\s+/g, '') : 'UV';
+    const deviceConfig = getDeviceConfig(deviceId);
+    const deviceLabel = deviceConfig ? deviceConfig.name.replace(/[\s()]+/g, '_') : 'F2';
+    const filename = `Standard_Test_Grid_${deviceLabel}_${laserLabel}.xcs`;
 
     // Try server-generated grid first (uses admin-configured defaults)
     fetch(`/api/testgrid/${settingsKey}`)
