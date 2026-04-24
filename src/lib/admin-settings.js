@@ -9,6 +9,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { DEVICES, LASER_TYPES } from './device-registry.js';
 
 // ── Hardcoded Defaults ──────────────────────────────────────────────────────────
 // These are used when no admin settings file exists.
@@ -93,6 +94,22 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
 
 const VALID_LASER_TYPES = Object.keys(HARDCODED_TEST_GRID_DEFAULTS);
 const VALID_GRID_MODES = ['frequency', 'power', 'speed'];
+const VALID_DEVICE_TYPES = Object.keys(DEVICES);
+const VALID_LASER_TYPE_IDS = Object.keys(LASER_TYPES);
+
+function normalizeVisibilitySettings(visibility) {
+    const hiddenDevices = Array.isArray(visibility?.hiddenDevices)
+        ? visibility.hiddenDevices.filter(id => VALID_DEVICE_TYPES.includes(id))
+        : [];
+    const hiddenLaserTypes = Array.isArray(visibility?.hiddenLaserTypes)
+        ? visibility.hiddenLaserTypes.filter(id => VALID_LASER_TYPE_IDS.includes(id))
+        : [];
+
+    return {
+        hiddenDevices: Array.from(new Set(hiddenDevices)),
+        hiddenLaserTypes: Array.from(new Set(hiddenLaserTypes)),
+    };
+}
 
 // ── Validation ──────────────────────────────────────────────────────────────────
 
@@ -279,6 +296,25 @@ export class AdminSettings {
     }
 
     /**
+     * Update visibility settings used by user-facing selectors.
+     * @param {{hiddenDevices?: string[], hiddenLaserTypes?: string[]}} visibility
+     */
+    updateVisibilitySettings(visibility) {
+        const normalized = normalizeVisibilitySettings(visibility);
+        const current = this.load();
+        current.visibility = normalized;
+        return this.save(current);
+    }
+
+    /**
+     * Get visibility settings for clients.
+     */
+    getVisibilitySettings() {
+        const settings = this.load();
+        return normalizeVisibilitySettings(settings.visibility);
+    }
+
+    /**
      * Get test grid defaults for a specific laser type.
      */
     getTestGridDefaults(laserType) {
@@ -306,6 +342,10 @@ export class AdminSettings {
             _version: 1,
             _modified: new Date().toISOString(),
             testGridDefaults: JSON.parse(JSON.stringify(HARDCODED_TEST_GRID_DEFAULTS)),
+            visibility: {
+                hiddenDevices: [],
+                hiddenLaserTypes: [],
+            },
         };
     }
 
@@ -321,6 +361,7 @@ export class AdminSettings {
                 ...(merged.testGridDefaults[lt] || {}),
             };
         }
+        merged.visibility = normalizeVisibilitySettings(merged.visibility);
         return merged;
     }
 

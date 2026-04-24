@@ -1,4 +1,4 @@
-import { getDeviceFamilies, isMultiLaserDevice, getDeviceConfig } from './device-registry.js';
+import { getDeviceFamiliesWithVisibility, isMultiLaserDevice, getDeviceConfig } from './device-registry.js';
 
 // Theme colors per device for the landing page buttons
 const DEVICE_THEMES = {
@@ -10,11 +10,16 @@ const DEVICE_THEMES = {
 };
 
 export class LandingPage {
-    constructor(settingsStorage, onDeviceSelected) {
+    constructor(settingsStorage, onDeviceSelected, visibilitySettings = null) {
         this.settingsStorage = settingsStorage;
         this.onDeviceSelected = onDeviceSelected;
         this.overlay = document.getElementById('deviceSelectionOverlay');
         this.profiles = settingsStorage.getProfiles();
+        this.visibilitySettings = visibilitySettings;
+    }
+
+    setVisibilitySettings(visibilitySettings) {
+        this.visibilitySettings = visibilitySettings;
     }
 
     /**
@@ -41,13 +46,13 @@ export class LandingPage {
     }
 
     render() {
-        const families = getDeviceFamilies();
+        const families = getDeviceFamiliesWithVisibility(this.visibilitySettings);
 
         // Build device buttons grouped by family
         const familySections = families.map(({ family, devices }) => {
             const buttons = devices.map(device => {
                 const theme = DEVICE_THEMES[device.id] || DEVICE_THEMES.svg_export;
-                const multi = isMultiLaserDevice(device.id);
+                const multi = isMultiLaserDevice(device.id, this.visibilitySettings);
                 return `
                     <button class="device-btn" data-id="${device.id}" style="
                         background: ${theme.gradient};

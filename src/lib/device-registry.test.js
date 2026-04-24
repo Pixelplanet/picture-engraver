@@ -3,7 +3,8 @@ import {
     LASER_TYPES, DEVICES, DEVICE_FAMILIES,
     resolveDeviceId, getDeviceConfig, getLaserConfig,
     getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions,
-    isVirtualDevice, getSettingsKey, getDeviceFamilies
+    isVirtualDevice, getSettingsKey, getDeviceFamilies,
+    getDeviceFamiliesWithVisibility
 } from './device-registry.js';
 
 describe('Device Registry', () => {
@@ -292,6 +293,34 @@ describe('Device Registry', () => {
 
         it('should return empty array for unknown device', () => {
             expect(getLaserTypeOptions('nonexistent')).toEqual([]);
+        });
+
+        it('should filter hidden laser types', () => {
+            const options = getLaserTypeOptions('f2', {
+                hiddenDevices: [],
+                hiddenLaserTypes: ['blue_f2']
+            });
+            expect(options).toEqual([{ id: 'ir', name: 'Infrared' }]);
+        });
+    });
+
+    describe('getDeviceFamiliesWithVisibility', () => {
+        it('should hide explicitly hidden devices', () => {
+            const families = getDeviceFamiliesWithVisibility({
+                hiddenDevices: ['f2_ultra_single'],
+                hiddenLaserTypes: []
+            });
+            const allDeviceIds = families.flatMap(f => f.devices.map(d => d.id));
+            expect(allDeviceIds).not.toContain('f2_ultra_single');
+        });
+
+        it('should hide a device when all its laser types are hidden', () => {
+            const families = getDeviceFamiliesWithVisibility({
+                hiddenDevices: [],
+                hiddenLaserTypes: ['mopa_single']
+            });
+            const allDeviceIds = families.flatMap(f => f.devices.map(d => d.id));
+            expect(allDeviceIds).not.toContain('f2_ultra_single');
         });
     });
 

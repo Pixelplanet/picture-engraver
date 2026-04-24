@@ -24,6 +24,7 @@ describe('AdminSettings', () => {
             const loaded = settings.load();
             expect(loaded._version).toBe(1);
             expect(loaded.testGridDefaults).toBeDefined();
+            expect(loaded.visibility).toEqual({ hiddenDevices: [], hiddenLaserTypes: [] });
             expect(loaded.testGridDefaults.uv).toBeDefined();
             expect(loaded.testGridDefaults.mopa).toBeDefined();
         });
@@ -62,6 +63,10 @@ describe('AdminSettings', () => {
                     uv: { power: 55 },
                     // mopa, mopa_single, etc. are missing
                 },
+                visibility: {
+                    hiddenDevices: ['f2'],
+                    hiddenLaserTypes: ['blue_f2'],
+                },
             };
             fs.writeFileSync(path.join(tmpDir, 'admin-settings.json'), JSON.stringify(partial));
 
@@ -73,6 +78,7 @@ describe('AdminSettings', () => {
             // MOPA should fall back to full defaults
             expect(loaded.testGridDefaults.mopa.power).toBe(14);
             expect(loaded.testGridDefaults.mopa.speedMin).toBe(200);
+            expect(loaded.visibility).toEqual({ hiddenDevices: ['f2'], hiddenLaserTypes: ['blue_f2'] });
         });
 
         it('should gracefully handle corrupted JSON', () => {
@@ -185,6 +191,31 @@ describe('AdminSettings', () => {
             expect(() => {
                 settings.updateTestGridDefaults('uv', { cardWidth: -5 });
             }).toThrow();
+        });
+    });
+
+    describe('updateVisibilitySettings', () => {
+        it('should save hidden devices and laser types', () => {
+            settings.updateVisibilitySettings({
+                hiddenDevices: ['f2_ultra_mopa'],
+                hiddenLaserTypes: ['blue_ultra'],
+            });
+
+            settings.invalidateCache();
+            const loaded = settings.load();
+            expect(loaded.visibility.hiddenDevices).toEqual(['f2_ultra_mopa']);
+            expect(loaded.visibility.hiddenLaserTypes).toEqual(['blue_ultra']);
+        });
+
+        it('should ignore unknown device and laser IDs', () => {
+            settings.updateVisibilitySettings({
+                hiddenDevices: ['nope', 'f2'],
+                hiddenLaserTypes: ['bad_laser', 'ir'],
+            });
+
+            const visibility = settings.getVisibilitySettings();
+            expect(visibility.hiddenDevices).toEqual(['f2']);
+            expect(visibility.hiddenLaserTypes).toEqual(['ir']);
         });
     });
 

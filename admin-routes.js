@@ -108,6 +108,11 @@ export function createAdminRouter(adminSettings) {
             return res.status(400).json({ error: `Invalid laser type. Valid: ${VALID_LASER_TYPES.join(', ')}` });
         }
 
+        const visibility = adminSettings.getVisibilitySettings();
+        if ((visibility.hiddenLaserTypes || []).includes(laserType)) {
+            return res.status(404).json({ error: 'Laser type is currently unavailable' });
+        }
+
         try {
             // Build filename from device mapping
             const deviceInfo = LASER_TYPE_TO_DEVICE[laserType];
@@ -170,6 +175,15 @@ export function createAdminRouter(adminSettings) {
             const saved = adminSettings.updateTestGridDefaults(laserType, req.body);
             invalidateXcsCache();
             res.json(saved.testGridDefaults[laserType]);
+        } catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+
+    router.patch('/admin/api/settings/visibility', adminLimiter, requireAdminAuth, (req, res) => {
+        try {
+            const saved = adminSettings.updateVisibilitySettings(req.body || {});
+            res.json(saved.visibility);
         } catch (err) {
             res.status(400).json({ error: err.message });
         }
@@ -275,6 +289,10 @@ export function createAdminRouter(adminSettings) {
         const deviceType = req.params.deviceType;
         const maps = adminSettings.getColorMapsForDevice(deviceType);
         res.json(maps);
+    });
+
+    router.get('/api/visibility', testgridLimiter, (req, res) => {
+        res.json(adminSettings.getVisibilitySettings());
     });
 
     return router;

@@ -25,7 +25,7 @@ import { multiGridPalette, initializeMultiGridPalette } from './lib/multi-grid-p
 import { GridImagePicker } from './lib/grid-image-picker.js';
 import { initFrequencyLimiter } from './lib/ui-enhancements.js';
 import { getMaterialsForLaser, getMaterialById, DEFAULT_MATERIAL_ID } from './lib/material-registry.js';
-import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey } from './lib/device-registry.js';
+import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey, isDeviceVisible } from './lib/device-registry.js';
 
 
 
@@ -42,7 +42,8 @@ const state = {
     editingLayerId: null,
     originalImageName: null, // Original uploaded file name (without extension)
     gridPicker: null, // GridImagePicker instance
-    currentMiniPickerMapId: null // Current grid in picker
+    currentMiniPickerMapId: null, // Current grid in picker
+    visibilitySettings: { hiddenDevices: [], hiddenLaserTypes: [] }
 };
 
 // ===================================
@@ -936,11 +937,27 @@ function getCellFromCoords(x, y) {
 async function init() {
     // 1. Initialize Settings Storage & Defaults
     SettingsStorage.ensureSystemDefaultMap();
+    state.settings = SettingsStorage.load();
 
     // 1a. Fetch server-managed color maps (non-blocking, background)
     SettingsStorage.fetchServerColorMaps().catch(() => {});
 
-    // 1b. Initialize Multi-Grid Palette with k-d tree index
+    // 1b. Fetch visibility config so we can hide unavailable devices/lasers for users
+    state.visibilitySettings = await SettingsStorage.fetchServerVisibilityConfig();
+
+    const isDeviceHidden = !isDeviceVisible(state.settings?.activeDevice, state.visibilitySettings);
+    const hasVisibleLaserOptions = getLaserTypeOptions(state.settings?.activeDevice, state.visibilitySettings).length > 0;
+    if (isDeviceHidden) {
+        state.settings.activeDevice = isDeviceVisible('f2_ultra_uv', state.visibilitySettings) ? 'f2_ultra_uv' : 'svg_export';
+        state.settings.activeLaserType = null;
+        SettingsStorage.save(state.settings);
+    } else if (!hasVisibleLaserOptions && state.settings?.activeDevice !== 'svg_export') {
+        state.settings.activeDevice = isDeviceVisible('f2_ultra_uv', state.visibilitySettings) ? 'f2_ultra_uv' : 'svg_export';
+        state.settings.activeLaserType = null;
+        SettingsStorage.save(state.settings);
+    }
+
+    // 1c. Initialize Multi-Grid Palette with k-d tree index
     await initializeMultiGridPalette(SettingsStorage);
 
     initMiniPicker();
@@ -956,7 +973,7 @@ async function init() {
 
         // Update Header/UI to show current device
         updateDeviceUI(deviceId);
-    });
+    }, state.visibilitySettings);
 
     // 3. Show Landing Page (if needed)
     // This will either trigger the callback immediately (if saved) or show UI
@@ -1045,11 +1062,16 @@ function updateDeviceUI(deviceId) {
             let badgeHTML = `by lasertools.org &nbsp; <span class="device-badge" style="background: ${badgeColor}; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; cursor:pointer;" title="Click to switch device">📍 ${profile.name}</span>`;
 
             // Add laser type selector for multi-laser devices
-            if (isMultiLaserDevice(deviceId)) {
-                const options = getLaserTypeOptions(deviceId);
-                const currentLaser = state.settings?.activeLaserType || null;
+            const options = getLaserTypeOptions(deviceId, state.visibilitySettings);
+            const currentLaser = state.settings?.activeLaserType || null;
+            if (options.length > 0 && !options.some(opt => opt.id === currentLaser)) {
+                state.settings.activeLaserType = options[0].id;
+                SettingsStorage.save(state.settings);
+            }
+
+            if (isMultiLaserDevice(deviceId, state.visibilitySettings)) {
                 const optionsHTML = options.map(opt =>
-                    `<option value="${opt.id}"${opt.id === currentLaser ? ' selected' : ''}>${opt.name}</option>`
+                    `<option value="${opt.id}"${opt.id === state.settings?.activeLaserType ? ' selected' : ''}>${opt.name}</option>`
                 ).join('');
                 badgeHTML += ` <select id="laserTypeSelector" class="laser-type-selector" title="Switch laser type">${optionsHTML}</select>`;
             }

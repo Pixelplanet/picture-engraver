@@ -273,6 +273,19 @@ describe('Admin Settings API', () => {
             expect(res.body.testGridDefaults.uv.power).toBe(HARDCODED_TEST_GRID_DEFAULTS.uv.power);
         });
     });
+
+    describe('PATCH /admin/api/settings/visibility', () => {
+        it('should update visibility settings', async () => {
+            const res = await request(app)
+                .patch('/admin/api/settings/visibility')
+                .set(authHeader())
+                .send({ hiddenDevices: ['f2'], hiddenLaserTypes: ['blue_f2'] });
+
+            expect(res.status).toBe(200);
+            expect(res.body.hiddenDevices).toEqual(['f2']);
+            expect(res.body.hiddenLaserTypes).toEqual(['blue_f2']);
+        });
+    });
 });
 
 // ── Public Test Grid Endpoint ───────────────────────────────────────────────────
@@ -332,6 +345,17 @@ describe('GET /api/testgrid/:laserType', () => {
         expect(res.status).toBe(200);
     });
 
+    it('should return 404 when laser type is hidden by admin visibility settings', async () => {
+        process.env.ADMIN_TOKEN = TEST_TOKEN;
+        await request(app)
+            .patch('/admin/api/settings/visibility')
+            .set({ Authorization: `Bearer ${TEST_TOKEN}` })
+            .send({ hiddenLaserTypes: ['uv'] });
+
+        const res = await request(app).get('/api/testgrid/uv');
+        expect(res.status).toBe(404);
+    });
+
     it('should serve admin-customized defaults', async () => {
         process.env.ADMIN_TOKEN = TEST_TOKEN;
 
@@ -345,6 +369,27 @@ describe('GET /api/testgrid/:laserType', () => {
         const res = await request(app).get('/api/testgrid/uv');
         expect(res.status).toBe(200);
         // XCS will contain the customized settings (hard to verify content, but the endpoint works)
+    });
+});
+
+describe('GET /api/visibility', () => {
+    let tmpDir, adminSettings, app;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'admin-route-test-'));
+        adminSettings = new AdminSettings(tmpDir);
+        app = createApp(adminSettings);
+    });
+
+    afterEach(() => {
+        delete process.env.ADMIN_TOKEN;
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should expose visibility settings without authentication', async () => {
+        const res = await request(app).get('/api/visibility');
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({ hiddenDevices: [], hiddenLaserTypes: [] });
     });
 });
 

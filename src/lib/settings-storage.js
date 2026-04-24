@@ -287,6 +287,7 @@ export const SettingsStorage = {
     // Cache for server-provided color maps
     _serverColorMaps: null,
     _serverMapsLoaded: false,
+    _visibilitySettings: { hiddenDevices: [], hiddenLaserTypes: [] },
 
     /**
      * Fetch admin-managed color maps from the server for a device type.
@@ -315,6 +316,27 @@ export const SettingsStorage = {
             this._serverMapsLoaded = true;
             return [];
         }
+    },
+
+    async fetchServerVisibilityConfig() {
+        try {
+            const res = await fetch('/api/visibility');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            this._visibilitySettings = {
+                hiddenDevices: Array.isArray(data.hiddenDevices) ? data.hiddenDevices : [],
+                hiddenLaserTypes: Array.isArray(data.hiddenLaserTypes) ? data.hiddenLaserTypes : [],
+            };
+            return this._visibilitySettings;
+        } catch (err) {
+            console.warn('[SettingsStorage] Could not fetch visibility settings:', err.message);
+            this._visibilitySettings = { hiddenDevices: [], hiddenLaserTypes: [] };
+            return this._visibilitySettings;
+        }
+    },
+
+    getVisibilitySettings() {
+        return this._visibilitySettings || { hiddenDevices: [], hiddenLaserTypes: [] };
     },
 
     /**

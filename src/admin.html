@@ -52,6 +52,7 @@
   .btn { padding: 8px 20px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 500; }
   .btn-primary { background: var(--accent); color: #fff; }
   .btn-secondary { background: var(--border); color: var(--text); }
+  .btn-warning { background: var(--warning); color: #fff; }
   .btn-danger { background: var(--danger); color: #fff; }
 
   .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 6px; color: #fff; font-size: 0.85rem; z-index: 100; opacity: 0; transition: opacity 0.3s; }
@@ -96,6 +97,15 @@
   .laser-tab.dirty::after { content: '●'; position: absolute; top: 2px; right: 2px; font-size: 0.45rem; color: var(--warning); line-height: 1; }
   .device-group-header.dirty .device-name::after { content: ' ●'; color: var(--warning); font-size: 0.55rem; }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+  .visibility-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; }
+  .visibility-panel h3 { font-size: 0.9rem; color: var(--accent); margin-bottom: 8px; }
+  .visibility-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .visibility-box { border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+  .visibility-box h4 { font-size: 0.8rem; margin-bottom: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .visibility-item { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; margin-bottom: 6px; }
+  .visibility-actions { margin-top: 10px; display: flex; gap: 8px; }
+  .visibility-help { color: var(--muted); font-size: 0.75rem; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -119,6 +129,15 @@
 
   <!-- Test Grids Section -->
   <div class="section active" id="section-testgrid">
+    <div class="visibility-panel">
+      <h3>Laser Visibility for End Users</h3>
+      <div id="visibility-controls"></div>
+      <div class="visibility-actions">
+        <button class="btn btn-primary" id="btn-save-visibility" onclick="saveVisibilitySettings()">Save Visibility</button>
+      </div>
+      <p class="visibility-help">Hidden items are removed from the user device picker and laser selector.</p>
+    </div>
+
     <div id="device-groups"></div>
 
     <div class="actions">
@@ -214,9 +233,68 @@ let token = '';
 let allSettings = {};
 let activeLaser = 'uv';
 let savedSettings = {};
+let savedVisibility = { hiddenDevices: [], hiddenLaserTypes: [] };
 
 function snapshotSettings() {
   savedSettings = JSON.parse(JSON.stringify(allSettings.testGridDefaults || {}));
+  savedVisibility = JSON.parse(JSON.stringify(allSettings.visibility || { hiddenDevices: [], hiddenLaserTypes: [] }));
+}
+
+function normalizeVisibility(v) {
+  return {
+    hiddenDevices: Array.isArray(v?.hiddenDevices) ? v.hiddenDevices : [],
+    hiddenLaserTypes: Array.isArray(v?.hiddenLaserTypes) ? v.hiddenLaserTypes : [],
+  };
+}
+
+function getCurrentVisibilityFromUI() {
+  return {
+    hiddenDevices: Array.from(document.querySelectorAll('[data-hide-device]:checked')).map(el => el.dataset.hideDevice),
+    hiddenLaserTypes: Array.from(document.querySelectorAll('[data-hide-laser]:checked')).map(el => el.dataset.hideLaser),
+  };
+}
+
+function renderVisibilityControls() {
+  const current = normalizeVisibility(allSettings.visibility);
+  const devicesHtml = Object.entries(DEVICES).map(([deviceId, device]) => {
+    const checked = current.hiddenDevices.includes(deviceId) ? 'checked' : '';
+    return `<label class="visibility-item"><input type="checkbox" data-hide-device="${deviceId}" ${checked}> Hide ${device.name}</label>`;
+  }).join('');
+
+  const allLasers = Object.values(DEVICES).flatMap(device => device.lasers);
+  const lasersHtml = Array.from(new Set(allLasers)).map(laserType => {
+    const checked = current.hiddenLaserTypes.includes(laserType) ? 'checked' : '';
+    return `<label class="visibility-item"><input type="checkbox" data-hide-laser="${laserType}" ${checked}> Hide ${LASER_LABELS[laserType]}</label>`;
+  }).join('');
+
+  document.getElementById('visibility-controls').innerHTML = `
+    <div class="visibility-grid">
+      <div class="visibility-box">
+        <h4>Laser Sources (Devices)</h4>
+        ${devicesHtml}
+      </div>
+      <div class="visibility-box">
+        <h4>Laser Types</h4>
+        ${lasersHtml}
+      </div>
+    </div>
+  `;
+}
+
+async function saveVisibilitySettings() {
+  try {
+    const visibility = getCurrentVisibilityFromUI();
+    const saved = await apiFetch('/admin/api/settings/visibility', {
+      method: 'PATCH',
+      body: JSON.stringify(visibility),
+    });
+    allSettings.visibility = saved;
+    savedVisibility = JSON.parse(JSON.stringify(saved));
+    renderVisibilityControls();
+    toast('Visibility settings saved');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
 }
 
 function valuesEqual(a, b) {
@@ -309,6 +387,7 @@ async function authenticate() {
     document.getElementById('auth-panel').style.display = 'none';
     document.getElementById('main-panel').style.display = 'block';
     sessionStorage.setItem('_adminToken', token);
+    renderVisibilityControls();
     renderTabs();
   } catch(e) {
     document.getElementById('auth-error').textContent = e.message;
@@ -470,6 +549,7 @@ async function resetAll() {
   try {
     allSettings = await apiFetch('/admin/api/settings/reset', { method: 'POST' });
     snapshotSettings();
+    renderVisibilityControls();
     renderTabs();
     toast('All settings reset to defaults');
   } catch(e) { toast(e.message, 'error'); }

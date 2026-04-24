@@ -229,9 +229,11 @@ export function getActiveLaserConfig(settings) {
  * @param {string} deviceId
  * @returns {boolean}
  */
-export function isMultiLaserDevice(deviceId) {
+export function isMultiLaserDevice(deviceId, visibilitySettings) {
     const device = getDeviceConfig(deviceId);
-    return device ? device.laserTypes.length > 1 : false;
+    if (!device) return false;
+    const visibleLaserTypes = filterVisibleLaserTypes(device, visibilitySettings);
+    return visibleLaserTypes.length > 1;
 }
 
 /**
@@ -239,10 +241,11 @@ export function isMultiLaserDevice(deviceId) {
  * @param {string} deviceId
  * @returns {Array<{id: string, name: string}>}
  */
-export function getLaserTypeOptions(deviceId) {
+export function getLaserTypeOptions(deviceId, visibilitySettings) {
     const device = getDeviceConfig(deviceId);
     if (!device) return [];
-    return device.laserTypes.map(ltId => {
+    const visibleLaserTypes = filterVisibleLaserTypes(device, visibilitySettings);
+    return visibleLaserTypes.map(ltId => {
         const lt = LASER_TYPES[ltId];
         return { id: ltId, name: lt ? lt.name : ltId };
     });
@@ -263,11 +266,64 @@ export function isVirtualDevice(deviceId) {
  * @returns {Array<{family: object, devices: Array<object>}>}
  */
 export function getDeviceFamilies() {
+    return getDeviceFamiliesWithVisibility(undefined);
+}
+
+/**
+ * Normalize visibility settings payload.
+ * @param {{hiddenDevices?: string[], hiddenLaserTypes?: string[]}|undefined} visibilitySettings
+ * @returns {{hiddenDevices: Set<string>, hiddenLaserTypes: Set<string>}}
+ */
+export function normalizeVisibilitySettings(visibilitySettings) {
+    const hiddenDevices = new Set(Array.isArray(visibilitySettings?.hiddenDevices) ? visibilitySettings.hiddenDevices : []);
+    const hiddenLaserTypes = new Set(Array.isArray(visibilitySettings?.hiddenLaserTypes) ? visibilitySettings.hiddenLaserTypes : []);
+    return { hiddenDevices, hiddenLaserTypes };
+}
+
+/**
+ * Check whether a device is visible under the given visibility settings.
+ */
+export function isDeviceVisible(deviceId, visibilitySettings) {
+    const { hiddenDevices } = normalizeVisibilitySettings(visibilitySettings);
+    return !hiddenDevices.has(deviceId);
+}
+
+/**
+ * Check whether a laser type is visible under the given visibility settings.
+ */
+export function isLaserTypeVisible(laserTypeId, visibilitySettings) {
+    const { hiddenLaserTypes } = normalizeVisibilitySettings(visibilitySettings);
+    return !hiddenLaserTypes.has(laserTypeId);
+}
+
+/**
+ * Return laser types that are visible for a device.
+ */
+export function filterVisibleLaserTypes(device, visibilitySettings) {
+    if (!device) return [];
+    return (device.laserTypes || []).filter(ltId => isLaserTypeVisible(ltId, visibilitySettings));
+}
+
+/**
+ * Get devices grouped by family, with optional visibility filtering.
+ */
+export function getDeviceFamiliesWithVisibility(visibilitySettings) {
     const grouped = {};
     for (const device of Object.values(DEVICES)) {
+        if (!isDeviceVisible(device.id, visibilitySettings)) continue;
+        const visibleLaserTypes = filterVisibleLaserTypes(device, visibilitySettings);
+        if (!isVirtualDevice(device.id) && device.laserTypes.length > 0 && visibleLaserTypes.length === 0) {
+            continue;
+        }
         const famId = device.family || 'virtual';
         if (!grouped[famId]) grouped[famId] = [];
-        grouped[famId].push(device);
+        grouped[famId].push({
+            ...device,
+            laserTypes: visibleLaserTypes,
+            defaultLaserType: visibleLaserTypes.includes(device.defaultLaserType)
+                ? device.defaultLaserType
+                : (visibleLaserTypes[0] || null),
+        });
     }
     return Object.values(DEVICE_FAMILIES)
         .sort((a, b) => a.order - b.order)
