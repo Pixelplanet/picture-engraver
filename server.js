@@ -137,7 +137,7 @@ app.use(morgan(':real-ip - :method :url :status :res[content-length] - :response
 }));
 
 app.use(cors());
-app.use(express.json({ limit: '10kb' })); // Limit JSON body size to preventing flooding
+app.use(express.json({ limit: '5mb' })); // Allow large color map uploads (up to 5MB)
 
 // Admin Settings & Routes
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
