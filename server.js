@@ -143,6 +143,9 @@ app.use(express.json({ limit: '5mb' })); // Allow large color map uploads (up to
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const adminSettings = new AdminSettings(DATA_DIR);
 adminSettings.seedDefaults();  // Ensure data volume has settings on first boot
+adminSettings.seedSystemColorMaps().catch(err => {
+    console.error('[server] seedSystemColorMaps failed:', err);
+});
 app.use(createAdminRouter(adminSettings));
 
 // Serve static files from the build directory

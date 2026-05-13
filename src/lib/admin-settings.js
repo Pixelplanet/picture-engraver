@@ -215,6 +215,53 @@ export class AdminSettings {
     }
 
     /**
+     * Seed bundled SYSTEM_DEFAULTS color maps (UV "System Default" and "Advanced
+     * System Default", MOPA template, etc.) into the admin color-maps directory
+     * so they appear in the admin portal as if uploaded.
+     *
+     * Idempotent: skips entries whose id already exists on disk. Existing user
+     * edits are preserved.
+     */
+    async seedSystemColorMaps() {
+        try {
+            const dir = this._colorMapsDir();
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+            const mod = await import('./default-color-map.js');
+            const defaults = Array.isArray(mod.SYSTEM_DEFAULTS) ? mod.SYSTEM_DEFAULTS : [];
+            let seeded = 0;
+            for (const src of defaults) {
+                if (!src || !src.id) continue;
+                // Only seed entries that look like color maps (have data.entries).
+                if (!src.data || !Array.isArray(src.data.entries) || src.data.entries.length === 0) continue;
+
+                const filePath = path.join(dir, `${src.id}.json`);
+                if (fs.existsSync(filePath)) continue;
+
+                const now = new Date().toISOString();
+                const map = {
+                    id: src.id,
+                    name: src.name,
+                    deviceType: src.deviceType || 'f2_ultra_uv',
+                    description: src.description || '',
+                    isDefault: src.id === 'system_default_basic',
+                    isSystemSeed: true,
+                    createdAt: now,
+                    updatedAt: now,
+                    data: src.data,
+                };
+                fs.writeFileSync(filePath, JSON.stringify(map, null, 2), 'utf-8');
+                seeded++;
+            }
+            if (seeded > 0) {
+                console.log(`[AdminSettings] Seeded ${seeded} system color map(s) into ${dir}`);
+            }
+        } catch (err) {
+            console.error(`[AdminSettings] Failed to seed system color maps: ${err.message}`);
+        }
+    }
+
+    /**
      * Load settings from file, falling back to hardcoded defaults.
      */
     load() {
@@ -438,6 +485,27 @@ export class AdminSettings {
         const dir = this._colorMapsDir();
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
+        }
+
+        // Uniqueness check: (name, deviceType) must be unique unless overwrite or auto-version
+        const allMaps = this.listColorMaps();
+        const conflict = allMaps.find(m => m.name === mapData.name && m.deviceType === mapData.deviceType && m.id !== mapData.id);
+        const overwrite = mapData._overwrite === true;
+        const autoVersion = mapData._autoVersion === true;
+        if (conflict && !overwrite) {
+            if (autoVersion) {
+                // Find next available versioned name
+                let base = mapData.name.replace(/ \(\d+\)$/, '');
+                let n = 2;
+                let newName = `${base} (${n})`;
+                while (allMaps.some(m => m.name === newName && m.deviceType === mapData.deviceType)) {
+                    n++;
+                    newName = `${base} (${n})`;
+                }
+                mapData.name = newName;
+            } else {
+                throw new Error(`A color map named '${mapData.name}' already exists for this device. Use overwrite or auto-version.`);
+            }
         }
 
         // Generate ID if new

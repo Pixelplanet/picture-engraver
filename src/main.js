@@ -3263,13 +3263,44 @@ function exportGrids(grids) {
     const a = document.createElement('a');
     a.href = url;
     const fileName = grids.length === 1
-        ? `${grids[0].name.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.json`
-        : `color-grids-${new Date().toISOString().slice(0, 10)}.json`;
+        ? `${gridFileName(grids[0])}.json`
+        : `color-grids-${exportLaserSlug(grids)}${new Date().toISOString().slice(0, 10)}.json`;
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
 
     showToast(`Exported ${grids.length} grid(s)`, 'success');
+}
+
+/**
+ * Slugify a string for safe filenames.
+ */
+function slugify(str) {
+    return String(str || '').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+}
+
+/**
+ * Build a filename for a single grid that includes the laser type, e.g.
+ *   "my-map_uv.json" or "my-map_mopa.json".
+ */
+function gridFileName(grid) {
+    const baseName = slugify(grid?.name) || 'color-grid';
+    const laser = getLaserConfig(grid?.deviceType);
+    const laserSlug = slugify(laser?.name);
+    return laserSlug ? `${baseName}_${laserSlug}` : baseName;
+}
+
+/**
+ * For multi-grid exports, build a "uv-" / "mopa-" prefix when all grids share
+ * a single laser type, otherwise an empty string.
+ */
+function exportLaserSlug(grids) {
+    const slugs = new Set(
+        (grids || [])
+            .map(g => slugify(getLaserConfig(g?.deviceType)?.name))
+            .filter(Boolean)
+    );
+    return slugs.size === 1 ? `${[...slugs][0]}-` : '';
 }
 
 

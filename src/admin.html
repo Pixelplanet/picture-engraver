@@ -672,38 +672,80 @@ async function handleMapFile(file) {
     const parsed = JSON.parse(text);
 
     // Detect format: export package (maps/grids array) vs direct map
-    let mapData;
-    let mapCount = 0;
+    let mapsToUpload = [];
     if (parsed.maps && Array.isArray(parsed.maps)) {
-      mapCount = parsed.maps.length;
-      // Upload each map individually
-      for (const m of parsed.maps) {
-        await apiFetch('/admin/api/colormaps', { method: 'POST', body: JSON.stringify(m) });
-      }
+      mapsToUpload = parsed.maps;
     } else if (parsed.grids && Array.isArray(parsed.grids)) {
-      mapCount = parsed.grids.length;
-      for (const m of parsed.grids) {
-        await apiFetch('/admin/api/colormaps', { method: 'POST', body: JSON.stringify(m) });
-      }
+      mapsToUpload = parsed.grids;
     } else if (parsed.data && parsed.data.entries) {
-      // Direct map object
-      mapCount = 1;
-      await apiFetch('/admin/api/colormaps', { method: 'POST', body: JSON.stringify(parsed) });
+      mapsToUpload = [parsed];
     } else if (parsed.entries && Array.isArray(parsed.entries)) {
-      // Raw data object — wrap it
-      mapCount = 1;
       const name = file.name.replace('.json', '') || 'Uploaded Map';
-      const wrapped = { name, deviceType: 'f2_ultra_uv', data: parsed };
-      await apiFetch('/admin/api/colormaps', { method: 'POST', body: JSON.stringify(wrapped) });
+      mapsToUpload = [{ name, deviceType: 'f2_ultra_uv', data: parsed }];
     } else {
       toast('Unrecognized format. Expected an Analyzer export JSON.', 'error');
       return;
     }
 
-    toast(`Uploaded ${mapCount} color map${mapCount > 1 ? 's' : ''}`);
+    let uploaded = 0;
+    let skipped = 0;
+    for (const m of mapsToUpload) {
+      const result = await uploadMapWithConflictHandling(m);
+      if (result === 'uploaded') uploaded++;
+      else if (result === 'skipped') skipped++;
+    }
+
+    let msg = `Uploaded ${uploaded} color map${uploaded !== 1 ? 's' : ''}`;
+    if (skipped > 0) msg += `, skipped ${skipped}`;
+    toast(msg);
     loadColorMaps();
   } catch(e) {
     toast('Upload failed: ' + e.message, 'error');
+  }
+}
+
+/**
+ * Upload a single color map. On (name, deviceType) conflict, prompt the admin
+ * to overwrite, save as a new version, or cancel.
+ * @returns {'uploaded' | 'skipped'}
+ */
+async function uploadMapWithConflictHandling(map) {
+  // Strip any prior decision flags so we don't accidentally overwrite silently.
+  const clean = { ...map };
+  delete clean._overwrite;
+  delete clean._autoVersion;
+
+  try {
+    await apiFetch('/admin/api/colormaps', { method: 'POST', body: JSON.stringify(clean) });
+    return 'uploaded';
+  } catch (e) {
+    const isConflict = /already exists/i.test(e.message);
+    if (!isConflict) throw e;
+
+    const label = clean.name || '(unnamed)';
+    const choice = (window.prompt(
+      `A color map named "${label}" already exists for this device.\n\n` +
+      `Type "o" to overwrite the existing map,\n` +
+      `Type "v" to save as a new version (e.g. "${label} (2)"),\n` +
+      `or leave blank to skip.`,
+      'v'
+    ) || '').trim().toLowerCase();
+
+    if (choice === 'o' || choice === 'overwrite') {
+      await apiFetch('/admin/api/colormaps', {
+        method: 'POST',
+        body: JSON.stringify({ ...clean, _overwrite: true }),
+      });
+      return 'uploaded';
+    }
+    if (choice === 'v' || choice === 'version') {
+      await apiFetch('/admin/api/colormaps', {
+        method: 'POST',
+        body: JSON.stringify({ ...clean, _autoVersion: true }),
+      });
+      return 'uploaded';
+    }
+    return 'skipped';
   }
 }
 
