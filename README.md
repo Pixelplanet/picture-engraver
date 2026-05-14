@@ -103,5 +103,13 @@ npm run test:unit
 npm run test:e2e
 ```
 
+## License
+
+This project is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License.
+
+You may fork, modify, and redistribute the project for non-commercial purposes, provided attribution is retained and derivative works are shared under the same license. Commercial use is not permitted without separate permission.
+
+See [LICENSE](LICENSE) for the full license text.
+
 ---
 Built for the maker community. 🛠️✨
