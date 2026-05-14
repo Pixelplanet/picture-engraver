@@ -106,6 +106,38 @@
   .visibility-item { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; margin-bottom: 6px; }
   .visibility-actions { margin-top: 10px; display: flex; gap: 8px; }
   .visibility-help { color: var(--muted); font-size: 0.75rem; margin-top: 8px; }
+
+  /* Modal */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; max-width: 1100px; width: 100%; max-height: 92vh; display: flex; flex-direction: column; overflow: hidden; }
+  .modal-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+  .modal-header h2 { font-size: 1rem; flex: 1; }
+  .modal-close { background: none; border: none; color: var(--muted); font-size: 1.4rem; cursor: pointer; padding: 0 6px; line-height: 1; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 18px 20px; overflow: auto; display: grid; grid-template-columns: minmax(0,1fr) 280px; gap: 18px; }
+  .modal-body .grid-area { display: flex; align-items: center; justify-content: center; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 18px; min-height: 320px; }
+  .modal-body .info-area { display: flex; flex-direction: column; gap: 10px; }
+  .info-summary { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 0.78rem; }
+  .info-summary div { margin: 2px 0; color: var(--muted); }
+  .info-summary div b { color: var(--text); font-weight: 500; }
+  .info-cell { background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 12px; font-size: 0.8rem; min-height: 160px; }
+  .info-cell .info-cell-title { font-size: 0.85rem; font-weight: 600; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .info-cell .info-swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); display: inline-block; }
+  .info-cell .info-row { display: flex; justify-content: space-between; padding: 3px 0; color: var(--muted); }
+  .info-cell .info-row b { color: var(--text); font-weight: 500; }
+  .info-cell .info-empty { color: var(--muted); font-style: italic; padding: 20px 0; text-align: center; }
+
+  /* Preview grid (test grid preview modal) */
+  .preview-grid { display: grid; gap: 2px; background: var(--border); padding: 2px; border-radius: 4px; max-width: 100%; }
+  .preview-cell { aspect-ratio: 1 / 1; min-width: 18px; cursor: pointer; border-radius: 2px; outline: 1px solid transparent; transition: outline-color 0.1s, transform 0.1s; }
+  .preview-cell:hover, .preview-cell.active { outline-color: #fff; transform: scale(1.08); z-index: 2; position: relative; }
+  .preview-cell.qr { background: repeating-linear-gradient(45deg, #000, #000 4px, #fff 4px, #fff 8px) !important; cursor: default; }
+  .preview-cell.qr:hover { transform: none; outline-color: var(--accent); }
+  .preview-cell.empty { background: transparent !important; border: 1px dashed rgba(255,255,255,0.1); cursor: default; }
+  .preview-cell.empty:hover { transform: none; outline-color: transparent; }
+  @media (max-width: 760px) {
+    .modal-body { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -166,6 +198,8 @@
         <option value="f2_ultra_single">F2 Ultra Single</option>
         <option value="f2">F2</option>
       </select>
+      <button class="btn btn-secondary" style="margin-left:8px" onclick="reseedSystemMaps(false)" title="Restore any missing bundled system maps (UV defaults, MOPA template). Existing user uploads are preserved.">↻ Reseed System Defaults</button>
+      <button class="btn btn-warning" onclick="reseedSystemMaps(true)" title="Force-overwrite the bundled system maps with the latest version from this build. User uploads are untouched.">⚡ Force Reseed</button>
       <span id="map-count" style="margin-left:auto; font-size:0.8rem; color:var(--muted)"></span>
     </div>
 
@@ -174,6 +208,9 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Generic modal host (filled by JS) -->
+<div id="modal-host"></div>
 
 <script>
 // ── Device & Laser Registry (mirrors device-registry.js) ───────────────────
@@ -532,8 +569,226 @@ async function saveSettings() {
 async function previewGrid() {
   try {
     const result = await apiFetch(`/admin/api/settings/testgrid/${activeLaser}/preview`);
-    const info = result.gridInfo;
-    toast(`Grid: ${info.numCols}x${info.numRows} = ${info.totalCells} cells, XCS: ${(result.xcsLength/1024).toFixed(1)}KB`);
+    openTestGridPreviewModal(result.gridInfo, result.xcsLength);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ── Generic Modal ───────────────────────────────────────────────────────────
+
+function closeModal() {
+  const host = document.getElementById('modal-host');
+  if (host) host.innerHTML = '';
+}
+
+function openModal(title, bodyHtml, onMount) {
+  const host = document.getElementById('modal-host');
+  host.innerHTML = `
+    <div class="modal-backdrop" onclick="if(event.target===this) closeModal()">
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <h2>${esc(title)}</h2>
+          <button class="modal-close" onclick="closeModal()" aria-label="Close">×</button>
+        </div>
+        <div class="modal-body">${bodyHtml}</div>
+      </div>
+    </div>`;
+  if (typeof onMount === 'function') onMount(host);
+}
+
+// ── Test Grid Preview Modal ────────────────────────────────────────────────
+
+function openTestGridPreviewModal(gridInfo, xcsLength) {
+  const settings = (savedSettings && savedSettings[activeLaser]) || (allSettings.testGridDefaults && allSettings.testGridDefaults[activeLaser]) || {};
+  const isMopa = !!gridInfo.gridMode; // MOPA grids include gridMode
+  const numCols = gridInfo.numCols || 0;
+  const numRows = gridInfo.numRows || 0;
+  const xVals = gridInfo.lpiValues || [];
+  const yVals = gridInfo.freqValues || [];
+  const xLabel = gridInfo.xAxisLabel || (isMopa ? 'X' : 'LPI');
+  const yLabel = gridInfo.yAxisLabel || (isMopa ? 'Y' : 'Frequency (kHz)');
+  const excStartCol = (typeof gridInfo.excStartCol === 'number') ? gridInfo.excStartCol : numCols;
+  const excStartRow = (typeof gridInfo.excStartRow === 'number') ? gridInfo.excStartRow : numRows;
+
+  // Build cells matrix mirroring the generator's logic so the preview matches the actual XCS.
+  const cells = [];
+  for (let row = 0; row < numRows; row++) {
+    for (let col = 0; col < numCols; col++) {
+      const inQrZone = col >= excStartCol && row >= excStartRow;
+      // Color matches generator: HSL gradient with hue across cols, lightness across rows.
+      const hue = (col / Math.max(numCols, 1)) * 0.7;
+      const lightness = 0.3 + (row / Math.max(numRows, 1)) * 0.4;
+      const rgb = hslToRgb(hue, 0.8, lightness);
+      const colorHex = rgbToHex(rgb.r, rgb.g, rgb.b);
+
+      const cell = {
+        col, row, colorHex,
+        rgb,
+        inQrZone,
+      };
+
+      if (isMopa) {
+        const mode = gridInfo.gridMode || 'frequency';
+        const xV = xVals[col];
+        const yV = yVals[row];
+        cell.power = settings.fixedPower;
+        cell.speed = settings.fixedSpeed;
+        cell.frequency = settings.fixedFreq;
+        if (mode === 'power') {
+          cell.speed = isFiniteNum(xV) ? xV : cell.speed;
+          cell.frequency = isFiniteNum(yV) ? yV : cell.frequency;
+        } else if (mode === 'speed') {
+          cell.power = isFiniteNum(xV) ? xV : cell.power;
+          cell.frequency = isFiniteNum(yV) ? yV : cell.frequency;
+        } else { // frequency
+          cell.speed = isFiniteNum(xV) ? xV : cell.speed;
+          cell.power = isFiniteNum(yV) ? yV : cell.power;
+        }
+        cell.lpi = settings.mopaLpi;
+        cell.passes = settings.passes;
+        cell.pulseWidth = settings.pulseWidth;
+        cell.label = `S${cell.speed} P${cell.power} F${cell.frequency}`;
+      } else {
+        cell.lpi = isFiniteNum(xVals[col]) ? Math.round(xVals[col]) : null;
+        cell.frequency = isFiniteNum(yVals[row]) ? Math.round(yVals[row]) : null;
+        cell.power = settings.power;
+        cell.speed = settings.speed;
+        cell.passes = settings.passes;
+        cell.label = `F${cell.frequency}kHz / L${cell.lpi}`;
+      }
+
+      cells.push(cell);
+    }
+  }
+
+  const summaryHtml = `
+    <div class="info-summary">
+      <div><b>Laser:</b> ${esc(LASER_LABELS[activeLaser] || activeLaser)}</div>
+      <div><b>Grid:</b> ${numCols} × ${numRows} = ${gridInfo.totalCells} cells</div>
+      <div><b>Card:</b> ${gridInfo.width} × ${gridInfo.height} mm</div>
+      <div><b>X axis (cols):</b> ${esc(xLabel)}</div>
+      <div><b>Y axis (rows):</b> ${esc(yLabel)}</div>
+      ${isMopa ? `<div><b>Mode:</b> ${esc(gridInfo.gridMode)}</div>` : ''}
+      <div><b>QR exclusion:</b> from col ${excStartCol}, row ${excStartRow}</div>
+      ${typeof xcsLength === 'number' ? `<div><b>XCS size:</b> ${(xcsLength/1024).toFixed(1)} KB</div>` : ''}
+    </div>`;
+
+  // Cap cell size so very large grids still fit. Use a CSS grid with fixed cols.
+  const maxGridPx = 560;
+  const cellPx = Math.max(18, Math.min(48, Math.floor(maxGridPx / Math.max(numCols, 1))));
+
+  const cellsHtml = cells.map(c => {
+    const cls = c.inQrZone ? 'preview-cell qr' : 'preview-cell';
+    const style = c.inQrZone ? '' : `background:${c.colorHex};`;
+    return `<div class="${cls}" data-col="${c.col}" data-row="${c.row}" style="${style}width:${cellPx}px;height:${cellPx}px" title="Col ${c.col+1} Row ${c.row+1}"></div>`;
+  }).join('');
+
+  const bodyHtml = `
+    <div class="grid-area">
+      <div class="preview-grid" id="preview-grid-el" style="grid-template-columns: repeat(${numCols}, ${cellPx}px)">
+        ${cellsHtml}
+      </div>
+    </div>
+    <div class="info-area">
+      ${summaryHtml}
+      <div class="info-cell" id="preview-cell-info">
+        <div class="info-empty">Hover a cell to see its settings.</div>
+      </div>
+      <div style="font-size:0.7rem; color:var(--muted)">Striped cells = QR code area (excluded from grid).</div>
+    </div>`;
+
+  openModal(`Test Grid Preview — ${LASER_LABELS[activeLaser] || activeLaser}`, bodyHtml, () => {
+    const gridEl = document.getElementById('preview-grid-el');
+    const infoEl = document.getElementById('preview-cell-info');
+    if (!gridEl || !infoEl) return;
+    let lastActive = null;
+    const cellMap = new Map(cells.map(c => [`${c.col},${c.row}`, c]));
+
+    function showCell(c) {
+      if (!c || c.inQrZone) {
+        infoEl.innerHTML = c && c.inQrZone
+          ? '<div class="info-empty">QR code area (no engraving cell)</div>'
+          : '<div class="info-empty">Hover a cell to see its settings.</div>';
+        return;
+      }
+      const rows = [
+        ['Col / Row', `${c.col + 1} / ${c.row + 1}`],
+        ['Frequency', isFiniteNum(c.frequency) ? `${c.frequency} kHz` : '—'],
+        [isMopa ? 'LPC' : 'LPI', isFiniteNum(c.lpi) ? c.lpi : '—'],
+        ['Power', isFiniteNum(c.power) ? `${c.power}%` : '—'],
+        ['Speed', isFiniteNum(c.speed) ? `${c.speed} mm/s` : '—'],
+        ['Passes', isFiniteNum(c.passes) ? c.passes : '—'],
+      ];
+      if (isMopa && isFiniteNum(c.pulseWidth)) rows.push(['Pulse width', `${c.pulseWidth} ns`]);
+      rows.push(['Color', c.colorHex.toUpperCase()]);
+      infoEl.innerHTML = `
+        <div class="info-cell-title">
+          <span class="info-swatch" style="background:${c.colorHex}"></span>
+          ${esc(c.label || '')}
+        </div>
+        ${rows.map(([k, v]) => `<div class="info-row"><span>${esc(k)}</span><b>${esc(String(v))}</b></div>`).join('')}
+      `;
+    }
+
+    gridEl.addEventListener('mousemove', e => {
+      const t = e.target.closest('.preview-cell');
+      if (!t) return;
+      const key = `${t.dataset.col},${t.dataset.row}`;
+      const c = cellMap.get(key);
+      if (lastActive && lastActive !== t) lastActive.classList.remove('active');
+      t.classList.add('active');
+      lastActive = t;
+      showCell(c);
+    });
+    gridEl.addEventListener('mouseleave', () => {
+      if (lastActive) lastActive.classList.remove('active');
+      lastActive = null;
+    });
+  });
+}
+
+function isFiniteNum(v) { return typeof v === 'number' && !isNaN(v) && isFinite(v); }
+
+function rgbToHex(r, g, b) {
+  const h = n => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+
+// HSL → RGB matching the test grid generator (h,s,l in 0..1; returns 0..255).
+function hslToRgb(h, s, l) {
+  let r, g, b;
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const hue2rgb = (p, q, t) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+  return { r: r * 255, g: g * 255, b: b * 255 };
+}
+
+// ── Reseed system color maps ───────────────────────────────────────────────
+
+async function reseedSystemMaps(force) {
+  if (force && !confirm('Force-overwrite the bundled system color maps with the version from this build?\n\nUser-uploaded maps will NOT be touched.')) return;
+  try {
+    const result = await apiFetch('/admin/api/colormaps/reseed' + (force ? '?force=true' : ''), { method: 'POST' });
+    const total = (result.seeded || 0) + (result.overwritten || 0);
+    if (total === 0) {
+      toast(`No new system maps to seed (${result.skipped || 0} already present)`);
+    } else {
+      toast(`Seeded ${result.seeded || 0}, overwritten ${result.overwritten || 0}, skipped ${result.skipped || 0}`);
+    }
+    loadColorMaps();
   } catch(e) { toast(e.message, 'error'); }
 }
 

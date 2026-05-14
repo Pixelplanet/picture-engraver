@@ -219,46 +219,73 @@ export class AdminSettings {
      * System Default", MOPA template, etc.) into the admin color-maps directory
      * so they appear in the admin portal as if uploaded.
      *
-     * Idempotent: skips entries whose id already exists on disk. Existing user
-     * edits are preserved.
+     * By default idempotent: skips entries whose id already exists on disk.
+     * Existing user edits are preserved. When `force` is true, system-seed
+     * entries (matched by id from SYSTEM_DEFAULTS) are overwritten with the
+     * bundled version, while unrelated user-uploaded maps are untouched.
+     *
+     * @param {{ force?: boolean }} [opts]
+     * @returns {Promise<{ seeded: number, skipped: number, overwritten: number, ids: string[], dir: string, error?: string }>}
      */
-    async seedSystemColorMaps() {
+    async seedSystemColorMaps(opts = {}) {
+        const force = !!opts.force;
+        const result = { seeded: 0, skipped: 0, overwritten: 0, ids: [], dir: this._colorMapsDir() };
         try {
-            const dir = this._colorMapsDir();
+            const dir = result.dir;
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
             const mod = await import('./default-color-map.js');
             const defaults = Array.isArray(mod.SYSTEM_DEFAULTS) ? mod.SYSTEM_DEFAULTS : [];
-            let seeded = 0;
             for (const src of defaults) {
                 if (!src || !src.id) continue;
                 // Only seed entries that look like color maps (have data.entries).
                 if (!src.data || !Array.isArray(src.data.entries) || src.data.entries.length === 0) continue;
 
                 const filePath = path.join(dir, `${src.id}.json`);
-                if (fs.existsSync(filePath)) continue;
+                const exists = fs.existsSync(filePath);
+                if (exists && !force) {
+                    result.skipped++;
+                    continue;
+                }
 
                 const now = new Date().toISOString();
+                let createdAt = now;
+                let isDefault = src.id === 'system_default_basic';
+                if (exists) {
+                    // Preserve createdAt and isDefault flag when overwriting
+                    try {
+                        const prior = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+                        if (prior.createdAt) createdAt = prior.createdAt;
+                        if (typeof prior.isDefault === 'boolean') isDefault = prior.isDefault;
+                    } catch { /* ignore corrupt prior */ }
+                }
                 const map = {
                     id: src.id,
                     name: src.name,
                     deviceType: src.deviceType || 'f2_ultra_uv',
                     description: src.description || '',
-                    isDefault: src.id === 'system_default_basic',
+                    isDefault,
                     isSystemSeed: true,
-                    createdAt: now,
+                    createdAt,
                     updatedAt: now,
                     data: src.data,
                 };
                 fs.writeFileSync(filePath, JSON.stringify(map, null, 2), 'utf-8');
-                seeded++;
+                if (exists) result.overwritten++;
+                else result.seeded++;
+                result.ids.push(src.id);
             }
-            if (seeded > 0) {
-                console.log(`[AdminSettings] Seeded ${seeded} system color map(s) into ${dir}`);
+            const total = result.seeded + result.overwritten;
+            if (total > 0) {
+                console.log(`[AdminSettings] System color maps: seeded=${result.seeded}, overwritten=${result.overwritten}, skipped=${result.skipped} (dir=${dir})`);
+            } else {
+                console.log(`[AdminSettings] System color maps already present (skipped=${result.skipped}, dir=${dir})`);
             }
         } catch (err) {
             console.error(`[AdminSettings] Failed to seed system color maps: ${err.message}`);
+            result.error = err.message;
         }
+        return result;
     }
 
     /**

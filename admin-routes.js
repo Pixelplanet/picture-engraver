@@ -228,6 +228,20 @@ export function createAdminRouter(adminSettings) {
         res.json(maps);
     });
 
+    // Reseed bundled SYSTEM_DEFAULTS into the color-maps directory.
+    // Use this if the test/prod server was provisioned before the seed code
+    // existed, or to restore a deleted/edited system map. Pass `?force=true`
+    // to overwrite existing system-seed files (user uploads are untouched).
+    router.post('/admin/api/colormaps/reseed', adminLimiter, requireAdminAuth, async (req, res) => {
+        try {
+            const force = req.query.force === 'true' || req.body?.force === true;
+            const result = await adminSettings.seedSystemColorMaps({ force });
+            res.json(result);
+        } catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+
     // Get a single color map (full data)
     router.get('/admin/api/colormaps/:id', adminLimiter, requireAdminAuth, (req, res) => {
         const map = adminSettings.getColorMap(req.params.id);
