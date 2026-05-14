@@ -49,6 +49,8 @@ Or using Docker Compose (set `ADMIN_TOKEN` in your environment or `.env` file):
 ADMIN_TOKEN=your-secret-token docker-compose up -d
 ```
 
+The app still works without a mounted data volume because built-in defaults are bundled in the image. Mount `/app/data` when you want admin changes, uploaded color maps, selected defaults, and visibility settings to survive container replacement or image upgrades.
+
 > 📖 **For developers:** See [docs/RELEASE_PROCEDURE.md](docs/RELEASE_PROCEDURE.md) for the modern deployment workflow and [docs/DOCKER_BUILD.md](docs/DOCKER_BUILD.md) for manual multi-arch build instructions.
 
 ## 🔐 Admin Portal

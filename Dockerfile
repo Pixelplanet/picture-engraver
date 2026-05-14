@@ -19,6 +19,7 @@ COPY server.js .
 COPY admin-routes.js .
 COPY --from=build /app/dist ./dist
 COPY src/lib/admin-settings.js ./src/lib/
+COPY src/lib/default-color-map.js ./src/lib/
 COPY src/lib/test-grid-generator.js ./src/lib/
 COPY src/lib/device-registry.js ./src/lib/
 COPY src/lib/material-registry.js ./src/lib/

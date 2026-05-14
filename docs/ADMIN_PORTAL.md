@@ -37,7 +37,7 @@ Then run:
 docker-compose up -d
 ```
 
-The `picture-engraver-data` volume persists all admin settings and uploaded color maps across container restarts.
+The app can run without a mounted data volume because the factory test-grid settings and bundled system color maps are included in the image. Mount `/app/data` when you want admin changes, uploaded color maps, selected defaults, and visibility settings to persist across container replacement or image upgrades.
 
 ## Test Grid Defaults
 
@@ -164,3 +164,5 @@ All admin data is stored as JSON files in the `DATA_DIR` directory (default: `/a
 ```
 
 Mount this directory as a Docker volume to persist data across container restarts.
+
+Without a volume, the app falls back to bundled defaults and remains usable, but any admin changes are stored only inside the container filesystem and can be lost when the container is recreated.
