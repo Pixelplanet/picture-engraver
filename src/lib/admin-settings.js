@@ -10,6 +10,7 @@
 import fs from 'fs';
 import path from 'path';
 import { DEVICES, LASER_TYPES } from './device-registry.js';
+import { SYSTEM_DEFAULTS } from './default-color-map.js';
 
 // ── Hardcoded Defaults ──────────────────────────────────────────────────────────
 // These are used when no admin settings file exists.
@@ -234,8 +235,7 @@ export class AdminSettings {
             const dir = result.dir;
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-            const mod = await import('./default-color-map.js');
-            const defaults = Array.isArray(mod.SYSTEM_DEFAULTS) ? mod.SYSTEM_DEFAULTS : [];
+            const defaults = Array.isArray(SYSTEM_DEFAULTS) ? SYSTEM_DEFAULTS : [];
             for (const src of defaults) {
                 if (!src || !src.id) continue;
                 // Only seed entries that look like color maps (have data.entries).
@@ -448,39 +448,85 @@ export class AdminSettings {
         return path.join(this.dataDir, 'color-maps');
     }
 
+    _normalizeSystemColorMap(src, persistedMaps = []) {
+        const deviceType = src.deviceType || 'f2_ultra_uv';
+        const hasPersistedDefault = persistedMaps.some(m => m.deviceType === deviceType && m.isDefault);
+        return {
+            id: src.id,
+            name: src.name,
+            deviceType,
+            description: src.description || '',
+            isDefault: hasPersistedDefault ? false : src.id === 'system_default_basic',
+            isSystemSeed: true,
+            isBundledDefault: true,
+            data: src.data,
+        };
+    }
+
+    _readPersistedColorMaps() {
+        const dir = this._colorMapsDir();
+        if (!fs.existsSync(dir)) return [];
+
+        return fs.readdirSync(dir)
+            .filter(f => f.endsWith('.json'))
+            .map(file => {
+                try {
+                    const raw = fs.readFileSync(path.join(dir, file), 'utf-8');
+                    const map = JSON.parse(raw);
+                    return {
+                        ...map,
+                        deviceType: map.deviceType || 'f2_ultra_uv',
+                        isBundledDefault: false,
+                    };
+                } catch {
+                    return null;
+                }
+            })
+            .filter(Boolean);
+    }
+
+    _allColorMaps() {
+        const persistedMaps = this._readPersistedColorMaps();
+        const persistedIds = new Set(persistedMaps.map(m => m.id));
+        const bundledMaps = SYSTEM_DEFAULTS
+            .filter(src => src?.id && src.data && Array.isArray(src.data.entries) && src.data.entries.length > 0)
+            .filter(src => !persistedIds.has(src.id))
+            .map(src => this._normalizeSystemColorMap(src, persistedMaps));
+
+        return [...persistedMaps, ...bundledMaps];
+    }
+
+    _toColorMapMetadata(map) {
+        return {
+            id: map.id,
+            name: map.name,
+            deviceType: map.deviceType || 'f2_ultra_uv',
+            description: map.description || '',
+            entryCount: map.data?.entries?.length || 0,
+            createdAt: map.createdAt,
+            updatedAt: map.updatedAt,
+            isDefault: !!map.isDefault,
+            isSystemSeed: !!map.isSystemSeed,
+            isBundledDefault: !!map.isBundledDefault,
+        };
+    }
+
     /**
-     * List all admin-managed color maps (metadata only, no full data).
+     * List all admin-visible color maps (metadata only, no full data).
+     * This includes persisted admin-managed maps plus bundled system defaults
+     * that still exist in code but have not yet been written to DATA_DIR.
      * @param {string} [deviceType] - Optional filter by device type
      * @returns {Array} Array of { id, name, deviceType, description, entryCount, createdAt, updatedAt }
      */
     listColorMaps(deviceType) {
-        const dir = this._colorMapsDir();
-        if (!fs.existsSync(dir)) return [];
-
-        const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-        const maps = [];
-
-        for (const file of files) {
-            try {
-                const raw = fs.readFileSync(path.join(dir, file), 'utf-8');
-                const map = JSON.parse(raw);
-                if (deviceType && map.deviceType !== deviceType) continue;
-                maps.push({
-                    id: map.id,
-                    name: map.name,
-                    deviceType: map.deviceType,
-                    description: map.description || '',
-                    entryCount: map.data?.entries?.length || 0,
-                    createdAt: map.createdAt,
-                    updatedAt: map.updatedAt,
-                    isDefault: !!map.isDefault,
-                });
-            } catch {
-                // Skip corrupted files
-            }
-        }
-
-        return maps.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+        return this._allColorMaps()
+            .filter(map => !deviceType || (map.deviceType || 'f2_ultra_uv') === deviceType)
+            .map(map => this._toColorMapMetadata(map))
+            .sort((a, b) => {
+                if (a.isDefault !== b.isDefault) return b.isDefault ? 1 : -1;
+                if (!!a.isBundledDefault !== !!b.isBundledDefault) return a.isBundledDefault ? 1 : -1;
+                return (b.updatedAt || '').localeCompare(a.updatedAt || '') || (a.name || '').localeCompare(b.name || '');
+            });
     }
 
     /**
@@ -490,12 +536,17 @@ export class AdminSettings {
      */
     getColorMap(id) {
         const filePath = path.join(this._colorMapsDir(), `${id}.json`);
-        if (!fs.existsSync(filePath)) return null;
-        try {
-            return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        } catch {
-            return null;
+        if (fs.existsSync(filePath)) {
+            try {
+                const map = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+                return { ...map, deviceType: map.deviceType || 'f2_ultra_uv', isBundledDefault: false };
+            } catch {
+                return null;
+            }
         }
+
+        const src = SYSTEM_DEFAULTS.find(m => m.id === id);
+        return src ? this._normalizeSystemColorMap(src, this._readPersistedColorMaps()) : null;
     }
 
     /**
@@ -533,6 +584,12 @@ export class AdminSettings {
             } else {
                 throw new Error(`A color map named '${mapData.name}' already exists for this device. Use overwrite or auto-version.`);
             }
+        } else if (conflict && overwrite) {
+            const existing = this.getColorMap(conflict.id);
+            mapData.id = conflict.id;
+            if (existing?.createdAt && !mapData.createdAt) mapData.createdAt = existing.createdAt;
+            if (typeof mapData.isDefault !== 'boolean') mapData.isDefault = !!existing?.isDefault;
+            if (existing?.isSystemSeed) mapData.isSystemSeed = true;
         }
 
         // Generate ID if new
@@ -583,6 +640,9 @@ export class AdminSettings {
 
         // Clear default flag on all maps for this device type
         const dir = this._colorMapsDir();
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
         if (fs.existsSync(dir)) {
             const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
             for (const file of files) {
@@ -602,6 +662,8 @@ export class AdminSettings {
         // Set this map as default
         map.isDefault = true;
         map.updatedAt = new Date().toISOString();
+        if (!map.createdAt) map.createdAt = map.updatedAt;
+        map.isBundledDefault = false;
         fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify(map, null, 2), 'utf-8');
 
         return {
@@ -619,30 +681,18 @@ export class AdminSettings {
      * @returns {Array}
      */
     getColorMapsForDevice(deviceType) {
-        const dir = this._colorMapsDir();
-        if (!fs.existsSync(dir)) return [];
-
-        const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
-        const maps = [];
-
-        for (const file of files) {
-            try {
-                const raw = fs.readFileSync(path.join(dir, file), 'utf-8');
-                const map = JSON.parse(raw);
-                if (map.deviceType === deviceType) {
-                    maps.push({
-                        id: map.id,
-                        name: map.name,
-                        deviceType: map.deviceType,
-                        description: map.description || '',
-                        isDefault: !!map.isDefault,
-                        data: map.data,
-                    });
-                }
-            } catch {
-                // Skip corrupted files
-            }
-        }
+        const maps = this._allColorMaps()
+            .filter(map => (map.deviceType || 'f2_ultra_uv') === deviceType)
+            .map(map => ({
+                id: map.id,
+                name: map.name,
+                deviceType: map.deviceType || 'f2_ultra_uv',
+                description: map.description || '',
+                isDefault: !!map.isDefault,
+                isSystemSeed: !!map.isSystemSeed,
+                isBundledDefault: !!map.isBundledDefault,
+                data: map.data,
+            }));
 
         // Sort: defaults first, then by name
         return maps.sort((a, b) => {

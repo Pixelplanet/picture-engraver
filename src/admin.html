@@ -886,6 +886,7 @@ function renderColorMaps() {
         <div class="map-name">
           ${esc(m.name)}
           ${m.isDefault ? '<span class="badge badge-default" style="margin-left:8px">DEFAULT</span>' : ''}
+          ${m.isSystemSeed ? '<span class="badge badge-device" style="margin-left:8px">SYSTEM</span>' : ''}
         </div>
         <div class="map-meta">
           <span class="badge badge-device">${esc(m.deviceType)}</span>
@@ -897,7 +898,7 @@ function renderColorMaps() {
       <div class="map-actions">
         ${!m.isDefault ? `<button class="btn btn-secondary" onclick="setMapDefault('${esc(m.id)}')" title="Set as default for this device">★ Default</button>` : ''}
         <button class="btn btn-secondary" onclick="downloadMap('${esc(m.id)}', '${esc(m.name)}')" title="Download JSON">⬇</button>
-        <button class="btn btn-danger" onclick="deleteMap('${esc(m.id)}', '${esc(m.name)}')" title="Delete">✕</button>
+        ${!m.isBundledDefault ? `<button class="btn btn-danger" onclick="deleteMap('${esc(m.id)}', '${esc(m.name)}')" title="Delete">✕</button>` : ''}
       </div>
     </div>
   `).join('');

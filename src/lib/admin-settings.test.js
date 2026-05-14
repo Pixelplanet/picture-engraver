@@ -472,28 +472,33 @@ describe('AdminSettings Color Maps', () => {
     });
 
     describe('listColorMaps', () => {
-        it('should return empty array when no maps exist', () => {
-            expect(settings.listColorMaps()).toEqual([]);
+        it('should include bundled system maps when no saved maps exist', () => {
+            const uvMaps = settings.listColorMaps('f2_ultra_uv');
+            expect(uvMaps.map(m => m.id)).toEqual(expect.arrayContaining([
+                'system_default_basic',
+                'system_default_advanced',
+            ]));
+            expect(uvMaps.every(m => m.isSystemSeed)).toBe(true);
         });
 
         it('should list saved maps', () => {
             settings.saveColorMap(makeMap());
             settings.saveColorMap(makeMap({ name: 'Second Map' }));
             const list = settings.listColorMaps();
-            expect(list).toHaveLength(2);
+            expect(list.map(m => m.name)).toEqual(expect.arrayContaining(['Test UV Map', 'Second Map']));
         });
 
         it('should filter by deviceType', () => {
             settings.saveColorMap(makeMap({ deviceType: 'f2_ultra_uv' }));
             settings.saveColorMap(makeMap({ name: 'MOPA Map', deviceType: 'f2_ultra_mopa' }));
-            expect(settings.listColorMaps('f2_ultra_uv')).toHaveLength(1);
-            expect(settings.listColorMaps('f2_ultra_mopa')).toHaveLength(1);
-            expect(settings.listColorMaps()).toHaveLength(2);
+            expect(settings.listColorMaps('f2_ultra_uv').filter(m => !m.isSystemSeed)).toHaveLength(1);
+            expect(settings.listColorMaps('f2_ultra_mopa').filter(m => !m.isSystemSeed)).toHaveLength(1);
+            expect(settings.listColorMaps().filter(m => !m.isSystemSeed)).toHaveLength(2);
         });
 
         it('should return metadata without full data', () => {
             settings.saveColorMap(makeMap());
-            const [meta] = settings.listColorMaps();
+            const meta = settings.listColorMaps().find(m => m.name === 'Test UV Map');
             expect(meta.entryCount).toBe(2);
             expect(meta.data).toBeUndefined(); // No full data in listing
         });
@@ -516,7 +521,8 @@ describe('AdminSettings Color Maps', () => {
         it('should delete a map', () => {
             const saved = settings.saveColorMap(makeMap());
             expect(settings.deleteColorMap(saved.id)).toBe(true);
-            expect(settings.listColorMaps()).toHaveLength(0);
+            expect(settings.getColorMap(saved.id)).toBeNull();
+            expect(settings.listColorMaps().some(m => m.id === saved.id)).toBe(false);
         });
 
         it('should return false for unknown id', () => {
@@ -570,7 +576,8 @@ describe('AdminSettings Color Maps', () => {
             settings.saveColorMap(makeMap({ name: 'MOPA', deviceType: 'f2_ultra_mopa' }));
 
             const uvMaps = settings.getColorMapsForDevice('f2_ultra_uv');
-            expect(uvMaps).toHaveLength(1);
+            expect(uvMaps.filter(m => !m.isSystemSeed)).toHaveLength(1);
+            expect(uvMaps.map(m => m.id)).toEqual(expect.arrayContaining(['system_default_basic', 'system_default_advanced']));
             expect(uvMaps[0].data.entries).toBeDefined(); // Full data
         });
 
