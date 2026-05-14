@@ -49,17 +49,17 @@ Or using Docker Compose (set `ADMIN_TOKEN` in your environment or `.env` file):
 ADMIN_TOKEN=your-secret-token docker-compose up -d
 ```
 
-The app still works without a mounted data volume because built-in defaults are bundled in the image. Mount `/app/data` when you want admin changes, uploaded color maps, selected defaults, and visibility settings to survive container replacement or image upgrades.
+The app still works without a mounted data volume because built-in defaults are bundled in the image. Mount `/app/data` when you want admin settings, uploaded color maps, and visibility settings to survive container replacement or image upgrades.
 
 > 📖 **For developers:** See [docs/RELEASE_PROCEDURE.md](docs/RELEASE_PROCEDURE.md) for the modern deployment workflow and [docs/DOCKER_BUILD.md](docs/DOCKER_BUILD.md) for manual multi-arch build instructions.
 
 ## 🔐 Admin Portal
 
-The admin portal lets you manage default test grid settings and color maps for all users. Access it at `/admin`.
+The admin portal lets you manage test grid settings and color maps for all users. Access it at `/admin`.
 
 **Features:**
 - **Test Grid Defaults** — Configure default frequency, LPI, power, and speed ranges per laser type.
-- **Color Map Management** — Upload, replace, and set default color mappings from analyzer export packages.
+- **Color Map Management** — Upload, replace, and delete color mappings from analyzer export packages.
 
 **Setup:** Set the `ADMIN_TOKEN` environment variable to enable authentication. Without it, the admin panel is inaccessible.
 

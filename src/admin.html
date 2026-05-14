@@ -77,7 +77,6 @@
   .map-card .map-meta { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
   .map-card .map-actions { display: flex; gap: 6px; align-items: center; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; }
-  .badge-default { background: var(--accent); color: #fff; }
   .badge-device { background: var(--border); color: var(--text); }
   .upload-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 32px; text-align: center; color: var(--muted); cursor: pointer; margin-bottom: 16px; transition: border-color 0.2s; }
   .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); color: var(--text); }
@@ -152,7 +151,7 @@
 
 <div id="main-panel" class="container">
   <h1>Picture Engraver Admin</h1>
-  <p class="subtitle">Manage test grid settings and default color mappings</p>
+  <p class="subtitle">Manage test grid settings and color mappings</p>
 
   <div class="top-nav">
     <button class="nav-btn active" onclick="switchSection('testgrid')">Test Grids</button>
@@ -885,7 +884,6 @@ function renderColorMaps() {
       <div class="map-info">
         <div class="map-name">
           ${esc(m.name)}
-          ${m.isDefault ? '<span class="badge badge-default" style="margin-left:8px">DEFAULT</span>' : ''}
           ${m.isSystemSeed ? '<span class="badge badge-device" style="margin-left:8px">SYSTEM</span>' : ''}
         </div>
         <div class="map-meta">
@@ -896,7 +894,6 @@ function renderColorMaps() {
         </div>
       </div>
       <div class="map-actions">
-        ${!m.isDefault ? `<button class="btn btn-secondary" onclick="setMapDefault('${esc(m.id)}')" title="Set as default for this device">★ Default</button>` : ''}
         <button class="btn btn-secondary" onclick="downloadMap('${esc(m.id)}', '${esc(m.name)}')" title="Download JSON">⬇</button>
         ${!m.isBundledDefault ? `<button class="btn btn-danger" onclick="deleteMap('${esc(m.id)}', '${esc(m.name)}')" title="Delete">✕</button>` : ''}
       </div>
@@ -1003,14 +1000,6 @@ async function uploadMapWithConflictHandling(map) {
     }
     return 'skipped';
   }
-}
-
-async function setMapDefault(id) {
-  try {
-    await apiFetch(`/admin/api/colormaps/${id}/set-default`, { method: 'POST' });
-    toast('Default updated');
-    loadColorMaps();
-  } catch(e) { toast(e.message, 'error'); }
 }
 
 async function downloadMap(id, name) {

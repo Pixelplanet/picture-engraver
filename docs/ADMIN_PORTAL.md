@@ -1,6 +1,6 @@
 # Admin Portal
 
-The admin portal provides a web interface for managing server-wide defaults — test grid settings and color maps — that apply to all users.
+The admin portal provides a web interface for managing server-wide test grid settings and color maps that apply to all users.
 
 ## Access
 
@@ -37,7 +37,7 @@ Then run:
 docker-compose up -d
 ```
 
-The app can run without a mounted data volume because the factory test-grid settings and bundled system color maps are included in the image. Mount `/app/data` when you want admin changes, uploaded color maps, selected defaults, and visibility settings to persist across container replacement or image upgrades.
+The app can run without a mounted data volume because the factory test-grid settings and bundled system color maps are included in the image. Mount `/app/data` when you want admin settings, uploaded color maps, and visibility settings to persist across container replacement or image upgrades.
 
 ## Test Grid Defaults
 
@@ -76,7 +76,7 @@ Each laser type has its own set of defaults. Common fields include:
 
 ## Color Map Management
 
-The **Color Maps** tab lets you manage default color mappings that are served to all clients.
+The **Color Maps** tab lets you manage color mappings that are served to all clients.
 
 ### Uploading Color Maps
 
@@ -90,7 +90,6 @@ Each map must include a `deviceType` field (e.g., `uv`, `mopa`) so it can be ser
 
 ### Map Actions
 
-- **Set as Default** — Marks this map as the default for its device type. Clients will use it when they have no user-saved map.
 - **Download** — Download the raw JSON map data.
 - **Delete** — Permanently remove the map from the server.
 
@@ -132,7 +131,6 @@ On startup, the client app calls `GET /api/colormaps/:deviceType` to fetch serve
 | `POST` | `/admin/api/colormaps` | Upload a new color map |
 | `PUT` | `/admin/api/colormaps/:id` | Replace an existing color map |
 | `DELETE` | `/admin/api/colormaps/:id` | Delete a color map |
-| `POST` | `/admin/api/colormaps/:id/set-default` | Set a map as the default for its device type |
 
 ### Authentication
 
