@@ -147,6 +147,7 @@ const COMMON_DEFAULTS = {
     activeDevice: null, // Will be set by user
     activeLaserType: null, // Active laser type for multi-laser devices (see device-registry.js)
     material: 'stainless_304', // Selected material ID (see material-registry.js)
+    pixelSize: 1, // Pixelation block size in source pixels (1 = off)
     _version: 2.1 // Increment this when defaults change to force update
 };
 

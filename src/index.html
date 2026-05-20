@@ -99,6 +99,14 @@
             <input type="range" class="slider" id="colorSlider" min="2" max="32" value="8">
           </div>
 
+          <div class="control-group" style="gap: 10px;">
+            <label class="control-label">
+              Pixelation: <span class="value-display" id="pixelSizeDisplay">Off</span>
+            </label>
+            <input type="range" class="slider" id="pixelSlider" min="1" max="20" step="1" value="1">
+            <div id="pixelSizeHint" style="font-size: 0.75em; color: #888; display: none;"></div>
+          </div>
+
           <button class="btn btn-primary" id="btnProcess" style="margin-top: 15px;">
             <span>🔄</span> Process Image
           </button>
