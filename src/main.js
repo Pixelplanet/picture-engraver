@@ -12,6 +12,7 @@ import '@fontsource/inter/700.css';
 import { TestGridGenerator } from './lib/test-grid-generator.js';
 import { SettingsStorage } from './lib/settings-storage.js';
 import { ImageProcessor } from './lib/image-processor.js';
+import { Pixelator } from './lib/pixelator.js';
 import { ColorQuantizer } from './lib/color-quantizer.js';
 import { EnhancedQuantizer } from './lib/enhanced-quantizer.js';
 import { Vectorizer } from './lib/vectorizer.js';
@@ -88,6 +89,9 @@ const elements = {
     customHeight: document.getElementById('customHeight'),
     colorSlider: document.getElementById('colorSlider'),
     colorCountDisplay: document.getElementById('colorCountDisplay'),
+    pixelSlider: document.getElementById('pixelSlider'),
+    pixelSizeDisplay: document.getElementById('pixelSizeDisplay'),
+    pixelSizeHint: document.getElementById('pixelSizeHint'),
     btnProcess: document.getElementById('btnProcess'),
     btnSaveMap: document.getElementById('btnSaveMap'),
 
@@ -1351,6 +1355,18 @@ function showControls() {
 // ===================================
 // Controls Setup
 // ===================================
+function updatePixelSizeDisplay(size) {
+    if (size <= 1) {
+        elements.pixelSizeDisplay.textContent = 'Off';
+        elements.pixelSizeHint.style.display = 'none';
+    } else {
+        const mm = (size / 10).toFixed(1);
+        elements.pixelSizeDisplay.textContent = `${size}px`;
+        elements.pixelSizeHint.textContent = `${mm} mm per pixel`;
+        elements.pixelSizeHint.style.display = 'block';
+    }
+}
+
 function setupControls() {
     const { sizeSelect, customSizeGroup, colorSlider, colorCountDisplay, btnProcess } = elements;
 
@@ -1366,6 +1382,14 @@ function setupControls() {
     // Color count slider
     colorSlider.addEventListener('input', (e) => {
         colorCountDisplay.textContent = e.target.value;
+    });
+
+    // Pixelation slider
+    elements.pixelSlider.addEventListener('input', (e) => {
+        const size = parseInt(e.target.value);
+        updatePixelSizeDisplay(size);
+        state.settings.pixelSize = size;
+        SettingsStorage.save(state.settings);
     });
 
     // Process button
@@ -1416,6 +1440,12 @@ async function processImage() {
             const processor = new ImageProcessor();
             const resized = processor.resize(state.originalImage, size.width, size.height);
 
+            // Optional pixelation pre-processing
+            const pixelSize = parseInt(elements.pixelSlider.value) || 1;
+            const toQuantize = pixelSize > 1
+                ? new Pixelator().pixelate(resized, pixelSize)
+                : resized;
+
             // Update output size to match actual resized dimensions (remove padding)
             state.outputSize = {
                 width: resized.width / 10, // Convert px back to mm (assuming 10px/mm)
@@ -1433,7 +1463,7 @@ async function processImage() {
                     if (numColors <= BASE_COLOR_THRESHOLD) {
                         // Standard quantization for low color counts
                         const quantizer = new ColorQuantizer();
-                        const result = quantizer.quantize(resized, numColors);
+                        const result = quantizer.quantize(toQuantize, numColors);
                         quantizedImage = result.quantizedImage;
                         palette = result.palette;
                     } else {
@@ -1444,14 +1474,14 @@ async function processImage() {
                         updateStatus(`Quantizing to ${baseColors} base colors...`, 35);
 
                         const baseQuantizer = new ColorQuantizer();
-                        const baseResult = baseQuantizer.quantize(resized, baseColors);
+                        const baseResult = baseQuantizer.quantize(toQuantize, baseColors);
 
                         updateStatus(`Expanding to ${numColors} colors with gradients...`, 45);
 
                         // Expand with gradient interpolation
                         const enhancedQuantizer = new EnhancedQuantizer();
                         const expandedResult = enhancedQuantizer.expandAndRequantize(
-                            resized,
+                            toQuantize,
                             baseResult.palette,
                             numColors
                         );
@@ -2941,6 +2971,12 @@ function applySettingsToUI() {
     document.getElementById('settingWhiteLpi').value = s.whiteLpi;
     document.getElementById('settingWhiteSpeed').value = s.whiteSpeed;
     document.getElementById('settingWhitePower').value = s.whitePower;
+
+    // Pixelation slider
+    const pixelSize = s.pixelSize || 1;
+    elements.pixelSlider.value = pixelSize;
+    updatePixelSizeDisplay(pixelSize);
+
     // Update Test Grid UI based on device
     if (typeof updateTestGridUI === 'function') updateTestGridUI();
 }

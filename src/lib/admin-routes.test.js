@@ -473,7 +473,8 @@ describe('Color Map Admin API', () => {
 
             const res = await request(app).get('/admin/api/colormaps').set(authHeader());
             expect(res.status).toBe(200);
-            expect(res.body).toHaveLength(2);
+            // System bundled defaults are always present; check only user-uploaded maps
+            expect(res.body.filter(m => !m.isBundledDefault)).toHaveLength(2);
         });
 
         it('should filter by deviceType', async () => {
@@ -481,8 +482,9 @@ describe('Color Map Admin API', () => {
             await request(app).post('/admin/api/colormaps').set(authHeader()).send(makeMap({ name: 'MOPA', deviceType: 'f2_ultra_mopa' }));
 
             const res = await request(app).get('/admin/api/colormaps?deviceType=f2_ultra_uv').set(authHeader());
-            expect(res.body).toHaveLength(1);
-            expect(res.body[0].deviceType).toBe('f2_ultra_uv');
+            const userMaps = res.body.filter(m => !m.isBundledDefault);
+            expect(userMaps).toHaveLength(1);
+            expect(userMaps[0].deviceType).toBe('f2_ultra_uv');
         });
     });
 
@@ -508,7 +510,8 @@ describe('Color Map Admin API', () => {
             expect(res.status).toBe(200);
 
             const list = await request(app).get('/admin/api/colormaps').set(authHeader());
-            expect(list.body).toHaveLength(0);
+            // System bundled defaults remain; confirm the uploaded map is gone
+            expect(list.body.filter(m => !m.isBundledDefault)).toHaveLength(0);
         });
 
         it('should return 404 for unknown id', async () => {
@@ -534,8 +537,10 @@ describe('Color Map Admin API', () => {
             // No auth header — public endpoint
             const res = await request(app).get('/api/colormaps/f2_ultra_uv');
             expect(res.status).toBe(200);
-            expect(res.body).toHaveLength(1);
-            expect(res.body[0].data.entries).toBeDefined();
+            // System bundled defaults are always included; confirm the uploaded map is present
+            const userMaps = res.body.filter(m => !m.isBundledDefault);
+            expect(userMaps).toHaveLength(1);
+            expect(userMaps[0].data.entries).toBeDefined();
         });
 
         it('should return empty array for device with no maps', async () => {
