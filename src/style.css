@@ -353,6 +353,22 @@ body {
   }
 }
 
+.upload-panel {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.upload-panel .image-preview-container {
+  min-height: 0;
+}
+
+#btnProcess {
+  position: sticky;
+  bottom: var(--spacing-sm);
+  z-index: 5;
+  box-shadow: var(--shadow-md);
+}
+
 #layerCalibrationPreview {
   flex-shrink: 0;
 }

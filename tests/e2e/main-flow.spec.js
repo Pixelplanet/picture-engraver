@@ -65,4 +65,26 @@ test.describe('Main Flow', () => {
         // 8. Download should be enabled
         // await expect(downloadBtn).toBeEnabled();
     });
+
+    test('keeps process button visible on constrained desktop height', async ({ page }) => {
+        await page.setViewportSize({ width: 1024, height: 520 });
+
+        await page.setInputFiles('#fileInput', {
+            name: 'test.png',
+            mimeType: 'image/png',
+            buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+        });
+
+        await page.waitForFunction(() => document.getElementById('controlsSection')?.style.display === 'flex');
+
+        const processButton = page.locator('#btnProcess');
+        await expect(processButton).toBeInViewport({ ratio: 1 });
+
+        const buttonBox = await processButton.boundingBox();
+        const footerBox = await page.locator('.app-footer').boundingBox();
+
+        expect(buttonBox).not.toBeNull();
+        expect(footerBox).not.toBeNull();
+        expect(buttonBox.y + buttonBox.height).toBeLessThanOrEqual(footerBox.y);
+    });
 });
