@@ -13,9 +13,10 @@
     <link rel="stylesheet" href="./style.css">
     <style>
         .privacy-container {
-            max-width: 1000px;
+            max-width: 900px;
+            width: 100%;
             margin: 40px auto;
-            padding: 40px;
+            padding: 24px;
             background: var(--bg-secondary);
             border-radius: 12px;
             border: 1px solid var(--border-primary);
@@ -68,13 +69,28 @@
             text-decoration: underline;
         }
 
-        /* Override global app overflow hidden for this page */
-        @media (min-width: 1024px) {
-            body { overflow: auto !important; }
-            .app { 
-                height: auto !important; 
-                max-height: none !important; 
-                overflow: auto !important; 
+        @media (min-width: 768px) {
+            .privacy-container {
+                padding: 40px;
+            }
+        }
+
+        /* Override global app layout for this page */
+        body { overflow: auto !important; }
+        .app { 
+            height: auto !important; 
+            max-height: none !important; 
+            overflow: auto !important; 
+        }
+        .main {
+            display: block !important;
+            height: auto !important;
+            min-height: 0 !important;
+            padding: 0 var(--spacing-md) !important;
+        }
+        @media (min-width: 768px) {
+            .main {
+                padding: 0 var(--spacing-xl) !important;
             }
         }
     </style>
