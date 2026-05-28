@@ -103,7 +103,7 @@
             <label class="control-label">
               Pixelation: <span class="value-display" id="pixelSizeDisplay">Off</span>
             </label>
-            <input type="range" class="slider" id="pixelSlider" min="1" max="20" step="1" value="1">
+            <input type="range" class="slider" id="pixelSlider" min="0" max="20" step="1" value="0">
             <div id="pixelSizeHint" style="font-size: 0.75em; color: #888; display: none;"></div>
           </div>
 
@@ -165,21 +165,24 @@
         </div>
 
         <div class="export-actions">
-          <div class="focus-warning focus-warning-block"
-            style="color: #ff4d4f; background: rgba(255, 77, 79, 0.1); border: 1px solid rgba(255, 77, 79, 0.2); padding: 10px; border-radius: 8px; text-align: center; font-size: 0.95em;">
-            <strong>⚠️ Important:</strong> Manually change focus <u style="font-weight: bold;">UP by 4mm</u> for best
-            results!
+          <div class="format-info-block"
+            style="background: rgba(80, 140, 255, 0.08); border: 1px solid rgba(80, 140, 255, 0.25); padding: 10px 12px; border-radius: 8px; font-size: 0.88em; line-height: 1.45;">
+            <div class="focus-warning-block" style="color: #ff4d4f; margin-bottom: 6px;">
+              <strong>⚠️ .xcs:</strong> manually raise the focus <u>UP by 4&nbsp;mm</u> in xTool&nbsp;Studio before engraving.
+            </div>
+            <div style="color: #b9e3a8;">
+              <strong>✨ .xs (new):</strong> defocus value is embedded in the file — no manual focus adjustment needed.
+            </div>
           </div>
-          <div class="export-format-row" style="display:flex; align-items:center; gap:8px; margin: 8px 0;">
-            <label for="exportFormatSelect" style="font-size: 0.9em;">Format:</label>
-            <select class="input" id="exportFormatSelect" style="max-width: 220px;">
-              <option value="xcs">xTool Studio (.xcs)</option>
-              <option value="xs">xTool Studio v2 (.xs)</option>
-            </select>
+          <div class="export-buttons-row" style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-success btn-lg" id="btnDownloadXCS" style="flex:1; min-width:160px;">
+              <span>💾</span> Download .xcs
+            </button>
+            <button class="btn btn-primary btn-lg" id="btnDownloadXS" style="flex:1; min-width:160px; position:relative;">
+              <span>💾</span> Download .xs
+              <span class="new-badge" style="position:absolute; top:-6px; right:-6px; background:#ff6b35; color:#fff; font-size:0.62em; font-weight:bold; padding:2px 6px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.3); letter-spacing:0.5px;">NEW</span>
+            </button>
           </div>
-          <button class="btn btn-success btn-lg" id="btnDownloadXCS">
-            <span>💾</span> Download XCS
-          </button>
         </div>
       </section>
     </main>
@@ -355,16 +358,15 @@
                 </div>
 
                 <div class="action-row" style="text-align: right; margin-top: auto;">
-                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; justify-content:flex-end;">
-                    <label for="standardGridFormatSelect" style="font-size:0.9em;">Format:</label>
-                    <select class="input" id="standardGridFormatSelect" style="max-width:220px;">
-                      <option value="xcs">xTool Studio (.xcs)</option>
-                      <option value="xs">xTool Studio v2 (.xs)</option>
-                    </select>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <a href="#" class="btn btn-primary btn-lg" id="btnGenerateStandard" style="flex:1; min-width:140px;">
+                      <span>💾</span> .xcs
+                    </a>
+                    <a href="#" class="btn btn-success btn-lg" id="btnGenerateStandardXS" style="flex:1; min-width:140px; position:relative;">
+                      <span>💾</span> .xs
+                      <span class="new-badge" style="position:absolute; top:-6px; right:-6px; background:#ff6b35; color:#fff; font-size:0.62em; font-weight:bold; padding:2px 6px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.3); letter-spacing:0.5px;">NEW</span>
+                    </a>
                   </div>
-                  <a href="#" class="btn btn-primary btn-lg" id="btnGenerateStandard" style="width: 100%;">
-                    <span>💾</span> Download Standard XCS
-                  </a>
                 </div>
               </div>
             </div>
@@ -538,14 +540,13 @@
                 <!-- Custom Actions -->
                 <div class="modal-footer-custom"
                   style="display: flex; justify-content: flex-end; gap: 10px; margin-top: auto; align-items: center; flex-wrap: wrap;">
-                  <label for="gridExportFormatSelect" style="font-size: 0.9em;">Format:</label>
-                  <select class="input" id="gridExportFormatSelect" style="max-width: 220px;">
-                    <option value="xcs">xTool Studio (.xcs)</option>
-                    <option value="xs">xTool Studio v2 (.xs)</option>
-                  </select>
                   <button class="btn btn-secondary" id="btnPreviewGrid">Update Preview</button>
                   <button class="btn btn-primary" id="btnGenerateGrid">
-                    <span>💾</span> Download Custom XCS
+                    <span>💾</span> Download .xcs
+                  </button>
+                  <button class="btn btn-success" id="btnGenerateGridXS" style="position:relative;">
+                    <span>💾</span> Download .xs
+                    <span class="new-badge" style="position:absolute; top:-6px; right:-6px; background:#ff6b35; color:#fff; font-size:0.62em; font-weight:bold; padding:2px 6px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.3); letter-spacing:0.5px;">NEW</span>
                   </button>
                 </div>
               </div>

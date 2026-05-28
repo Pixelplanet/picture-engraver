@@ -122,6 +122,7 @@ const elements = {
 
     // Export
     btnDownloadXCS: document.getElementById('btnDownloadXCS'),
+    btnDownloadXS: document.getElementById('btnDownloadXS'),
 
     // Modals
     settingsModal: document.getElementById('settingsModal'),
@@ -155,6 +156,8 @@ const elements = {
     exportFormatSelect: document.getElementById('exportFormatSelect'),
     gridExportFormatSelect: document.getElementById('gridExportFormatSelect'),
     standardGridFormatSelect: document.getElementById('standardGridFormatSelect'),
+    btnGenerateStandardXS: document.getElementById('btnGenerateStandardXS'),
+    btnGenerateGridXS: document.getElementById('btnGenerateGridXS'),
     gridDefocus: document.getElementById('gridDefocus'),
     settingFreqMin: document.getElementById('settingFreqMin'),
     settingFreqMax: document.getElementById('settingFreqMax'),
@@ -1118,13 +1121,12 @@ function updateDeviceUI(deviceId) {
     // Toggle UI elements based on virtual device mode
     toggleVirtualModeUI(isVirtual);
 
-    // Enforce focus warning visibility based on laser config + export format
+    // Enforce focus warning visibility based on laser config (.xs button label clarifies in-file defocus)
     const laser = getLaserConfig(deviceId);
-    const usingXsFormat = (state.settings?.exportFormat || 'xcs') === 'xs';
     const showFocusWarning = laser ? laser.addFocusWarning : false;
     const focusWarnings = document.querySelectorAll('.focus-warning-block');
     focusWarnings.forEach(el => {
-        if (!showFocusWarning || isVirtual || usingXsFormat) {
+        if (!showFocusWarning || isVirtual) {
             el.style.setProperty('display', 'none', 'important');
         } else {
             el.style.display = 'block';
@@ -1162,18 +1164,23 @@ function toggleVirtualModeUI(isVirtual) {
         }
     });
 
-    // 3. Change export button text and behavior
+    // 3. Change export button text and behavior (only the .xcs button — .xs is hidden in SVG mode)
     const exportBtn = document.getElementById('btnDownloadXCS');
     if (exportBtn) {
         if (isVirtual) {
             exportBtn.innerHTML = '<span>📁</span> Download SVG';
             exportBtn.dataset.exportMode = 'svg';
-            exportBtn.disabled = false; // Force enable in SVG mode to fix persistent disabled state
+            exportBtn.disabled = false;
         } else {
-            exportBtn.innerHTML = '<span>💾</span> Download XCS';
+            exportBtn.innerHTML = '<span>💾</span> Download .xcs';
             exportBtn.dataset.exportMode = 'xcs';
-            exportBtn.disabled = false; // Force enable in XCS mode
+            exportBtn.disabled = false;
         }
+    }
+    // Hide the .xs button entirely in virtual/SVG mode (xs format is irrelevant)
+    const exportBtnXS = document.getElementById('btnDownloadXS');
+    if (exportBtnXS) {
+        exportBtnXS.style.display = isVirtual ? 'none' : '';
     }
 
     // 4. Hide/show the "Auto-Assign Colors" button (not relevant for SVG mode)
@@ -1448,8 +1455,8 @@ async function processImage() {
             const processor = new ImageProcessor();
             const resized = processor.resize(state.originalImage, size.width, size.height);
 
-            // Optional pixelation pre-processing
-            const pixelSize = parseInt(elements.pixelSlider.value) || 1;
+            // Optional pixelation pre-processing (0 or 1 = off)
+            const pixelSize = parseInt(elements.pixelSlider.value, 10);
             const toQuantize = pixelSize > 1
                 ? new Pixelator().pixelate(resized, pixelSize)
                 : resized;
@@ -2754,45 +2761,9 @@ function switchPreviewTab(tabName) {
 // Export
 // ===================================
 function setupExport() {
-    elements.btnDownloadXCS.addEventListener('click', downloadXCS);
-
-    // Per-export format selector — persist & update UI live (focus warning, button text)
-    if (elements.exportFormatSelect) {
-        elements.exportFormatSelect.addEventListener('change', () => {
-            const fmt = elements.exportFormatSelect.value;
-            state.settings.exportFormat = fmt;
-            SettingsStorage.save(state.settings);
-            // Update download button label
-            elements.btnDownloadXCS.innerHTML = fmt === 'xs'
-                ? '<span>💾</span> Download XS'
-                : '<span>💾</span> Download XCS';
-            // Re-apply focus-warning visibility
-            applySettingsToUI();
-        });
-    }
-    if (elements.gridExportFormatSelect) {
-        elements.gridExportFormatSelect.addEventListener('change', () => {
-            const fmt = elements.gridExportFormatSelect.value;
-            state.settings.exportFormat = fmt;
-            SettingsStorage.save(state.settings);
-            const btn = document.getElementById('btnGenerateGrid');
-            if (btn) btn.innerHTML = fmt === 'xs'
-                ? '<span>💾</span> Download Custom XS'
-                : '<span>💾</span> Download Custom XCS';
-            applySettingsToUI();
-        });
-    }
-    if (elements.standardGridFormatSelect) {
-        elements.standardGridFormatSelect.addEventListener('change', () => {
-            const fmt = elements.standardGridFormatSelect.value;
-            state.settings.exportFormat = fmt;
-            SettingsStorage.save(state.settings);
-            const btn = document.getElementById('btnGenerateStandard');
-            if (btn) btn.innerHTML = fmt === 'xs'
-                ? '<span>💾</span> Download Standard XS'
-                : '<span>💾</span> Download Standard XCS';
-            applySettingsToUI();
-        });
+    elements.btnDownloadXCS.addEventListener('click', () => downloadXCS('xcs'));
+    if (elements.btnDownloadXS) {
+        elements.btnDownloadXS.addEventListener('click', () => downloadXCS('xs'));
     }
 }
 
@@ -2800,7 +2771,7 @@ function setupExport() {
  * Generate and download XCS in one click
  * Combined for faster workflow since generation is now very fast
  */
-async function downloadXCS() {
+async function downloadXCS(formatOverride) {
     // Check if we're in SVG export mode
     if (SettingsStorage.isCurrentDeviceVirtual()) {
         return downloadSVG();
@@ -2818,16 +2789,13 @@ async function downloadXCS() {
         return;
     }
 
-    const btn = elements.btnDownloadXCS;
+    const fmt = formatOverride === 'xs' ? 'xs' : 'xcs';
+    const btn = fmt === 'xs' ? (elements.btnDownloadXS || elements.btnDownloadXCS) : elements.btnDownloadXCS;
     const originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span>⏳</span> Generating...';
 
-    try {
-        // Determine output format (per-export selector wins over saved settings)
-        const fmt = elements.exportFormatSelect ? elements.exportFormatSelect.value : (state.settings?.exportFormat || 'xcs');
-
-        // Filename
+    try {        // Filename
         const deviceId = resolveDeviceId(state.settings?.activeDevice || 'f2_ultra_uv');
         const deviceConfig = getDeviceConfig(deviceId);
         const deviceLabel = deviceConfig ? deviceConfig.name.replace(/[\s()]+/g, '_') : 'F2';
@@ -3018,29 +2986,7 @@ function applySettingsToUI() {
         elements.settingDefocus.value = defocusVal;
     }
 
-    // Export format dropdown (.xcs vs .xs)
-    const currentFmt = (s.exportFormat === 'xs') ? 'xs' : 'xcs';
-    if (elements.exportFormatSelect) {
-        elements.exportFormatSelect.value = currentFmt;
-        const btn = document.getElementById('btnDownloadXCS');
-        if (btn) btn.innerHTML = currentFmt === 'xs'
-            ? '<span>💾</span> Download XS'
-            : '<span>💾</span> Download XCS';
-    }
-    if (elements.gridExportFormatSelect) {
-        elements.gridExportFormatSelect.value = currentFmt;
-        const btnG = document.getElementById('btnGenerateGrid');
-        if (btnG) btnG.innerHTML = currentFmt === 'xs'
-            ? '<span>💾</span> Download Custom XS'
-            : '<span>💾</span> Download Custom XCS';
-    }
-    if (elements.standardGridFormatSelect) {
-        elements.standardGridFormatSelect.value = currentFmt;
-        const btnS = document.getElementById('btnGenerateStandard');
-        if (btnS) btnS.innerHTML = currentFmt === 'xs'
-            ? '<span>💾</span> Download Standard XS'
-            : '<span>💾</span> Download Standard XCS';
-    }
+    // (Per-export format selectors have been replaced by separate buttons.)
     if (elements.gridDefocus) {
         const activeLaserForGrid = getActiveLaserConfig(s);
         const def = activeLaserForGrid ? (activeLaserForGrid.defaultDefocus || 0) : 0;
@@ -3057,12 +3003,12 @@ function applySettingsToUI() {
         }
     }
 
-    // Toggle Focus Warning Blocks (hide entirely when using .xs which carries defocus in-file)
+    // Toggle Focus Warning Blocks — shown when the active laser requires manual defocus.
+    // (Always shown when applicable; the .xs button caption clarifies it carries defocus in-file.)
     const showFocusWarning = activeLaser ? activeLaser.addFocusWarning : false;
-    const usingXs = (s.exportFormat || 'xcs') === 'xs';
     const focusWarnings = document.querySelectorAll('.focus-warning-block');
     focusWarnings.forEach(el => {
-        el.style.display = (showFocusWarning && !usingXs) ? 'block' : 'none';
+        el.style.display = showFocusWarning ? 'block' : 'none';
     });
 
     // Standard Colors (Black & White)
@@ -3076,8 +3022,8 @@ function applySettingsToUI() {
     document.getElementById('settingWhiteSpeed').value = s.whiteSpeed;
     document.getElementById('settingWhitePower').value = s.whitePower;
 
-    // Pixelation slider
-    const pixelSize = s.pixelSize || 1;
+    // Pixelation slider (default 0 = off)
+    const pixelSize = typeof s.pixelSize === 'number' ? s.pixelSize : 0;
     elements.pixelSlider.value = pixelSize;
     updatePixelSizeDisplay(pixelSize);
 
@@ -3250,7 +3196,6 @@ function saveSettings() {
         whitePower: parseInt(document.getElementById('settingWhitePower').value),
 
         defocus: elements.settingDefocus ? parseFloat(elements.settingDefocus.value) || 0 : (state.settings.defocus || 0),
-        exportFormat: elements.exportFormatSelect ? elements.exportFormatSelect.value : (state.settings.exportFormat || 'xcs'),
     };
 
     SettingsStorage.save(state.settings);
@@ -3600,14 +3545,23 @@ function setupTestGrid() {
 
     // Buttons
     document.getElementById('btnPreviewGrid').addEventListener('click', updateGridPreview);
-    document.getElementById('btnGenerateGrid').addEventListener('click', generateCustomGridXCS);
+    document.getElementById('btnGenerateGrid').addEventListener('click', () => generateCustomGridXCS('xcs'));
+    const btnGenGridXS = document.getElementById('btnGenerateGridXS');
+    if (btnGenGridXS) btnGenGridXS.addEventListener('click', () => generateCustomGridXCS('xs'));
 
-    // Standard Grid Button
+    // Standard Grid Buttons
     const btnStd = document.getElementById('btnGenerateStandard');
     if (btnStd) {
         btnStd.addEventListener('click', (e) => {
-            e.preventDefault(); // Prevent # navigation
-            generateStandardGridXCS();
+            e.preventDefault();
+            generateStandardGridXCS('xcs');
+        });
+    }
+    const btnStdXS = document.getElementById('btnGenerateStandardXS');
+    if (btnStdXS) {
+        btnStdXS.addEventListener('click', (e) => {
+            e.preventDefault();
+            generateStandardGridXCS('xs');
         });
     }
 
@@ -4801,8 +4755,6 @@ function getCustomGridSettings() {
 
     const defocusEl = document.getElementById('gridDefocus');
     const defocus = defocusEl ? Math.max(0, Math.min(20, parseFloat(defocusEl.value) || 0)) : (state.settings.defocus || 0);
-    const fmtEl = document.getElementById('gridExportFormatSelect');
-    const exportFormat = fmtEl ? fmtEl.value : (state.settings.exportFormat || 'xcs');
 
     if (isMopaLike) {
         const fixedMode = document.getElementById('gridFixedParam') ? document.getElementById('gridFixedParam').value : 'frequency';
@@ -4859,7 +4811,6 @@ function getCustomGridSettings() {
         const gridMatEl = document.getElementById('gridMaterial');
         settings.material = gridMatEl ? gridMatEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID);
         settings.defocus = defocus;
-        settings.exportFormat = exportFormat;
         return settings;
     } else {
         const gridMatEl = document.getElementById('gridMaterial');
@@ -4885,7 +4836,6 @@ function getCustomGridSettings() {
             activeDevice: deviceId,
             activeLaserType: laserTypeId,
             defocus,
-            exportFormat,
         };
     }
 }
@@ -4985,7 +4935,7 @@ function getSmartGridFilename(prefix, settings, deviceId) {
     return name;
 }
 
-function generateStandardGridXCS() {
+function generateStandardGridXCS(formatOverride) {
     const currentSettings = SettingsStorage.load();
     const deviceId = resolveDeviceId(currentSettings.activeDevice || 'f2_ultra_uv');
     const laserTypeId = currentSettings.activeLaserType || null;
@@ -4995,9 +4945,8 @@ function generateStandardGridXCS() {
     const deviceConfig = getDeviceConfig(deviceId);
     const deviceLabel = deviceConfig ? deviceConfig.name.replace(/[\s()]+/g, '_') : 'F2';
 
-    const fmtEl = document.getElementById('standardGridFormatSelect');
-    const fmt = fmtEl ? fmtEl.value : (currentSettings.exportFormat || 'xcs');
-    const ext = fmt === 'xs' ? 'xs' : 'xcs';
+    const fmt = formatOverride === 'xs' ? 'xs' : 'xcs';
+    const ext = fmt;
     const filename = `Standard_Test_Grid_${deviceLabel}_${laserLabel}.${ext}`;
 
     // For .xs: always generate client-side so we can rebundle. Server only ships xcs.
@@ -5054,10 +5003,10 @@ async function clientSideStandardGrid(deviceId, laserTypeId, laser, filename, fm
     }
 }
 
-async function generateCustomGridXCS() {
+async function generateCustomGridXCS(formatOverride) {
     const customSettings = getCustomGridSettings();
-    const fmt = customSettings.exportFormat || 'xcs';
-    const ext = fmt === 'xs' ? 'xs' : 'xcs';
+    const fmt = formatOverride === 'xs' ? 'xs' : 'xcs';
+    const ext = fmt;
 
     // Always regenerate to capture latest settings if reused
     const generator = new TestGridGenerator(customSettings);
