@@ -17,6 +17,7 @@ import { ColorQuantizer } from './lib/color-quantizer.js';
 import { EnhancedQuantizer } from './lib/enhanced-quantizer.js';
 import { Vectorizer } from './lib/vectorizer.js';
 import { XCSGenerator } from './lib/xcs-generator.js';
+import { XSGenerator } from './lib/xs-generator.js';
 import { showToast } from './lib/toast.js';
 import { Logger } from './lib/logger.js';
 import { LandingPage } from './lib/landing-page.js';
@@ -26,7 +27,7 @@ import { multiGridPalette, initializeMultiGridPalette } from './lib/multi-grid-p
 import { GridImagePicker } from './lib/grid-image-picker.js';
 import { initFrequencyLimiter } from './lib/ui-enhancements.js';
 import { getMaterialsForLaser, getMaterialById, DEFAULT_MATERIAL_ID } from './lib/material-registry.js';
-import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey, isDeviceVisible } from './lib/device-registry.js';
+import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey, isDeviceVisible, getDefaultDefocus } from './lib/device-registry.js';
 
 
 
@@ -149,6 +150,12 @@ const elements = {
     settingCrossHatch: document.getElementById('settingCrossHatch'),
     settingPulseWidth: document.getElementById('settingPulseWidth'),
     rowPulseWidth: document.getElementById('rowPulseWidth'),
+    settingDefocus: document.getElementById('settingDefocus'),
+    rowDefocus: document.getElementById('rowDefocus'),
+    exportFormatSelect: document.getElementById('exportFormatSelect'),
+    gridExportFormatSelect: document.getElementById('gridExportFormatSelect'),
+    standardGridFormatSelect: document.getElementById('standardGridFormatSelect'),
+    gridDefocus: document.getElementById('gridDefocus'),
     settingFreqMin: document.getElementById('settingFreqMin'),
     settingFreqMax: document.getElementById('settingFreqMax'),
     settingLpiMin: document.getElementById('settingLpiMin'),
@@ -1111,12 +1118,13 @@ function updateDeviceUI(deviceId) {
     // Toggle UI elements based on virtual device mode
     toggleVirtualModeUI(isVirtual);
 
-    // Enforce focus warning visibility based on laser config
+    // Enforce focus warning visibility based on laser config + export format
     const laser = getLaserConfig(deviceId);
+    const usingXsFormat = (state.settings?.exportFormat || 'xcs') === 'xs';
     const showFocusWarning = laser ? laser.addFocusWarning : false;
     const focusWarnings = document.querySelectorAll('.focus-warning-block');
     focusWarnings.forEach(el => {
-        if (!showFocusWarning || isVirtual) {
+        if (!showFocusWarning || isVirtual || usingXsFormat) {
             el.style.setProperty('display', 'none', 'important');
         } else {
             el.style.display = 'block';
@@ -2747,6 +2755,45 @@ function switchPreviewTab(tabName) {
 // ===================================
 function setupExport() {
     elements.btnDownloadXCS.addEventListener('click', downloadXCS);
+
+    // Per-export format selector — persist & update UI live (focus warning, button text)
+    if (elements.exportFormatSelect) {
+        elements.exportFormatSelect.addEventListener('change', () => {
+            const fmt = elements.exportFormatSelect.value;
+            state.settings.exportFormat = fmt;
+            SettingsStorage.save(state.settings);
+            // Update download button label
+            elements.btnDownloadXCS.innerHTML = fmt === 'xs'
+                ? '<span>💾</span> Download XS'
+                : '<span>💾</span> Download XCS';
+            // Re-apply focus-warning visibility
+            applySettingsToUI();
+        });
+    }
+    if (elements.gridExportFormatSelect) {
+        elements.gridExportFormatSelect.addEventListener('change', () => {
+            const fmt = elements.gridExportFormatSelect.value;
+            state.settings.exportFormat = fmt;
+            SettingsStorage.save(state.settings);
+            const btn = document.getElementById('btnGenerateGrid');
+            if (btn) btn.innerHTML = fmt === 'xs'
+                ? '<span>💾</span> Download Custom XS'
+                : '<span>💾</span> Download Custom XCS';
+            applySettingsToUI();
+        });
+    }
+    if (elements.standardGridFormatSelect) {
+        elements.standardGridFormatSelect.addEventListener('change', () => {
+            const fmt = elements.standardGridFormatSelect.value;
+            state.settings.exportFormat = fmt;
+            SettingsStorage.save(state.settings);
+            const btn = document.getElementById('btnGenerateStandard');
+            if (btn) btn.innerHTML = fmt === 'xs'
+                ? '<span>💾</span> Download Standard XS'
+                : '<span>💾</span> Download Standard XCS';
+            applySettingsToUI();
+        });
+    }
 }
 
 /**
@@ -2777,11 +2824,10 @@ async function downloadXCS() {
     btn.innerHTML = '<span>⏳</span> Generating...';
 
     try {
-        // Generate XCS
-        const generator = new XCSGenerator(state.settings);
-        const xcsContent = generator.generate(state.processedImage, state.layers, getOutputSize());
+        // Determine output format (per-export selector wins over saved settings)
+        const fmt = elements.exportFormatSelect ? elements.exportFormatSelect.value : (state.settings?.exportFormat || 'xcs');
 
-        // Download immediately — filename includes device, image name, laser type, material
+        // Filename
         const deviceId = resolveDeviceId(state.settings?.activeDevice || 'f2_ultra_uv');
         const deviceConfig = getDeviceConfig(deviceId);
         const deviceLabel = deviceConfig ? deviceConfig.name.replace(/[\s()]+/g, '_') : 'F2';
@@ -2790,25 +2836,45 @@ async function downloadXCS() {
         const materialId = state.settings?.material || DEFAULT_MATERIAL_ID;
         const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
         const imgLabel = state.originalImageName ? `_${state.originalImageName}` : '';
-        const xcsFilename = `engraving${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.xcs`;
+        const ext = fmt === 'xs' ? 'xs' : 'xcs';
+        const filename = `engraving${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.${ext}`;
 
-        const blob = new Blob([xcsContent], { type: 'application/json' });
+        // Resolve defocus (mm). Falls back to laser default.
+        const defocus = typeof state.settings?.defocus === 'number'
+            ? state.settings.defocus
+            : getDefaultDefocus(deviceId, state.settings?.activeLaserType);
+
+        const genSettings = { ...state.settings, defocus };
+
+        let blob;
+        if (fmt === 'xs') {
+            const xsGen = new XSGenerator(genSettings);
+            blob = await xsGen.generate(state.processedImage, state.layers, getOutputSize());
+            if (!(blob instanceof Blob)) {
+                blob = new Blob([blob], { type: 'application/zip' });
+            }
+        } else {
+            const xcsGen = new XCSGenerator(genSettings);
+            const xcsContent = xcsGen.generate(state.processedImage, state.layers, getOutputSize());
+            blob = new Blob([xcsContent], { type: 'application/json' });
+        }
+
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = xcsFilename;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        showToast('XCS file downloaded!', 'success');
+        showToast(`${ext.toUpperCase()} file downloaded!`, 'success');
 
         // Complete Onboarding if active
         if (window.onboarding) window.onboarding.handleAction('download');
     } catch (error) {
-        console.error('XCS generation error:', error);
-        showToast('Error generating XCS: ' + error.message, 'error');
+        console.error('Export error:', error);
+        showToast('Error generating file: ' + error.message, 'error');
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
@@ -2944,6 +3010,43 @@ function applySettingsToUI() {
     elements.settingLpiMin.value = s.lpiMin;
     elements.settingLpiMax.value = s.lpiMax;
 
+    // Defocus — fall back to per-laser-type default
+    if (elements.settingDefocus) {
+        const activeLaserForDefocus = getActiveLaserConfig(s);
+        const defaultDefocus = activeLaserForDefocus ? (activeLaserForDefocus.defaultDefocus || 0) : 0;
+        const defocusVal = typeof s.defocus === 'number' ? s.defocus : defaultDefocus;
+        elements.settingDefocus.value = defocusVal;
+    }
+
+    // Export format dropdown (.xcs vs .xs)
+    const currentFmt = (s.exportFormat === 'xs') ? 'xs' : 'xcs';
+    if (elements.exportFormatSelect) {
+        elements.exportFormatSelect.value = currentFmt;
+        const btn = document.getElementById('btnDownloadXCS');
+        if (btn) btn.innerHTML = currentFmt === 'xs'
+            ? '<span>💾</span> Download XS'
+            : '<span>💾</span> Download XCS';
+    }
+    if (elements.gridExportFormatSelect) {
+        elements.gridExportFormatSelect.value = currentFmt;
+        const btnG = document.getElementById('btnGenerateGrid');
+        if (btnG) btnG.innerHTML = currentFmt === 'xs'
+            ? '<span>💾</span> Download Custom XS'
+            : '<span>💾</span> Download Custom XCS';
+    }
+    if (elements.standardGridFormatSelect) {
+        elements.standardGridFormatSelect.value = currentFmt;
+        const btnS = document.getElementById('btnGenerateStandard');
+        if (btnS) btnS.innerHTML = currentFmt === 'xs'
+            ? '<span>💾</span> Download Standard XS'
+            : '<span>💾</span> Download Standard XCS';
+    }
+    if (elements.gridDefocus) {
+        const activeLaserForGrid = getActiveLaserConfig(s);
+        const def = activeLaserForGrid ? (activeLaserForGrid.defaultDefocus || 0) : 0;
+        elements.gridDefocus.value = typeof s.defocus === 'number' ? s.defocus : def;
+    }
+
     // Separation Logic: Pulse Width — show for lasers with pulse width capability
     const activeLaser = getActiveLaserConfig(s);
     const isMopaLike = activeLaser ? (activeLaser.hasPulseWidth && activeLaser.hasMopaFrequency) : false;
@@ -2954,11 +3057,12 @@ function applySettingsToUI() {
         }
     }
 
-    // Toggle Focus Warning Blocks
+    // Toggle Focus Warning Blocks (hide entirely when using .xs which carries defocus in-file)
     const showFocusWarning = activeLaser ? activeLaser.addFocusWarning : false;
+    const usingXs = (s.exportFormat || 'xcs') === 'xs';
     const focusWarnings = document.querySelectorAll('.focus-warning-block');
     focusWarnings.forEach(el => {
-        el.style.display = showFocusWarning ? 'block' : 'none';
+        el.style.display = (showFocusWarning && !usingXs) ? 'block' : 'none';
     });
 
     // Standard Colors (Black & White)
@@ -3143,7 +3247,10 @@ function saveSettings() {
         whiteFreq: parseInt(document.getElementById('settingWhiteFreq').value),
         whiteLpi: parseInt(document.getElementById('settingWhiteLpi').value),
         whiteSpeed: parseInt(document.getElementById('settingWhiteSpeed').value),
-        whitePower: parseInt(document.getElementById('settingWhitePower').value)
+        whitePower: parseInt(document.getElementById('settingWhitePower').value),
+
+        defocus: elements.settingDefocus ? parseFloat(elements.settingDefocus.value) || 0 : (state.settings.defocus || 0),
+        exportFormat: elements.exportFormatSelect ? elements.exportFormatSelect.value : (state.settings.exportFormat || 'xcs'),
     };
 
     SettingsStorage.save(state.settings);
@@ -4692,6 +4799,11 @@ function getCustomGridSettings() {
     const laser = getLaserConfig(deviceId, laserTypeId);
     const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
 
+    const defocusEl = document.getElementById('gridDefocus');
+    const defocus = defocusEl ? Math.max(0, Math.min(20, parseFloat(defocusEl.value) || 0)) : (state.settings.defocus || 0);
+    const fmtEl = document.getElementById('gridExportFormatSelect');
+    const exportFormat = fmtEl ? fmtEl.value : (state.settings.exportFormat || 'xcs');
+
     if (isMopaLike) {
         const fixedMode = document.getElementById('gridFixedParam') ? document.getElementById('gridFixedParam').value : 'frequency';
 
@@ -4746,6 +4858,8 @@ function getCustomGridSettings() {
         // Include selected material (dev mode; falls back to default)
         const gridMatEl = document.getElementById('gridMaterial');
         settings.material = gridMatEl ? gridMatEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID);
+        settings.defocus = defocus;
+        settings.exportFormat = exportFormat;
         return settings;
     } else {
         const gridMatEl = document.getElementById('gridMaterial');
@@ -4768,7 +4882,10 @@ function getCustomGridSettings() {
             fillGaps: false,
 
             material: gridMatEl ? gridMatEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID),
-            activeDevice: deviceId
+            activeDevice: deviceId,
+            activeLaserType: laserTypeId,
+            defocus,
+            exportFormat,
         };
     }
 }
@@ -4877,61 +4994,84 @@ function generateStandardGridXCS() {
     const laserLabel = laser ? laser.name.replace(/\s+/g, '') : 'UV';
     const deviceConfig = getDeviceConfig(deviceId);
     const deviceLabel = deviceConfig ? deviceConfig.name.replace(/[\s()]+/g, '_') : 'F2';
-    const filename = `Standard_Test_Grid_${deviceLabel}_${laserLabel}.xcs`;
 
-    // Try server-generated grid first (uses admin-configured defaults)
+    const fmtEl = document.getElementById('standardGridFormatSelect');
+    const fmt = fmtEl ? fmtEl.value : (currentSettings.exportFormat || 'xcs');
+    const ext = fmt === 'xs' ? 'xs' : 'xcs';
+    const filename = `Standard_Test_Grid_${deviceLabel}_${laserLabel}.${ext}`;
+
+    // For .xs: always generate client-side so we can rebundle. Server only ships xcs.
+    if (fmt === 'xs') {
+        clientSideStandardGrid(deviceId, laserTypeId, laser, filename, fmt);
+        return;
+    }
+
+    // .xcs: try server-generated grid first (uses admin-configured defaults)
     fetch(`/api/testgrid/${settingsKey}`)
         .then(res => {
             if (!res.ok) throw new Error('Server unavailable');
             return res.text();
         })
-        .then(xcs => downloadTestGridXCS(xcs, filename))
-        .catch(() => {
-            // Fallback: generate client-side with hardcoded defaults
-            const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
-            const fixedSettings = { cellSize: 5, cellGap: 1 };
-
-            if (isMopaLike) {
-                fixedSettings.speedMin = 200;
-                fixedSettings.speedMax = 1200;
-                fixedSettings.power = 14;
-                fixedSettings.freqMin = 200;
-                fixedSettings.freqMax = 1200;
-                fixedSettings.lpi = 5000;
-                fixedSettings.passes = 1;
-                fixedSettings.crossHatch = false;
-                fixedSettings.gridMode = 'power';
-            } else {
-                fixedSettings.lpiMin = 300;
-                fixedSettings.lpiMax = 800;
-                fixedSettings.freqMin = 40;
-                fixedSettings.freqMax = 90;
-                fixedSettings.power = 70;
-                fixedSettings.speed = 425;
-                fixedSettings.passes = 1;
-                fixedSettings.crossHatch = true;
-            }
-
-            const generator = new TestGridGenerator(fixedSettings);
-            generator.settings.activeDevice = deviceId;
-            generator.settings.activeLaserType = laserTypeId;
-            const { xcs } = generator.generateBusinessCardGrid();
-            downloadTestGridXCS(xcs, filename);
-        });
+        .then(xcs => downloadTestGridFile(xcs, filename, 'xcs'))
+        .catch(() => clientSideStandardGrid(deviceId, laserTypeId, laser, filename, fmt));
 }
 
-function generateCustomGridXCS() {
+async function clientSideStandardGrid(deviceId, laserTypeId, laser, filename, fmt) {
+    const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
+    const fixedSettings = { cellSize: 5, cellGap: 1 };
+
+    if (isMopaLike) {
+        fixedSettings.speedMin = 200;
+        fixedSettings.speedMax = 1200;
+        fixedSettings.power = 14;
+        fixedSettings.freqMin = 200;
+        fixedSettings.freqMax = 1200;
+        fixedSettings.lpi = 5000;
+        fixedSettings.passes = 1;
+        fixedSettings.crossHatch = false;
+        fixedSettings.gridMode = 'power';
+    } else {
+        fixedSettings.lpiMin = 300;
+        fixedSettings.lpiMax = 800;
+        fixedSettings.freqMin = 40;
+        fixedSettings.freqMax = 90;
+        fixedSettings.power = 70;
+        fixedSettings.speed = 425;
+        fixedSettings.passes = 1;
+        fixedSettings.crossHatch = true;
+    }
+    fixedSettings.defocus = getDefaultDefocus(deviceId, laserTypeId);
+    fixedSettings.activeDevice = deviceId;
+    fixedSettings.activeLaserType = laserTypeId;
+
+    const generator = new TestGridGenerator(fixedSettings);
+    if (fmt === 'xs') {
+        const { xs } = await generator.generateBusinessCardGridXS();
+        downloadTestGridFile(xs, filename, 'xs');
+    } else {
+        const { xcs } = generator.generateBusinessCardGrid();
+        downloadTestGridFile(xcs, filename, 'xcs');
+    }
+}
+
+async function generateCustomGridXCS() {
     const customSettings = getCustomGridSettings();
-    if (!activeGridGenerator) activeGridGenerator = new TestGridGenerator(customSettings);
+    const fmt = customSettings.exportFormat || 'xcs';
+    const ext = fmt === 'xs' ? 'xs' : 'xcs';
 
     // Always regenerate to capture latest settings if reused
     const generator = new TestGridGenerator(customSettings);
-    const { xcs } = generator.generateBusinessCardGrid();
 
     const deviceId = state.settings.activeDevice || 'f2_ultra_uv';
-    const filename = getSmartGridFilename('CustomGrid', customSettings, deviceId);
+    const filename = getSmartGridFilename('CustomGrid', customSettings, deviceId) + '.' + ext;
 
-    downloadTestGridXCS(xcs, filename);
+    if (fmt === 'xs') {
+        const { xs } = await generator.generateBusinessCardGridXS();
+        downloadTestGridFile(xs, filename, 'xs');
+    } else {
+        const { xcs } = generator.generateBusinessCardGrid();
+        downloadTestGridFile(xcs, filename, 'xcs');
+    }
 }
 
 function drawGridToCanvas(canvasId, settings) {
@@ -5056,23 +5196,33 @@ function updateStandardPreview() {
     drawGridToCanvas('standardPreviewCanvas', fixedSettings);
 }
 
-function downloadTestGridXCS(xcsContent, filename) {
-    const blob = new Blob([xcsContent], { type: 'application/json' });
+function downloadTestGridFile(content, filename, fmt) {
+    const mime = fmt === 'xs' ? 'application/zip' : 'application/json';
+    let blob;
+    if (content instanceof Blob) {
+        blob = content;
+    } else if (typeof content === 'string') {
+        blob = new Blob([content], { type: mime });
+    } else {
+        blob = new Blob([content], { type: mime });
+    }
+    const ext = fmt === 'xs' ? '.xs' : '.xcs';
+    if (!filename.endsWith(ext)) filename += ext;
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-
-    // Ensure extension
-    if (!filename.endsWith('.xcs')) {
-        filename += '.xcs';
-    }
-
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast(`Downloaded: ${filename}`, 'success');
+}
+
+// Back-compat wrapper (some call sites assume xcs)
+function downloadTestGridXCS(xcsContent, filename) {
+    downloadTestGridFile(xcsContent, filename, 'xcs');
 }
 
 // Analyzer Functions

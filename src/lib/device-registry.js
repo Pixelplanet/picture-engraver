@@ -28,6 +28,7 @@ export const LASER_TYPES = {
         settingsKey: 'uv',            // Key used in material-registry defaults
         hasDefaultMap: true,
         addFocusWarning: true,         // UV needs focus warning layer
+        defaultDefocus: 4,             // Default defocus distance in mm for .xs profiles
     },
     mopa: {
         id: 'mopa',
@@ -43,6 +44,7 @@ export const LASER_TYPES = {
         settingsKey: 'mopa',
         hasDefaultMap: true,
         addFocusWarning: false,
+        defaultDefocus: 0,
     },
     mopa_single: {
         id: 'mopa_single',
@@ -58,6 +60,7 @@ export const LASER_TYPES = {
         settingsKey: 'mopa',           // Shares MOPA settings/defaults
         hasDefaultMap: true,            // Reuses MOPA color maps
         addFocusWarning: false,
+        defaultDefocus: 0,
     },
     blue_ultra: {
         id: 'blue_ultra',
@@ -73,6 +76,7 @@ export const LASER_TYPES = {
         settingsKey: 'blue_ultra',
         hasDefaultMap: false,           // No calibrated color maps yet
         addFocusWarning: false,
+        defaultDefocus: 0,
     },
     ir: {
         id: 'ir',
@@ -88,6 +92,7 @@ export const LASER_TYPES = {
         settingsKey: 'ir',
         hasDefaultMap: false,
         addFocusWarning: false,
+        defaultDefocus: 0,
     },
     blue_f2: {
         id: 'blue_f2',
@@ -103,6 +108,7 @@ export const LASER_TYPES = {
         settingsKey: 'blue_f2',
         hasDefaultMap: false,
         addFocusWarning: false,
+        defaultDefocus: 0,
     },
 };
 
@@ -332,6 +338,18 @@ export function getDeviceFamiliesWithVisibility(visibilitySettings) {
             devices: grouped[fam.id] || [],
         }))
         .filter(g => g.devices.length > 0);
+}
+
+/**
+ * Get the default defocus distance (mm) for the given device + laser.
+ * Returns 0 when the laser type or device is unknown.
+ * @param {string} deviceId
+ * @param {string} [laserTypeId]
+ * @returns {number}
+ */
+export function getDefaultDefocus(deviceId, laserTypeId) {
+    const laser = getLaserConfig(deviceId, laserTypeId);
+    return laser && typeof laser.defaultDefocus === 'number' ? laser.defaultDefocus : 0;
 }
 
 /**

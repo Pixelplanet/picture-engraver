@@ -94,7 +94,7 @@ describe('Flexible MOPA Grid Generator', () => {
         const json = generator.encodeSettings(14, 9);
         const data = JSON.parse(json);
 
-        expect(data.v).toBe(4);
+        expect(data.v).toBe(5);
         expect(data.ax).toBe('p'); // Fixed Power
         expect(data.p).toEqual([50, 50]); // Fixed Value
         expect(data.s).toEqual([500, 1500]); // Range

@@ -39,7 +39,7 @@ describe('TestGridGenerator', () => {
     });
 
     describe('encodeSettings', () => {
-        it('should encode UV settings as v2', () => {
+        it('should encode UV settings as v3 (with defocus)', () => {
             const gen = new TestGridGenerator({
                 activeDevice: 'f2_ultra_uv',
                 lpiMax: 2000, lpiMin: 500,
@@ -49,16 +49,17 @@ describe('TestGridGenerator', () => {
             const json = gen.encodeSettings(14, 9);
             const data = JSON.parse(json);
 
-            expect(data.v).toBe(2);
+            expect(data.v).toBe(3);
             expect(data.t).toBe('uv');
             expect(data.l).toEqual([2000, 500, 14]);
             expect(data.f).toEqual([40, 90, 9]);
             expect(data.p).toBe(70);
             expect(data.s).toBe(425);
             expect(data.m).toBe('stainless_304');
+            expect(typeof data.df).toBe('number');
         });
 
-        it('should encode MOPA settings as v4', () => {
+        it('should encode MOPA settings as v5 (with defocus)', () => {
             const gen = new TestGridGenerator({
                 activeDevice: 'f2_ultra_mopa',
                 gridMode: 'power',
@@ -69,10 +70,11 @@ describe('TestGridGenerator', () => {
             const json = gen.encodeSettings(14, 9);
             const data = JSON.parse(json);
 
-            expect(data.v).toBe(4);
+            expect(data.v).toBe(5);
             expect(data.t).toBe('mopa');
             expect(data.ax).toBe('p');
             expect(data.m).toBe('stainless_304');
+            expect(typeof data.df).toBe('number');
         });
 
         it('should encode mopa_single as mopa type', () => {
@@ -86,7 +88,7 @@ describe('TestGridGenerator', () => {
             const json = gen.encodeSettings(14, 9);
             const data = JSON.parse(json);
 
-            expect(data.v).toBe(4);
+            expect(data.v).toBe(5);
             expect(data.t).toBe('mopa');
         });
 
@@ -100,7 +102,7 @@ describe('TestGridGenerator', () => {
             const json = gen.encodeSettings(10, 8);
             const data = JSON.parse(json);
 
-            expect(data.v).toBe(2);
+            expect(data.v).toBe(3);
             expect(data.t).toBe('uv');
         });
     });

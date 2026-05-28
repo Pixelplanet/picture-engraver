@@ -5,8 +5,10 @@
 
 import jsQR from 'jsqr';
 import QRCode from 'qrcode';
+import JSZip from 'jszip';
 import { getXtoolMaterialId, DEFAULT_MATERIAL_ID } from './material-registry.js';
-import { getLaserConfig, getDeviceConfig, resolveDeviceId } from './device-registry.js';
+import { getLaserConfig, getDeviceConfig, resolveDeviceId, getDefaultDefocus } from './device-registry.js';
+import { XSGenerator } from './xs-generator.js';
 
 export class TestGridGenerator {
     constructor(settings = {}) {
@@ -52,6 +54,13 @@ export class TestGridGenerator {
             qrSize: 12,
             qrFrequency: 90,
             qrLpi: 2500,
+
+            // Defocus (mm). 0 = disabled. Defaults to per-laser-type config.
+            defocus: getDefaultDefocus(deviceId, laserTypeId),
+
+            // Output format ('xcs' or 'xs'). Test grids stay xcs by default for
+            // back-compat; the UI dispatcher overrides this when needed.
+            exportFormat: 'xcs',
 
             // Layout
             cellSize: 5,
@@ -158,6 +167,16 @@ export class TestGridGenerator {
             ...xcsParams
         };
 
+        // Defocus injection (used by the .xs writer; harmless to xcs consumers)
+        const defocusMm = typeof this.settings.defocus === 'number' ? this.settings.defocus : 0;
+        if (defocusMm > 0) {
+            customize.defocus = true;
+            customize.defocus_distance = defocusMm;
+        } else {
+            customize.defocus = false;
+            customize.defocus_distance = 1;
+        }
+
         const processingType = hasMopaFreq ? 'COLOR_FILL_ENGRAVE' : 'FILL_VECTOR_ENGRAVING';
 
         const data = {
@@ -218,7 +237,7 @@ export class TestGridGenerator {
             const sRange = getRange('speedMin', 'speedMax', 'speed', 200);
 
             return JSON.stringify({
-                v: 4,
+                v: 5,
                 ax: mode === 'power' ? 'p' : (mode === 'speed' ? 's' : 'f'),
                 f: fRange,
                 p: pRange,
@@ -228,17 +247,19 @@ export class TestGridGenerator {
                 l: s.lpi || 5000, // Density
                 pw: s.pulseWidth || 80,
                 m: material,
+                df: typeof s.defocus === 'number' ? s.defocus : 0,
                 t: 'mopa'
             });
         } else {
-            // UV Encoding (v2 — adds material)
+            // UV Encoding (v3 — adds defocus)
             return JSON.stringify({
-                v: 2,
+                v: 3,
                 l: [s.lpiMax, s.lpiMin, numCols],
                 f: [s.freqMin, s.freqMax, numRows],
                 p: s.power,
                 s: s.speed,
                 m: material,
+                df: typeof s.defocus === 'number' ? s.defocus : 0,
                 t: type
             });
         }
@@ -280,6 +301,7 @@ export class TestGridGenerator {
                         data: raw,
                         version: raw.v,
                         material,
+                        defocus: typeof raw.df === 'number' ? raw.df : 0,
                         lpiValues: xValues,  // Mapped to X
                         freqValues: yValues, // Mapped to Y
                         xAxisLabel: xLabel,
@@ -296,6 +318,7 @@ export class TestGridGenerator {
                     pwr: raw.p || raw.pwr,
                     spd: raw.s || raw.spd,
                     type: raw.t || 'uv',
+                    defocus: typeof raw.df === 'number' ? raw.df : 0,
                     ts: raw.ts || Date.now()
                 };
 
@@ -305,6 +328,7 @@ export class TestGridGenerator {
                 return {
                     found: true,
                     data: settings,
+                    defocus: settings.defocus,
                     lpiValues,
                     freqValues
                 };
@@ -874,4 +898,205 @@ export class TestGridGenerator {
         };
     }
 
+    /**
+     * Generate the test grid as an .xs (v2) bundle instead of .xcs.
+     * Internally builds the XCS form first and converts it.
+     * Returns { xs: Blob|Buffer, gridInfo, qrData }.
+     */
+    async generateBusinessCardGridXS() {
+        const result = this.generateBusinessCardGrid();
+        const xs = await xcsJsonToXsZip(JSON.parse(result.xcs), this.settings);
+        return { xs, gridInfo: result.gridInfo, qrData: result.gridInfo.qrData };
+    }
+
+}
+
+// ── XCS (v1) → XS (v2) directory ZIP converter ─────────────────────────────────
+// Used to re-emit test-grid output in the new format. Keeps every display's
+// engraving parameters intact and externalizes its dPath into the v2 vector
+// bucket.
+
+async function sha256Hex(str) {
+    if (typeof globalThis !== 'undefined'
+        && globalThis.crypto
+        && globalThis.crypto.subtle
+        && typeof TextEncoder !== 'undefined') {
+        const buf = new TextEncoder().encode(str);
+        const digest = await globalThis.crypto.subtle.digest('SHA-256', buf);
+        const bytes = new Uint8Array(digest);
+        let out = '';
+        for (let i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, '0');
+        return out;
+    }
+    const mod = await import('node:crypto');
+    return mod.createHash('sha256').update(str, 'utf-8').digest('hex');
+}
+
+function uuid4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
+export async function xcsJsonToXsZip(xcsObj, settings = {}) {
+    const now = Date.now();
+    const canvas = xcsObj.canvas[0];
+    const canvasId = xcsObj.canvasId || canvas.id;
+    const extId = xcsObj.extId || 'GS009-CLASS-4';
+    const extName = xcsObj.extName || 'F2 Ultra UV';
+
+    // Extract per-display settings from the v1 device map
+    const displayCustomize = new Map();
+    let lightSourceMode = 'uv';
+    let material = null;
+    try {
+        const canvasEntry = xcsObj.device.data.value[0][1];
+        lightSourceMode = canvasEntry.data.LASER_PLANE.lightSourceMode || lightSourceMode;
+        material = canvasEntry.data.LASER_PLANE.material;
+        for (const [displayId, info] of canvasEntry.displays.value) {
+            const processingType = info.processingType || 'FILL_VECTOR_ENGRAVING';
+            const block = info.data[processingType] || info.data.FILL_VECTOR_ENGRAVING;
+            const customize = block ? block.parameter.customize : {};
+            displayCustomize.set(displayId, { processingType, customize, info });
+        }
+    } catch { /* tolerate missing device map */ }
+
+    // Build profiles + display vectorRefs
+    const profiles = {};
+    const displayProfileMap = {};
+    const vectorBucket = new Map();
+    const displays = [];
+
+    for (const d of canvas.displays) {
+        const out = { ...d };
+        if (out.dPath) {
+            const hash = await sha256Hex(out.dPath);
+            if (!vectorBucket.has(hash)) vectorBucket.set(hash, out.dPath);
+            out.vectorRef = { vectorHash: hash, bucketType: 'svg', originalField: 'dPath' };
+            delete out.dPath;
+        }
+        displays.push(out);
+
+        const settingsForDisplay = displayCustomize.get(d.id);
+        if (settingsForDisplay) {
+            const profileId = `profile_${d.id.slice(0, 8)}`;
+            profiles[profileId] = {
+                id: profileId,
+                processingType: settingsForDisplay.processingType,
+                values: { ...settingsForDisplay.customize },
+            };
+            displayProfileMap[d.id] = profileId;
+        }
+    }
+
+    const files = {};
+    files['.format'] = 'v2\n';
+    files['meta/persistence-meta.json'] = { schemaVersion: '2.0.0', protocol: 'xcs-workspace-v2' };
+    files['project.json'] = {
+        __v2__: true,
+        version: '2.0.0',
+        schemaMeta: { schemaVersion: '2.0.0', format: 'directory' },
+        projectId: uuid4(),
+        projectTraceID: uuid4(),
+        projectName: canvas.title || 'Test Grid',
+        activeCanvasId: canvasId,
+        activeDeviceId: extId,
+        versionInfo: {
+            source: 'picture-engraver',
+            appVersion: '2.0.0',
+            savedAt: now,
+            ua: typeof navigator !== 'undefined' ? (navigator.userAgent || '') : 'node',
+            minRequiredVersion: '2.0.0',
+            appMinRequiredVersion: '2.0.0',
+            webMinRequiredVersion: '2.0.0',
+        },
+        created: xcsObj.created || now,
+        modify: xcsObj.modify || now,
+        modules: { canvases: [canvasId], devices: [extId] },
+        customProjectData: { tangentialCuttingUuids: [], flyCutUuid2CanvasIds: {} },
+    };
+    files['profiles.json'] = { profiles };
+    files[`canvases/${canvasId}.json`] = {
+        id: canvasId,
+        title: canvas.title || 'Test Grid',
+        hidden: false,
+        layerData: canvas.layerData || {},
+        groupData: canvas.groupData || {},
+        extendInfo: {
+            version: '2.0.0',
+            minCanvasVersion: '0.0.0',
+            displayProcessConfigMap: {},
+            rulerPluginData: {},
+            type: '2d',
+        },
+        chunkLayout: {
+            displayCount: displays.length,
+            chunkCount: displays.length > 0 ? 1 : 0,
+            chunkIndexes: displays.length > 0 ? [0] : [],
+        },
+    };
+    files[`canvases/${canvasId}/displays-0.json`] = {
+        canvasId,
+        chunkIndex: 0,
+        displays,
+    };
+    files[`devices/device-${extId}.json`] = {
+        id: extId,
+        deviceCode: extId,
+        extId,
+        extName,
+        power: xcsObj.device?.power || [20],
+        processing: {
+            [canvasId]: {
+                id: canvasId,
+                activeMode: 'LASER_PLANE',
+                modes: {
+                    LASER_PLANE: {
+                        material,
+                        lightSourceMode,
+                        thickness: 0,
+                        isProcessByLayer: false,
+                        pathPlanning: 'auto',
+                        fillPlanning: 'separate',
+                        ignoredDisplayIds: [],
+                        displayProfiles: displayProfileMap,
+                    },
+                },
+            },
+        },
+        customProjectData: { tangentialCuttingUuids: [], flyCutUuid2CanvasIds: {} },
+    };
+
+    const bucketEntries = {};
+    const indexEntries = {};
+    for (const [hash, value] of vectorBucket.entries()) {
+        bucketEntries[hash] = value;
+        indexEntries[hash] = { hash, size: value.length };
+    }
+    files['vectors/svg/index.json'] = {
+        bucketType: 'svg',
+        version: '1.0',
+        entryCount: vectorBucket.size,
+        entries: indexEntries,
+    };
+    files['vectors/svg/data-0.json'] = {
+        bucketType: 'svg',
+        chunkIndex: 0,
+        entries: bucketEntries,
+    };
+
+    const zip = new JSZip();
+    for (const [path, content] of Object.entries(files)) {
+        if (typeof content === 'string') zip.file(path, content);
+        else zip.file(path, JSON.stringify(content));
+    }
+    const isBrowser = typeof window !== 'undefined' && typeof Blob !== 'undefined';
+    return zip.generateAsync({
+        type: isBrowser ? 'blob' : 'nodebuffer',
+        compression: 'DEFLATE',
+        compressionOptions: { level: 6 },
+        mimeType: 'application/zip',
+    });
 }

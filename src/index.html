@@ -170,6 +170,13 @@
             <strong>⚠️ Important:</strong> Manually change focus <u style="font-weight: bold;">UP by 4mm</u> for best
             results!
           </div>
+          <div class="export-format-row" style="display:flex; align-items:center; gap:8px; margin: 8px 0;">
+            <label for="exportFormatSelect" style="font-size: 0.9em;">Format:</label>
+            <select class="input" id="exportFormatSelect" style="max-width: 220px;">
+              <option value="xcs">xTool Studio (.xcs)</option>
+              <option value="xs">xTool Studio v2 (.xs)</option>
+            </select>
+          </div>
           <button class="btn btn-success btn-lg" id="btnDownloadXCS">
             <span>💾</span> Download XCS
           </button>
@@ -207,6 +214,10 @@
             <div class="setting-row" id="rowPulseWidth">
               <label>Pulse Width (ns)</label>
               <input type="number" class="input" id="settingPulseWidth" value="80" min="1">
+            </div>
+            <div class="setting-row" id="rowDefocus">
+              <label>Defocus (mm, 0=off)</label>
+              <input type="number" class="input" id="settingDefocus" value="4" min="0" max="20" step="0.5">
             </div>
           </div>
 
@@ -344,6 +355,13 @@
                 </div>
 
                 <div class="action-row" style="text-align: right; margin-top: auto;">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; justify-content:flex-end;">
+                    <label for="standardGridFormatSelect" style="font-size:0.9em;">Format:</label>
+                    <select class="input" id="standardGridFormatSelect" style="max-width:220px;">
+                      <option value="xcs">xTool Studio (.xcs)</option>
+                      <option value="xs">xTool Studio v2 (.xs)</option>
+                    </select>
+                  </div>
                   <a href="#" class="btn btn-primary btn-lg" id="btnGenerateStandard" style="width: 100%;">
                     <span>💾</span> Download Standard XCS
                   </a>
@@ -496,6 +514,10 @@
                       <label>Cross Hatch</label>
                       <input type="checkbox" class="checkbox" id="gridCrossHatch" checked>
                     </div>
+                    <div class="setting-row">
+                      <label>Defocus (mm, 0=off)</label>
+                      <input type="number" class="input" id="gridDefocus" value="0" min="0" max="20" step="0.5">
+                    </div>
                   </div>
                 </div>
               </div>
@@ -515,7 +537,12 @@
 
                 <!-- Custom Actions -->
                 <div class="modal-footer-custom"
-                  style="display: flex; justify-content: flex-end; gap: 10px; margin-top: auto;">
+                  style="display: flex; justify-content: flex-end; gap: 10px; margin-top: auto; align-items: center; flex-wrap: wrap;">
+                  <label for="gridExportFormatSelect" style="font-size: 0.9em;">Format:</label>
+                  <select class="input" id="gridExportFormatSelect" style="max-width: 220px;">
+                    <option value="xcs">xTool Studio (.xcs)</option>
+                    <option value="xs">xTool Studio v2 (.xs)</option>
+                  </select>
                   <button class="btn btn-secondary" id="btnPreviewGrid">Update Preview</button>
                   <button class="btn btn-primary" id="btnGenerateGrid">
                     <span>💾</span> Download Custom XCS

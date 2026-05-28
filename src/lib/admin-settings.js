@@ -24,6 +24,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         power: 70, speed: 425,
         passes: 1, crossHatch: true,
         material: 'stainless_304',
+        defocus: 4,
         qrPower: 75, qrSpeed: 100,
         qrSize: 12, qrFrequency: 45, qrLpi: 500,
         qrCrossHatch: true,
@@ -37,6 +38,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         speedMin: 200, speedMax: 1200,
         pulseWidth: 80, passes: 1,
         material: 'stainless_304',
+        defocus: 0,
         qrPower: 17.5, qrSpeed: 150,
         qrFrequency: 90, qrLpi: 2500,
         qrCrossHatch: false,
@@ -50,6 +52,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         speedMin: 200, speedMax: 1200,
         pulseWidth: 80, passes: 1,
         material: 'stainless_304',
+        defocus: 0,
         qrPower: 17.5, qrSpeed: 150,
         qrFrequency: 90, qrLpi: 2500,
         qrCrossHatch: false,
@@ -63,6 +66,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         speedMin: 10, speedMax: 500,
         pulseWidth: 200, passes: 1,
         material: 'stainless_304',
+        defocus: 0,
         qrPower: 17.5, qrSpeed: 150,
         qrFrequency: 90, qrLpi: 2500,
         qrCrossHatch: false,
@@ -75,6 +79,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         power: 50, speed: 200,
         passes: 1, crossHatch: true,
         material: 'stainless_304',
+        defocus: 0,
         qrPower: 17.5, qrSpeed: 150,
         qrSize: 12, qrFrequency: 90, qrLpi: 2500,
         qrCrossHatch: true,
@@ -87,6 +92,7 @@ const HARDCODED_TEST_GRID_DEFAULTS = {
         power: 50, speed: 200,
         passes: 1, crossHatch: true,
         material: 'stainless_304',
+        defocus: 0,
         qrPower: 17.5, qrSpeed: 150,
         qrSize: 12, qrFrequency: 90, qrLpi: 2500,
         qrCrossHatch: true,
@@ -149,6 +155,13 @@ export function validateTestGridSettings(settings, laserType) {
     }
     if (settings.speed !== undefined && !isPositiveNumber(settings.speed)) {
         errors.push('speed must be a positive number');
+    }
+
+    // Defocus validation (mm). 0 = disabled. Cap at 20mm to catch typos.
+    if (settings.defocus !== undefined) {
+        if (typeof settings.defocus !== 'number' || !isFinite(settings.defocus) || settings.defocus < 0 || settings.defocus > 20) {
+            errors.push('defocus must be a number between 0 and 20');
+        }
     }
 
     // Grid mode validation for MOPA-like types
