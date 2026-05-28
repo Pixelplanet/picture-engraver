@@ -26,7 +26,16 @@ import { getLaserConfig, resolveDeviceId, getDefaultDefocus } from './device-reg
 const SCHEMA_VERSION = '2.0.0';
 const PROTOCOL = 'xcs-workspace-v2';
 const APP_VERSION = '2.0.0';
-const FORMAT_SENTINEL = 'v2\n';
+// xTool Studio writes a literal "v2" (2 bytes, no trailing newline)
+const FORMAT_SENTINEL = 'v2';
+
+// Short random hex ID for binding/patch IDs (matches Studio's `binding_XXXXXXXX` /
+// `patch_XXXXXXXX` shape, 8-char lowercase hex).
+function shortHex8() {
+    let s = '';
+    for (let i = 0; i < 8; i++) s += Math.floor(Math.random() * 16).toString(16);
+    return s;
+}
 
 // ── SHA-256 (works in browser via Web Crypto and in Node via node:crypto) ─────
 async function sha256Hex(str) {
@@ -78,7 +87,6 @@ export class XSGenerator {
     async _build(imageData, layers, size) {
         const now = Date.now();
         const projectId = this.generateUUID();
-        const projectTraceID = this.generateUUID();
         const canvasId = this.generateUUID();
 
         // Resolve device / laser config
@@ -122,18 +130,28 @@ export class XSGenerator {
             );
             if (!baseDisplay) continue;
 
-            // Externalize dPath into the vector bucket
+            // Externalize dPath only when large enough to benefit from the
+            // content-addressed vector bucket. Studio inlines short paths.
             const dPath = baseDisplay.dPath;
-            const hash = await sha256Hex(dPath);
-            if (!vectorBucket.has(hash)) vectorBucket.set(hash, dPath);
+            const VECTOR_BUCKET_THRESHOLD = 1024;
+            if (dPath && dPath.length >= VECTOR_BUCKET_THRESHOLD) {
+                const hash = await sha256Hex(dPath);
+                if (!vectorBucket.has(hash)) vectorBucket.set(hash, dPath);
+                delete baseDisplay.dPath;
+                baseDisplay.vectorRef = {
+                    vectorHash: hash,
+                    bucketType: 'svg',
+                    originalField: 'dPath',
+                };
+            }
 
-            // Replace dPath with vectorRef
-            delete baseDisplay.dPath;
-            baseDisplay.vectorRef = {
-                vectorHash: hash,
-                bucketType: 'svg',
-                originalField: 'dPath',
-            };
+            // v2 union fields observed in real Studio-saved files
+            if (baseDisplay.groupTags === undefined) baseDisplay.groupTags = [];
+            if (baseDisplay.alpha === undefined) baseDisplay.alpha = 1;
+            if (baseDisplay.effects === undefined) baseDisplay.effects = [];
+            if (baseDisplay.customData === undefined || Object.keys(baseDisplay.customData).length === 0) {
+                baseDisplay.customData = { tabBreaks: {}, startPoint: {} };
+            }
 
             displays.push(baseDisplay);
             zOrder = Math.max(zOrder, baseDisplay.zOrder || 0);
@@ -199,36 +217,42 @@ export class XSGenerator {
             protocol: PROTOCOL,
         };
 
+        // activeDeviceId always uses the "<extId>-1" suffix that Studio writes
+        // when binding a device to a project.
+        const deviceInstanceId = `${extId}-1`;
+
         files['project.json'] = {
             __v2__: true,
             version: SCHEMA_VERSION,
             schemaMeta: {
-                schemaVersion: SCHEMA_VERSION,
+                schemaVersion: '2',
                 format: 'directory',
+                migratedFrom: 'v1',
+                migratedAt: now,
             },
             projectId,
-            projectTraceID,
+            // Studio uses the same UUID for both projectId and projectTraceID
+            projectTraceID: projectId,
             projectName: 'Engraved Image',
             activeCanvasId: canvasId,
-            activeDeviceId: extId,
+            activeDeviceId: deviceInstanceId,
             versionInfo: {
                 source: 'picture-engraver',
                 appVersion: APP_VERSION,
                 savedAt: now,
                 ua: typeof navigator !== 'undefined' ? (navigator.userAgent || '') : 'node',
-                minRequiredVersion: SCHEMA_VERSION,
-                appMinRequiredVersion: APP_VERSION,
-                webMinRequiredVersion: APP_VERSION,
+                minRequiredVersion: '2.6.0',
+                appMinRequiredVersion: '',
+                webMinRequiredVersion: '',
             },
             created: now,
             modify: now,
             modules: {
                 canvases: [canvasId],
-                devices: [extId],
+                devices: [deviceInstanceId],
             },
             customProjectData: {
-                tangentialCuttingUuids: [],
-                flyCutUuid2CanvasIds: {},
+                projectTraceID: projectId,
             },
         };
 
@@ -244,7 +268,7 @@ export class XSGenerator {
                 version: SCHEMA_VERSION,
                 minCanvasVersion: '0.0.0',
                 displayProcessConfigMap: {},
-                rulerPluginData: {},
+                rulerPluginData: { rulerGuide: [] },
                 type: '2d',
             },
             chunkLayout,
@@ -256,16 +280,54 @@ export class XSGenerator {
             displays,
         };
 
-        // Device file — maps each display to its profile id
-        const ignoredDisplayIds = [];
-        const displayProfileMap = {};
+        // Device file — real Studio v2 layout uses profileRefs + bindings + patches
+        // (NOT a displayProfiles map). Each display gets one binding linking it to
+        // its base profile, with an optional patch carrying the overrides.
+        const profileRefs = [];
+        const bindings = [];
+        const patches = {};
         for (const d of displays) {
             const pid = profileRefsByDisplay.get(d.id);
-            if (pid) displayProfileMap[d.id] = pid;
+            if (!pid) continue;
+            if (!profileRefs.includes(pid)) profileRefs.push(pid);
+
+            const patchId = `patch_${shortHex8()}`;
+            const bindingId = `binding_${shortHex8()}`;
+            const baseValues = profiles[pid].values;
+            // The patch.overrides block omits Studio's "meta" defaults that live
+            // on the base profile (dotDuration, kerf flags, delayPerLine, …).
+            const overrides = { ...baseValues };
+            delete overrides.dotDuration;
+            delete overrides.enableDelayPerLine;
+            delete overrides.delayPerLine;
+            delete overrides.outlineTrace;
+            delete overrides.needGapNumDensity;
+            delete overrides.enableKerf;
+            delete overrides.kerfDistance;
+            patches[patchId] = {
+                id: patchId,
+                profileId: pid,
+                source: 'material',
+                material: {
+                    materialType: 'customize',
+                    materialId: 0,
+                    paramSource: 'customParams',
+                    planType,
+                },
+                overrides,
+            };
+            bindings.push({
+                bindingId,
+                baseProfileId: pid,
+                patchIds: [patchId],
+                displayIds: [d.id],
+                canvasId,
+                mode: 'LASER_PLANE',
+            });
         }
 
-        files[`devices/device-${extId}.json`] = {
-            id: extId,
+        files[`devices/device-${deviceInstanceId}.json`] = {
+            id: deviceInstanceId,
             deviceCode: extId,
             extId,
             extName,
@@ -276,15 +338,18 @@ export class XSGenerator {
                     activeMode: 'LASER_PLANE',
                     modes: {
                         LASER_PLANE: {
-                            material: getXtoolMaterialId(this.settings.material || DEFAULT_MATERIAL_ID),
-                            lightSourceMode: lightSource,
-                            thickness: 0,
-                            isProcessByLayer: false,
-                            pathPlanning: 'auto',
-                            fillPlanning: 'separate',
-                            ignoredDisplayIds,
-                            displayProfiles: displayProfileMap,
-                            planType,
+                            ignoredDisplayIds: [],
+                            data: {
+                                material: getXtoolMaterialId(this.settings.material || DEFAULT_MATERIAL_ID),
+                                lightSourceMode: lightSource,
+                                thickness: 0,
+                                isProcessByLayer: false,
+                                pathPlanning: 'auto',
+                                fillPlanning: 'separate',
+                            },
+                            profileRefs,
+                            patches,
+                            bindings,
                         },
                     },
                 },

@@ -23,7 +23,7 @@ describe('TestGridGenerator → .xs (v2) output', () => {
         for (const f of ['.format', 'project.json', 'profiles.json', 'vectors/svg/index.json', 'vectors/svg/data-0.json']) {
             expect(zip.files[f]).toBeTruthy();
         }
-        expect(await zip.files['.format'].async('string')).toBe('v2\n');
+        expect(await zip.files['.format'].async('string')).toBe('v2');
 
         // Every JSON file must parse
         for (const fn of Object.keys(zip.files)) {
@@ -48,27 +48,30 @@ describe('TestGridGenerator → .xs (v2) output', () => {
         // dpi and density both populated
         expect(first.values.density).toBe(first.values.dpi);
 
-        // Device file must contain planType + map every display to a profile
+        // Device file: uses real Studio v2 layout — profileRefs + bindings + patches
         const dispFile = Object.keys(zip.files).find(f => f.includes('displays-0.json'));
         const disp = JSON.parse(await zip.files[dispFile].async('string'));
         const devFile = Object.keys(zip.files).find(f => f.startsWith('devices/device-'));
         const dev = JSON.parse(await zip.files[devFile].async('string'));
         const canvasId = Object.keys(dev.processing)[0];
         const laserPlane = dev.processing[canvasId].modes.LASER_PLANE;
-        expect(laserPlane.planType).toBe('dot_cloud');
+        expect(Array.isArray(laserPlane.profileRefs)).toBe(true);
+        expect(Array.isArray(laserPlane.bindings)).toBe(true);
+        expect(typeof laserPlane.patches).toBe('object');
+        expect(laserPlane.data.lightSourceMode).toBeTruthy();
+        const boundDisplayIds = new Set(laserPlane.bindings.flatMap(b => b.displayIds));
         for (const d of disp.displays) {
-            expect(laserPlane.displayProfiles[d.id]).toBeTruthy();
+            expect(boundDisplayIds.has(d.id)).toBe(true);
             expect(d.isFill).toBe(true);
             expect(d.fill.visible).toBe(true);
-            // path externalised to vector bucket
-            expect(d.vectorRef).toBeTruthy();
-            expect(d.dPath).toBeUndefined();
+            // Path is either inlined (small) or externalized via vectorRef (large)
+            expect(d.dPath || d.vectorRef).toBeTruthy();
         }
 
-        // Vector bucket completeness
+        // Vector bucket completeness — every externalized ref must resolve
         const bucket = JSON.parse(await zip.files['vectors/svg/data-0.json'].async('string')).entries;
         for (const d of disp.displays) {
-            expect(bucket[d.vectorRef.vectorHash]).toBeTruthy();
+            if (d.vectorRef) expect(bucket[d.vectorRef.vectorHash]).toBeTruthy();
         }
     });
 

@@ -940,6 +940,12 @@ function uuid4() {
     });
 }
 
+function shortHex8() {
+    let s = '';
+    for (let i = 0; i < 8; i++) s += Math.floor(Math.random() * 16).toString(16);
+    return s;
+}
+
 export async function xcsJsonToXsZip(xcsObj, settings = {}) {
     const now = Date.now();
     const canvas = xcsObj.canvas[0];
@@ -969,17 +975,30 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
     const vectorBucket = new Map();
     const displays = [];
 
+    // Studio only externalizes large dPaths; small ones stay inline.
+    // Threshold chosen to roughly match observed Studio behavior.
+    const VECTOR_BUCKET_THRESHOLD = 1024;
     for (const d of canvas.displays) {
         const out = { ...d };
-        if (out.dPath) {
+        if (out.dPath && out.dPath.length >= VECTOR_BUCKET_THRESHOLD) {
             const hash = await sha256Hex(out.dPath);
             if (!vectorBucket.has(hash)) vectorBucket.set(hash, out.dPath);
             out.vectorRef = { vectorHash: hash, bucketType: 'svg', originalField: 'dPath' };
             delete out.dPath;
         }
-        displays.push(out);
 
         const settingsForDisplay = displayCustomize.get(d.id);
+
+        // v2 union fields observed in real Studio-saved files
+        if (out.groupTags === undefined) out.groupTags = [];
+        if (out.alpha === undefined) out.alpha = 1;
+        if (out.effects === undefined) out.effects = [];
+        if (out.customData === undefined || Object.keys(out.customData).length === 0) {
+            out.customData = { tabBreaks: {}, startPoint: {} };
+        }
+
+        displays.push(out);
+
         if (settingsForDisplay) {
             const processingType = settingsForDisplay.processingType;
             const cust = { ...settingsForDisplay.customize };
@@ -1028,30 +1047,39 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
     }
 
     const files = {};
-    files['.format'] = 'v2\n';
+    files['.format'] = 'v2';
     files['meta/persistence-meta.json'] = { schemaVersion: '2.0.0', protocol: 'xcs-workspace-v2' };
+
+    const projectId = uuid4();
+    const deviceInstanceId = `${extId}-1`;
+
     files['project.json'] = {
         __v2__: true,
         version: '2.0.0',
-        schemaMeta: { schemaVersion: '2.0.0', format: 'directory' },
-        projectId: uuid4(),
-        projectTraceID: uuid4(),
+        schemaMeta: {
+            schemaVersion: '2',
+            format: 'directory',
+            migratedFrom: 'v1',
+            migratedAt: now,
+        },
+        projectId,
+        projectTraceID: projectId,
         projectName: canvas.title || 'Test Grid',
         activeCanvasId: canvasId,
-        activeDeviceId: extId,
+        activeDeviceId: deviceInstanceId,
         versionInfo: {
             source: 'picture-engraver',
             appVersion: '2.0.0',
             savedAt: now,
             ua: typeof navigator !== 'undefined' ? (navigator.userAgent || '') : 'node',
-            minRequiredVersion: '2.0.0',
-            appMinRequiredVersion: '2.0.0',
-            webMinRequiredVersion: '2.0.0',
+            minRequiredVersion: '2.6.0',
+            appMinRequiredVersion: '',
+            webMinRequiredVersion: '',
         },
         created: xcsObj.created || now,
         modify: xcsObj.modify || now,
-        modules: { canvases: [canvasId], devices: [extId] },
-        customProjectData: { tangentialCuttingUuids: [], flyCutUuid2CanvasIds: {} },
+        modules: { canvases: [canvasId], devices: [deviceInstanceId] },
+        customProjectData: { projectTraceID: projectId },
     };
     files['profiles.json'] = { profiles };
     files[`canvases/${canvasId}.json`] = {
@@ -1064,7 +1092,7 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
             version: '2.0.0',
             minCanvasVersion: '0.0.0',
             displayProcessConfigMap: {},
-            rulerPluginData: {},
+            rulerPluginData: { rulerGuide: [] },
             type: '2d',
         },
         chunkLayout: {
@@ -1078,8 +1106,52 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
         chunkIndex: 0,
         displays,
     };
-    files[`devices/device-${extId}.json`] = {
-        id: extId,
+
+    // Device file — real Studio v2 layout uses profileRefs + bindings + patches
+    // (NOT a displayProfiles map). Each display gets one binding linking it to
+    // its base profile, with a patch carrying the actual overrides.
+    const profileRefs = [];
+    const bindings = [];
+    const patches = {};
+    for (const d of displays) {
+        const pid = displayProfileMap[d.id];
+        if (!pid) continue;
+        if (!profileRefs.includes(pid)) profileRefs.push(pid);
+        const baseValues = profiles[pid].values;
+        const overrides = { ...baseValues };
+        delete overrides.dotDuration;
+        delete overrides.enableDelayPerLine;
+        delete overrides.delayPerLine;
+        delete overrides.outlineTrace;
+        delete overrides.needGapNumDensity;
+        delete overrides.enableKerf;
+        delete overrides.kerfDistance;
+        const patchId = `patch_${shortHex8()}`;
+        const bindingId = `binding_${shortHex8()}`;
+        patches[patchId] = {
+            id: patchId,
+            profileId: pid,
+            source: 'material',
+            material: {
+                materialType: 'customize',
+                materialId: 0,
+                paramSource: 'customParams',
+                planType: 'dot_cloud',
+            },
+            overrides,
+        };
+        bindings.push({
+            bindingId,
+            baseProfileId: pid,
+            patchIds: [patchId],
+            displayIds: [d.id],
+            canvasId,
+            mode: 'LASER_PLANE',
+        });
+    }
+
+    files[`devices/device-${deviceInstanceId}.json`] = {
+        id: deviceInstanceId,
         deviceCode: extId,
         extId,
         extName,
@@ -1090,15 +1162,18 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
                 activeMode: 'LASER_PLANE',
                 modes: {
                     LASER_PLANE: {
-                        material,
-                        lightSourceMode,
-                        thickness: 0,
-                        isProcessByLayer: false,
-                        pathPlanning: 'auto',
-                        fillPlanning: 'separate',
                         ignoredDisplayIds: [],
-                        displayProfiles: displayProfileMap,
-                        planType: 'dot_cloud',
+                        data: {
+                            material,
+                            lightSourceMode,
+                            thickness: 0,
+                            isProcessByLayer: false,
+                            pathPlanning: 'auto',
+                            fillPlanning: 'separate',
+                        },
+                        profileRefs,
+                        patches,
+                        bindings,
                     },
                 },
             },

@@ -3,13 +3,21 @@ import JSZip from 'jszip';
 import { createHash } from 'node:crypto';
 import { XSGenerator } from './xs-generator.js';
 
+// Paths long enough (>1024 chars) to trigger vector bucket externalization.
+const longPath = (offset) => {
+    let p = `M${offset} ${offset}`;
+    for (let i = 0; i < 100; i++) p += ` L${offset + i * 0.1} ${offset + i * 0.1}`;
+    p += ' Z';
+    return p;
+};
+
 const sampleLayers = () => ([
     {
         id: 'layer-1',
         name: 'Red Layer',
         visible: true,
         color: { r: 255, g: 0, b: 0 },
-        paths: ['M0 0 L10 0 L10 10 L0 10 Z'],
+        paths: [longPath(0)],
         frequency: 50,
         lpi: 200,
     },
@@ -18,7 +26,7 @@ const sampleLayers = () => ([
         name: 'Blue Layer',
         visible: true,
         color: { r: 0, g: 0, b: 255 },
-        paths: ['M20 20 L30 20 L30 30 L20 30 Z'],
+        paths: [longPath(20)],
         frequency: 60,
         lpi: 300,
     },
