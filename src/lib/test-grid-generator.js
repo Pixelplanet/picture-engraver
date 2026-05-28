@@ -981,11 +981,47 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
 
         const settingsForDisplay = displayCustomize.get(d.id);
         if (settingsForDisplay) {
+            const processingType = settingsForDisplay.processingType;
+            const cust = { ...settingsForDisplay.customize };
+
+            // v2 expects a richer customize/values block. Normalize the test-grid
+            // shape (which targets v1 .xcs) to match the engraving XSGenerator output
+            // so xTool Studio treats these displays as solid fills with full settings.
+            //
+            // Normalizations:
+            //   - bitmapScanMode: v1 'zMode' → v2 'lineMode'
+            //   - density / dpi: ensure both are set (test-grid only sets density)
+            //   - processingType: required inside values for v2
+            //   - default flags that xTool reads for engraving behavior
+            if (cust.bitmapScanMode === 'zMode') cust.bitmapScanMode = 'lineMode';
+            if (cust.density != null && cust.dpi == null) cust.dpi = cust.density;
+            if (cust.dpi != null && cust.density == null) cust.density = cust.dpi;
+            if (cust.crossAngle == null) cust.crossAngle = cust.bitmapScanMode === 'crossMode';
+            if (cust.scanAngle == null) cust.scanAngle = 0;
+            if (cust.angleType == null) cust.angleType = 2;
+            if (cust.bitmapEngraveMode == null) cust.bitmapEngraveMode = 'normal';
+            if (cust.processingLightSource == null) {
+                cust.processingLightSource = lightSourceMode === 'uv' ? 'red' : lightSourceMode;
+            }
+            if (cust.defocus == null) { cust.defocus = false; cust.defocus_distance = 1; }
+
+            const enrichedValues = {
+                dotDuration: 100,
+                enableDelayPerLine: false,
+                delayPerLine: 0.3,
+                outlineTrace: false,
+                needGapNumDensity: true,
+                enableKerf: false,
+                kerfDistance: 0,
+                ...cust,
+                processingType,
+            };
+
             const profileId = `profile_${d.id.slice(0, 8)}`;
             profiles[profileId] = {
                 id: profileId,
-                processingType: settingsForDisplay.processingType,
-                values: { ...settingsForDisplay.customize },
+                processingType,
+                values: enrichedValues,
             };
             displayProfileMap[d.id] = profileId;
         }
@@ -1062,6 +1098,7 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
                         fillPlanning: 'separate',
                         ignoredDisplayIds: [],
                         displayProfiles: displayProfileMap,
+                        planType: 'dot_cloud',
                     },
                 },
             },
