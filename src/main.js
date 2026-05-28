@@ -2015,27 +2015,39 @@ function updateDownloadButtonState() {
     if (!elements.btnDownloadXCS) return;
 
     const isVirtual = SettingsStorage.isCurrentDeviceVirtual();
-    const btn = elements.btnDownloadXCS;
+    const btnXCS = elements.btnDownloadXCS;
+    const btnXS = elements.btnDownloadXS;
 
     // In virtual mode (SVG Export), we don't need color/settings assignment
     if (isVirtual) {
-        btn.disabled = false;
-        btn.title = 'Download SVG File';
-        btn.style.opacity = '1';
+        btnXCS.disabled = false;
+        btnXCS.title = 'Download SVG File';
+        btnXCS.style.opacity = '1';
+        if (btnXS) {
+            btnXS.disabled = false;
+            btnXS.style.opacity = '1';
+        }
         return;
     }
 
     const unassignedLayers = state.layers.filter(l => l.visible && (l.frequency === null || l.lpi === null));
+    const hasUnassigned = unassignedLayers.length > 0 && state.layers.length > 0;
 
-    if (unassignedLayers.length > 0 && state.layers.length > 0) {
-        btn.disabled = true;
-        btn.title = `Please assign colors/settings to all ${unassignedLayers.length} pending layers first`;
-        btn.style.opacity = '0.5';
-    } else {
-        btn.disabled = false;
-        btn.title = 'Download XCS File';
-        btn.style.opacity = '1';
-    }
+    const applyState = (btn, fileLabel) => {
+        if (!btn) return;
+        if (hasUnassigned) {
+            btn.disabled = true;
+            btn.title = `Please assign colors/settings to all ${unassignedLayers.length} pending layers first`;
+            btn.style.opacity = '0.5';
+        } else {
+            btn.disabled = false;
+            btn.title = `Download ${fileLabel} File`;
+            btn.style.opacity = '1';
+        }
+    };
+
+    applyState(btnXCS, 'XCS');
+    applyState(btnXS, 'XS');
 }
 
 function updateCalibrationStatus() {
