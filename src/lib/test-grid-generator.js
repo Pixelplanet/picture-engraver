@@ -940,9 +940,10 @@ function uuid4() {
     });
 }
 
-function shortHex8() {
+const NANOID_ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+function nanoid12() {
     let s = '';
-    for (let i = 0; i < 8; i++) s += Math.floor(Math.random() * 16).toString(16);
+    for (let i = 0; i < 12; i++) s += NANOID_ALPHA[Math.floor(Math.random() * NANOID_ALPHA.length)];
     return s;
 }
 
@@ -1024,10 +1025,15 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
             }
             if (cust.defocus == null) { cust.defocus = false; cust.defocus_distance = 1; }
 
+            // F2 family (GS006) uses dwellTime fields; F2 Ultra uses delayPerLine.
+            const isF2Family = extId === 'GS006';
+            const delayFields = isF2Family
+                ? { enableDwellTime: false, dwellTime: 0.3 }
+                : { enableDelayPerLine: false, delayPerLine: 0.3 };
+
             const enrichedValues = {
                 dotDuration: 100,
-                enableDelayPerLine: false,
-                delayPerLine: 0.3,
+                ...delayFields,
                 outlineTrace: false,
                 needGapNumDensity: true,
                 enableKerf: false,
@@ -1036,7 +1042,7 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
                 processingType,
             };
 
-            const profileId = `profile_${d.id.slice(0, 8)}`;
+            const profileId = `profile:${nanoid12()}`;
             profiles[profileId] = {
                 id: profileId,
                 processingType,
@@ -1107,12 +1113,12 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
         displays,
     };
 
-    // Device file — real Studio v2 layout uses profileRefs + bindings + patches
-    // (NOT a displayProfiles map). Each display gets one binding linking it to
-    // its base profile, with a patch carrying the actual overrides.
+    // Device file — real Studio v2 layout uses profileRefs + bindings + patches.
+    // Bindings are consolidated by profile id (displays sharing the same profile
+    // share one binding with displayIds[]).
     const profileRefs = [];
-    const bindings = [];
     const patches = {};
+    const bindingByProfile = new Map();
     for (const d of displays) {
         const pid = displayProfileMap[d.id];
         if (!pid) continue;
@@ -1122,33 +1128,35 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
         delete overrides.dotDuration;
         delete overrides.enableDelayPerLine;
         delete overrides.delayPerLine;
+        delete overrides.enableDwellTime;
+        delete overrides.dwellTime;
         delete overrides.outlineTrace;
         delete overrides.needGapNumDensity;
         delete overrides.enableKerf;
         delete overrides.kerfDistance;
-        const patchId = `patch_${shortHex8()}`;
-        const bindingId = `binding_${shortHex8()}`;
+        const patchId = `patch:${nanoid12()}`;
         patches[patchId] = {
             id: patchId,
             profileId: pid,
-            source: 'material',
-            material: {
-                materialType: 'customize',
-                materialId: 0,
-                paramSource: 'customParams',
-                planType: 'dot_cloud',
-            },
+            source: 'custom',
             overrides,
         };
-        bindings.push({
-            bindingId,
-            baseProfileId: pid,
-            patchIds: [patchId],
-            displayIds: [d.id],
-            canvasId,
-            mode: 'LASER_PLANE',
-        });
+        let binding = bindingByProfile.get(pid);
+        if (!binding) {
+            binding = {
+                bindingId: `binding:${nanoid12()}`,
+                baseProfileId: pid,
+                patchIds: [],
+                displayIds: [],
+                canvasId,
+                mode: 'LASER_PLANE',
+            };
+            bindingByProfile.set(pid, binding);
+        }
+        binding.patchIds.push(patchId);
+        binding.displayIds.push(d.id);
     }
+    const bindings = [...bindingByProfile.values()];
 
     files[`devices/device-${deviceInstanceId}.json`] = {
         id: deviceInstanceId,

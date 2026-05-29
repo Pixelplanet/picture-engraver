@@ -60,8 +60,11 @@ Observed file names in the sample: see [xs_extracted/](xs_extracted).
 ## 3. File-by-file reference
 
 ### 3.1 `.format`
-Two-byte ASCII sentinel: `v2\n`. Likely used as a fast format-version probe
-without needing to read JSON.
+Two bytes: ASCII `v2` (no trailing newline). Used as a fast format-version
+probe without needing to read JSON.
+
+> ⚠️ Earlier notes claimed `v2\n` — that was wrong. Studio writes exactly two
+> bytes (`0x76 0x32`).
 
 ### 3.2 `meta/persistence-meta.json`
 ```json
@@ -75,24 +78,24 @@ Top-level project metadata. Key fields observed:
 | ---------------------------- | ------------------------------------------------------------ |
 | `__v2__: true`               | Format flag                                                  |
 | `version: "2.0.0"`           | Schema version                                               |
-| `schemaMeta`                 | `{ schemaVersion, format: "directory", migratedFrom: "v1", migratedAt: <ms> }` — present because this file was migrated from a v1 `.xcs` |
-| `projectId`, `projectTraceID`| UUIDs                                                        |
+| `schemaMeta`                 | `{ schemaVersion: "2", format: "directory", migratedFrom: "v1", migratedAt: <ms> }` — `migratedFrom`/`migratedAt` always present on Studio-saved files even when not actually migrated |
+| `projectId`, `projectTraceID`| Two UUID fields, **always identical** in Studio output       |
 | `projectName`                | Display name                                                 |
 | `activeCanvasId`             | UUID of currently-selected canvas                            |
-| `activeDeviceId`             | e.g. `"GS009-CLASS-4-1"`                                     |
-| `versionInfo`                | `source`, `appVersion`, `savedAt` (epoch ms), `ua`, `minRequiredVersion`, `appMinRequiredVersion`, `webMinRequiredVersion` |
+| `activeDeviceId`             | **`<extId>-<instance>`** — the device's `extId` with a numeric instance suffix (usually `-1`), e.g. `"GS009-CLASS-4-1"`, `"GS006-1"`, `"GS004-CLASS-4-1"` |
+| `versionInfo`                | `source`, `appVersion`, `savedAt` (epoch ms), `ua`, `minRequiredVersion: "2.6.0"`, `appMinRequiredVersion: ""`, `webMinRequiredVersion: ""` |
 | `created`, `modify`          | epoch ms                                                     |
-| `modules.canvases` / `.devices` | Arrays of IDs whose files live under `canvases/` / `devices/` |
-| `cover`                      | Relative path to the cover asset (`resources/project-cover.png`) |
-| `customProjectData`          | App-specific blob                                            |
+| `modules.canvases` / `.devices` | Arrays of IDs whose files live under `canvases/` / `devices/` (the device entry is the `<extId>-<instance>` id, not the bare `extId`) |
+| `cover`                      | Relative path to the cover asset (`resources/project-cover.png`). Optional — Studio omits if no cover was generated. |
+| `customProjectData`          | At minimum `{ projectTraceID: <same UUID> }`. May also carry `tangentialCuttingUuids: []`, `flyCutUuid2CanvasIds: {}` |
 
 ### 3.4 `profiles.json`
 Centralizes processing parameters previously inlined per display. Sample:
 ```json
 {
   "profiles": {
-    "profile_02ec6224": {
-      "id": "profile_02ec6224",
+    "profile:K2l7TWbevF6U": {
+      "id": "profile:K2l7TWbevF6U",
       "processingType": "FILL_VECTOR_ENGRAVING",
       "values": {
         "bitmapEngraveMode": "normal",
@@ -112,7 +115,29 @@ Centralizes processing parameters previously inlined per display. Sample:
 }
 ```
 Devices (`devices/*.json` → `processing.<canvasId>.modes.LASER_PLANE`) reference
-these profile IDs.
+these profile IDs via `profileRefs` and `bindings.baseProfileId`.
+
+**Profile id shape.** Studio uses `profile:<12-char nanoid>` (colon, mixed-case
+alphanumerics, e.g. `profile:K2l7TWbevF6U`). The older legacy form
+`profile_<8-hex>` (with underscore) also loads — both shapes appear in the wild.
+The same nanoid convention is used for `binding:` and `patch:` ids.
+
+**Field variations by device family** (verified via cross-laser saves of the
+same project in Studio):
+
+| Field                       | F2 Ultra (GS009/GS007/GS004) | F2 (GS006)               |
+| --------------------------- | ---------------------------- | ------------------------ |
+| Inter-line pause flag       | `enableDelayPerLine: bool`   | `enableDwellTime: bool`  |
+| Inter-line pause duration   | `delayPerLine: 0.3`          | `dwellTime: 0.3`         |
+| `pulseWidth`, `mopaFrequency` | Present on MOPA & Blue Ultra lasers; absent on UV and the F2 family |
+
+`processingLightSource` observed values: `"red"` (UV, MOPA, MOPA-Single, IR
+diode), `"blue"` (blue-diode lasers on both F2 and F2 Ultra). Note that UV
+profiles use `"red"` — Studio internally treats the UV head as the "red" plane
+even though the actual beam is UV.
+
+`bitmapScanMode` observed values: `"lineMode"`, `"crossMode"`, `"zMode"`. All
+three are valid in v2 — earlier notes incorrectly claimed `zMode` was rejected.
 
 ### 3.5 `canvases/<canvasId>.json`
 Header for one canvas. Notable fields:
@@ -173,21 +198,110 @@ graphicX, graphicY, isCompoundPath, vectorRef,                  ← PATH-only
 text, resolution, style, fontData, charJSONs                    ← TEXT-only
 ```
 
-### 3.7 `devices/device-<deviceId>.json`
-Per-device binding. Top-level keys:
-`id, deviceCode, extId, extName, power, processing, customProjectData`.
+### 3.7 `devices/device-<deviceInstanceId>.json`
 
-- `processing` is a map keyed by **canvasId**:
-  ```json
-  "<canvasId>": {
-    "id": "<canvasId>",
-    "activeMode": "LASER_PLANE",
-    "modes": { "LASER_PLANE": { "ignoredDisplayIds": [ … ], … } }
+**File-naming convention.** The filename uses the `<extId>-<instance>` id
+(matching `project.json.activeDeviceId`), e.g. `device-GS009-CLASS-4-1.json`
+for `GS009-CLASS-4`, instance `1`. Inside the file, `id` is the same
+instance-suffixed value but `deviceCode` / `extId` are the bare device codes.
+
+Top-level keys: `id, deviceCode, extId, extName, power, processing, customProjectData`.
+
+- `power` is the device's calibrated max-power range, e.g. `[5]` (UV),
+  `[5, 15]` (F2 IR/Blue), `[60, 40]` (F2 Ultra Blue/MOPA), `[20]` (default).
+- `customProjectData` typically `{ tangentialCuttingUuids: [], flyCutUuid2CanvasIds: {} }`.
+
+`processing` is a map keyed by **canvasId**:
+
+```json
+"<canvasId>": {
+  "id": "<canvasId>",
+  "activeMode": "LASER_PLANE",
+  "modes": { "LASER_PLANE": { ... } }
+}
+```
+
+#### `modes.LASER_PLANE` structure (verified across UV / Blue / MOPA / IR / F2)
+
+```json
+{
+  "ignoredDisplayIds": [],
+  "data": {
+    "material": 1323,
+    "lightSourceMode": "uv",   // or "blue", "red"
+    "thickness": 0,
+    "isProcessByLayer": false,
+    "pathPlanning": "auto",
+    "fillPlanning": "separate"
+  },
+  "profileRefs": [ "profile:K2l7TWbevF6U", ... ],
+  "patches": { "patch:XfeaLC3PwN0B": { ... }, ... },
+  "bindings": [ { ... }, ... ]
+}
+```
+
+Important: there is **no `displayProfiles` map** and **no `planType` field**
+at the LASER_PLANE root — both were assumptions from an earlier draft of this
+document. `planType` only appears inside `patch.material` (when present).
+
+##### `profileRefs[]`
+Flat ordered list of profile ids consumed by this mode. Every id present in
+any `binding.baseProfileId` must also appear here.
+
+##### `bindings[]`
+Each binding links *one or more* displays to a base profile, optionally
+patched. Studio consolidates: when many displays share the same base profile,
+they're listed together in a single binding's `displayIds[]` (we observed one
+binding referencing 118 display ids in a cross-laser save).
+
+```json
+{
+  "bindingId": "binding:1qKapPXVZXa5",
+  "baseProfileId": "profile:K2l7TWbevF6U",
+  "patchIds": ["patch:XfeaLC3PwN0B", "patch:..."],   // one patch per display
+  "displayIds": ["<uuid>", "<uuid>", ...],
+  "canvasId": "<uuid>",
+  "mode": "LASER_PLANE"
+}
+```
+
+The lengths of `patchIds` and `displayIds` are correlated by position — patch
+*i* applies to display *i*.
+
+##### `patches{}`
+Keyed by patch id. Each patch carries the **overrides** that diverge from the
+base profile for that one display:
+
+```json
+{
+  "id": "patch:XfeaLC3PwN0B",
+  "profileId": "profile:K2l7TWbevF6U",
+  "source": "custom",
+  "overrides": {
+    "bitmapEngraveMode": "normal",
+    "speed": 425, "density": 800, "dpi": 800, "power": 70,
+    "repeat": 1, "bitmapScanMode": "crossMode",
+    "frequency": 40, "crossAngle": true, "scanAngle": 0, "angleType": 2,
+    "processingLightSource": "red",
+    "defocus": true, "defocus_distance": 4,
+    "processingType": "FILL_VECTOR_ENGRAVING"
   }
-  ```
-- Inside each mode you find references to profile IDs from `profiles.json`
-  and per-display overrides (the sample also lists `ignoredDisplayIds`, e.g.
-  the `TEXT` warning label is excluded from machining).
+}
+```
+
+Observed `source` values:
+- `"custom"` — no `material` block; the user typed numbers in. Use this for
+  programmatically generated files.
+- `"material"` — references xTool's material library. Carries a `material`
+  sub-block with `materialType` (`"official"` | `"customize"`), `materialId`,
+  `paramSource` (`"official"` | `"customParams"`), optional `paramSchemeId`
+  (for official materials), and `planType` (e.g. `"red"`, `"blue"`,
+  `"dot_cloud"` — names the active laser plane, not used elsewhere).
+
+The `overrides` block deliberately omits the profile's "meta" defaults
+(`dotDuration`, `enableDelayPerLine`/`delayPerLine`, `enableDwellTime`/
+`dwellTime`, `outlineTrace`, `needGapNumDensity`, `enableKerf`, `kerfDistance`).
+Those stay in the base profile only.
 
 ### 3.8 `resources/`
 Binary assets are stored as actual files (PNG, JPEG, etc.) with a JSON sidecar
@@ -341,3 +455,76 @@ These were used to produce the findings above and are kept in the workspace:
 - [_analyze3.py](_analyze3.py) — schema of a vector bucket data file
 - [_compare.py](_compare.py) — proves every old `dPath` SHA-256s to a new bucket key
 - [_compare2.py](_compare2.py) — prints old `.xcs` structure for side-by-side
+
+
+---
+
+## 8. Laser-type variations (cross-laser reference saves)
+
+The folder `docs/Xtool/` contains five reference `.xs` files: the same
+Standard Test Grid project saved by xTool Studio after switching the active
+device to each supported laser type. Comparing them surfaces the deltas a
+writer must handle for cross-laser compatibility.
+
+### Devices observed
+
+| Display name           | `extId`           | Filename                            | `power` | Notes                          |
+| ---------------------- | ------------------- | ----------------------------------- | --------- | ------------------------------ |
+| F2                     | `GS006`           | `device-GS006-1.json`             | `[5,15]`| Diode + IR head, F2 (non-Ultra)|
+| F2 Ultra Blue          | `GS009-CLASS-4`   | `device-GS009-CLASS-4-1.json`     | `[60,40]` | Blue diode                   |
+| F2 Ultra MOPA          | `GS007-CLASS-4`   | `device-GS007-CLASS-4-1.json`     | `[60,40]` | Multi-pulse fibre            |
+| F2 Ultra MOPA-Single   | `GS004-CLASS-4`   | `device-GS004-CLASS-4-1.json`     | `[60,40]` | Single-pulse fibre           |
+| F2 Ultra UV            | `GS009-CLASS-4`   | `device-GS009-CLASS-4-1.json`     | `[5]`     | UV head (same shell as Blue) |
+
+### Field-level deltas the writer must respect
+
+1. **`enableDelayPerLine` / `delayPerLine` vs `enableDwellTime` / `dwellTime`.**
+   F2 (`GS006`) writes `enableDwellTime` and `dwellTime` in every
+   `profile.values` block. Every other tested family (UV / Blue Ultra / MOPA /
+   MOPA-Single, all `GS009/GS007/GS004`) writes `enableDelayPerLine` and
+   `delayPerLine`. Same semantics (inter-line dwell in seconds), different
+   keys.
+
+2. **`processingLightSource`.** Values map to *plane*, not bulb:
+   `"blue"` for any blue-diode plane, `"red"` for UV / MOPA / MOPA-Single /
+   IR / red. There is no `"uv"` value; UV uses `"red"`.
+
+3. **MOPA-only fields.** `pulseWidth` and `mopaFrequency` only appear in
+   profiles whose bulb is a MOPA fibre or a Blue Ultra laser. Skip them on UV
+   and the F2 family.
+
+4. **`processing.<canvasId>.data.lightSourceMode`.** Mirrors the active head:
+   `"uv"`, `"blue"`, `"red"`, `"mopa"` etc. Use the same string the
+   target laser type publishes — it's only read by Studio as a hint, but
+   incorrect values cause warning banners in the UI.
+
+5. **`activeDeviceId` / device filename always uses `<extId>-<instance>`**,
+   so e.g. switching `GS006` `→` `GS009-CLASS-4` means renaming the
+   `devices/device-…json` file as well as rewriting `project.json`.
+
+6. **Profile / binding / patch ids use `<type>:<nanoid12>`** (colon,
+   12 mixed-case alphanumerics — e.g. `profile:K2l7TWbevF6U`,
+   `binding:1qKapPXVZXa5`, `patch:XfeaLC3PwN0B`). Legacy underscore-hex
+   ids still load but Studio re-saves them in the canonical form.
+
+7. **Binding consolidation.** Studio merges displays that share a base profile
+   into a single binding (one binding with N `displayIds` and N `patchIds`).
+   Writers that emit one binding per display still load, but produce noisier
+   diffs against Studio output.
+
+8. **`planType` placement.** Only ever inside `patch.material.planType`
+   (for `source: "material"` patches). It is **never** a key on the
+   `LASER_PLANE` root.
+
+9. **Displays are laser-independent.** Geometry, `vectorRef` externalization,
+   and `layerData` keys are identical across all five saves; the only
+   per-laser changes live in `profiles.json` and the active
+   `devices/device-….json`.
+
+### Practical implication for our generator
+
+The writer in `src/lib/xs-generator.js` (and the `xcsJsonToXsZip` path in
+`src/lib/test-grid-generator.js`) detects the F2 family via `extId === 'GS006'`
+and swaps `enableDelayPerLine` / `delayPerLine` for `enableDwellTime` /
+`dwellTime` accordingly. All other deltas are already handled by the existing
+laser-type-aware mapping.

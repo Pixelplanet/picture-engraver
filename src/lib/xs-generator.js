@@ -29,11 +29,12 @@ const APP_VERSION = '2.0.0';
 // xTool Studio writes a literal "v2" (2 bytes, no trailing newline)
 const FORMAT_SENTINEL = 'v2';
 
-// Short random hex ID for binding/patch IDs (matches Studio's `binding_XXXXXXXX` /
-// `patch_XXXXXXXX` shape, 8-char lowercase hex).
-function shortHex8() {
+// Studio uses nanoid-style IDs: `profile:<12>` / `binding:<12>` / `patch:<12>`,
+// 12-char alphanumeric (case-sensitive). Match that shape.
+const NANOID_ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+function nanoid12() {
     let s = '';
-    for (let i = 0; i < 8; i++) s += Math.floor(Math.random() * 16).toString(16);
+    for (let i = 0; i < 12; i++) s += NANOID_ALPHA[Math.floor(Math.random() * NANOID_ALPHA.length)];
     return s;
 }
 
@@ -165,7 +166,11 @@ export class XSGenerator {
             const crossHatch = layer.crossHatch !== undefined ? layer.crossHatch : !!this.settings.crossHatch;
             const pulseWidth = layer.pulseWidth !== undefined ? layer.pulseWidth : (parseInt(this.settings.pulseWidth) || 80);
 
-            const profileId = `profile_${displayId.slice(0, 8)}`;
+            // F2 family (GS006) uses dwellTime-prefixed fields; F2 Ultra family
+            // uses delayPerLine. Detected by extId prefix.
+            const isF2Family = extId === 'GS006';
+
+            const profileId = `profile:${nanoid12()}`;
             const values = {
                 bitmapEngraveMode: 'normal',
                 speed: parseInt(speed),
@@ -181,8 +186,6 @@ export class XSGenerator {
                 scanAngle: 0,
                 angleType: 2,
                 crossAngle: !!crossHatch,
-                enableDelayPerLine: false,
-                delayPerLine: 0.3,
                 outlineTrace: false,
                 needGapNumDensity: true,
                 enableKerf: false,
@@ -190,6 +193,13 @@ export class XSGenerator {
                 processingLightSource: lightSource === 'uv' ? 'red' : lightSource,
                 processingType: processingType,
             };
+            if (isF2Family) {
+                values.enableDwellTime = false;
+                values.dwellTime = 0.3;
+            } else {
+                values.enableDelayPerLine = false;
+                values.delayPerLine = 0.3;
+            }
             if (hasPulseWidth) values.pulseWidth = parseInt(pulseWidth) || 80;
             if (hasMopaFreq) values.mopaFrequency = parseInt(frequency);
 
@@ -281,18 +291,18 @@ export class XSGenerator {
         };
 
         // Device file — real Studio v2 layout uses profileRefs + bindings + patches
-        // (NOT a displayProfiles map). Each display gets one binding linking it to
-        // its base profile, with an optional patch carrying the overrides.
+        // (NOT a displayProfiles map). Bindings are consolidated by profile id:
+        // displays sharing the same profile share one binding with displayIds[].
         const profileRefs = [];
-        const bindings = [];
         const patches = {};
+        // profileId → binding (so we can append displayIds + patchIds)
+        const bindingByProfile = new Map();
         for (const d of displays) {
             const pid = profileRefsByDisplay.get(d.id);
             if (!pid) continue;
             if (!profileRefs.includes(pid)) profileRefs.push(pid);
 
-            const patchId = `patch_${shortHex8()}`;
-            const bindingId = `binding_${shortHex8()}`;
+            const patchId = `patch:${nanoid12()}`;
             const baseValues = profiles[pid].values;
             // The patch.overrides block omits Studio's "meta" defaults that live
             // on the base profile (dotDuration, kerf flags, delayPerLine, …).
@@ -300,6 +310,8 @@ export class XSGenerator {
             delete overrides.dotDuration;
             delete overrides.enableDelayPerLine;
             delete overrides.delayPerLine;
+            delete overrides.enableDwellTime;
+            delete overrides.dwellTime;
             delete overrides.outlineTrace;
             delete overrides.needGapNumDensity;
             delete overrides.enableKerf;
@@ -307,24 +319,26 @@ export class XSGenerator {
             patches[patchId] = {
                 id: patchId,
                 profileId: pid,
-                source: 'material',
-                material: {
-                    materialType: 'customize',
-                    materialId: 0,
-                    paramSource: 'customParams',
-                    planType,
-                },
+                source: 'custom',
                 overrides,
             };
-            bindings.push({
-                bindingId,
-                baseProfileId: pid,
-                patchIds: [patchId],
-                displayIds: [d.id],
-                canvasId,
-                mode: 'LASER_PLANE',
-            });
+
+            let binding = bindingByProfile.get(pid);
+            if (!binding) {
+                binding = {
+                    bindingId: `binding:${nanoid12()}`,
+                    baseProfileId: pid,
+                    patchIds: [],
+                    displayIds: [],
+                    canvasId,
+                    mode: 'LASER_PLANE',
+                };
+                bindingByProfile.set(pid, binding);
+            }
+            binding.patchIds.push(patchId);
+            binding.displayIds.push(d.id);
         }
+        const bindings = [...bindingByProfile.values()];
 
         files[`devices/device-${deviceInstanceId}.json`] = {
             id: deviceInstanceId,
