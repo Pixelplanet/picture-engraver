@@ -528,3 +528,58 @@ The writer in `src/lib/xs-generator.js` (and the `xcsJsonToXsZip` path in
 and swaps `enableDelayPerLine` / `delayPerLine` for `enableDwellTime` /
 `dwellTime` accordingly. All other deltas are already handled by the existing
 laser-type-aware mapping.
+
+
+---
+
+## 9. Critical v2 gotchas (verified by loading in Studio)
+
+These are *not* obvious from the file structure alone — they were discovered
+by generating `.xs` files for each laser type and watching how Studio
+loaded them.
+
+### 9.1 `processingType` must always be `"FILL_VECTOR_ENGRAVING"` in v2
+
+Studio's v2 reader only recognizes `processingType: "FILL_VECTOR_ENGRAVING"`
+for raster/fill engraving. The legacy v1 string `"COLOR_FILL_ENGRAVE"`
+(used by MOPA / blue-diode / IR profiles in `.xcs`) **silently fails**:
+the file loads, displays appear, but only as **outline strokes** — every
+fill setting is ignored.
+
+Always emit `FILL_VECTOR_ENGRAVING` in v2 regardless of laser type, both
+on the `display.processingType` field and inside `profile.values.processingType`.
+
+### 9.2 The MOPA legacy extId `"GS009-CLASS-1"` is not valid in v2
+
+In v1 (`.xcs`) the F2 Ultra MOPA head was identified as `GS009-CLASS-1`.
+In v2 (`.xs`) Studio rejects that id and silently falls back to
+`GS009-CLASS-4` (F2 Ultra UV) — the file opens but the **wrong device
+profile is selected** and the laser settings get reinterpreted.
+
+The correct v2 mapping for the dual-head F2 Ultra (MOPA + Blue diode) is
+`GS004-CLASS-4` / "F2 Ultra" — the same id used for the blue-diode-only
+`F2 Ultra` device. When converting a v1 MOPA project to v2, remap
+`GS009-CLASS-1` → `GS004-CLASS-4`.
+
+Confirmed v2 `extId` values:
+
+| Device                 | v1 extId        | v2 extId          | v2 extName     | Bed (mm)  |
+| ---------------------- | --------------- | ----------------- | -------------- | --------- |
+| F2 (IR / Blue diode)   | `GS006`       | `GS006`         | `F2`         | 115 × 115 |
+| F2 Ultra UV            | `GS009-CLASS-4` | `GS009-CLASS-4` | `F2 Ultra UV`| 200 × 200 |
+| F2 Ultra (MOPA + Blue) | `GS009-CLASS-1` (MOPA) / `GS004-CLASS-4` (Blue) | `GS004-CLASS-4` | `F2 Ultra`   | 220 × 220 |
+| F2 Ultra Single MOPA   | `GS007-CLASS-4` | `GS007-CLASS-4` | `F2 Ultra (Single)` | 220 × 220 |
+
+### 9.3 Canvas size must match the device
+
+Studio's canvas in `.xs` files is laser-bed-sized — it does not auto-fit.
+Generators must place geometry inside the bed bounds (and ideally center it)
+or the design will visibly hang off the canvas in Studio.
+
+Bed sizes (from comparing canvas-coordinate spans of the cross-laser
+reference saves):
+
+- `GS006` (F2): **115 × 115 mm**
+- `GS009-CLASS-4` (F2 Ultra UV): **200 × 200 mm**
+- `GS004-CLASS-4` (F2 Ultra Dual): **220 × 220 mm**
+- `GS007-CLASS-4` (F2 Ultra Single): **220 × 220 mm**
