@@ -94,11 +94,14 @@ export class XSGenerator {
         const deviceId = resolveDeviceId(this.settings.activeDevice || 'f2_ultra_uv');
         const laserTypeId = this.settings.activeLaserType || null;
         const laser = getLaserConfig(deviceId, laserTypeId);
-        const extId = laser ? laser.extId : 'GS009-CLASS-4';
-        const extName = laser ? laser.extName : 'F2 Ultra UV';
+        const extId = laser ? (laser.xsExtId || laser.extId) : 'GS009-CLASS-4';
+        const extName = laser ? (laser.xsExtName || laser.extName) : 'F2 Ultra UV';
         const lightSource = laser ? laser.lightSource : 'uv';
         const planType = laser ? laser.planType : 'dot_cloud';
-        const processingType = laser ? laser.processingType : 'FILL_VECTOR_ENGRAVING';
+        // v2 (.xs) only recognizes 'FILL_VECTOR_ENGRAVING' — using v1's
+        // 'COLOR_FILL_ENGRAVE' makes Studio render the layer as outlines only,
+        // ignoring the engraving parameters. Always force the v2 value here.
+        const processingType = 'FILL_VECTOR_ENGRAVING';
         const hasPulseWidth = laser ? laser.hasPulseWidth : false;
         const hasMopaFreq = laser ? laser.hasMopaFrequency : false;
 

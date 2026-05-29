@@ -69,6 +69,28 @@ export class TestGridGenerator {
 
             ...settings
         };
+
+        // Studio's canvas size differs by physical device. Used to center the
+        // grid in the work area.
+        this._extId = laser ? laser.extId : null;
+    }
+
+    // Per-extId workspace size (mm). Each Studio device has a fixed canvas
+    // matching its laser-bed dimensions:
+    //   GS006          → F2                  → 110 × 110
+    //   GS009-CLASS-4  → F2 Ultra UV         → 200 × 200
+    //   GS004-CLASS-4  → F2 Ultra Dual       → 220 × 220
+    //   GS007-CLASS-4  → F2 Ultra Single MOPA → 220 × 220
+    //   GS009-CLASS-1  → legacy MOPA id (xs remaps to GS004-CLASS-4) → 220
+    getWorkspaceSize() {
+        switch (this._extId) {
+            case 'GS006':         return 110;
+            case 'GS009-CLASS-4': return 200;
+            case 'GS004-CLASS-4': return 220;
+            case 'GS007-CLASS-4': return 220;
+            case 'GS009-CLASS-1': return 220;
+            default:              return 200;
+        }
     }
 
     // Generate evenly spaced values
@@ -451,7 +473,7 @@ export class TestGridGenerator {
         const effectiveGridW = numCols * s.cellSize + (numCols - 1) * gapX;
         const effectiveGridH = numRows * s.cellSize + (numRows - 1) * gapY;
 
-        const workspaceSize = 200;
+        const workspaceSize = this.getWorkspaceSize();
         // Offsets to center the effective grid within the workspace
         // (Note: s.cardWidth includes margins, so we center the card, then add margin + (available - effective)/2)
         // Actually, we can just center the effective grid in the workspace directly?
@@ -712,7 +734,7 @@ export class TestGridGenerator {
         const deviceId = resolveDeviceId(this.settings.activeDevice || 'f2_ultra_mopa');
         const laserTypeId = this.settings.activeLaserType || null;
         const laser = getLaserConfig(deviceId, laserTypeId);
-        const extId = laser ? laser.extId : 'GS009-CLASS-1';
+        const extId = laser ? laser.extId : 'GS004-CLASS-4';
         const extName = laser ? laser.extName : 'F2 Ultra';
         const lightSource = laser ? laser.lightSource : 'red';
 
@@ -727,7 +749,7 @@ export class TestGridGenerator {
         const effectiveGridH = numRows * s.cellSize + (numRows - 1) * s.cellGap;
 
         // Centering
-        const workspaceSize = 200;
+        const workspaceSize = this.getWorkspaceSize();
         const cardOffsetX = (workspaceSize - s.cardWidth) / 2;
         const cardOffsetY = (workspaceSize - s.cardHeight) / 2;
         const contentOffsetX = s.margin + (availableWidth - effectiveGridW) / 2;
@@ -951,8 +973,17 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
     const now = Date.now();
     const canvas = xcsObj.canvas[0];
     const canvasId = xcsObj.canvasId || canvas.id;
-    const extId = xcsObj.extId || 'GS009-CLASS-4';
-    const extName = xcsObj.extName || 'F2 Ultra UV';
+    let extId = xcsObj.extId || 'GS009-CLASS-4';
+    let extName = xcsObj.extName || 'F2 Ultra UV';
+
+    // v1 (.xcs) → v2 (.xs) device id remap. Studio's v2 only accepts a fixed
+    // set of extIds; the legacy MOPA id 'GS009-CLASS-1' loads as F2 Ultra UV
+    // in .xs because v2 doesn't know it. Translate to the correct dual-head
+    // device id.
+    if (extId === 'GS009-CLASS-1') {
+        extId = 'GS004-CLASS-4';
+        extName = 'F2 Ultra';
+    }
 
     // Extract per-display settings from the v1 device map
     const displayCustomize = new Map();
@@ -998,10 +1029,18 @@ export async function xcsJsonToXsZip(xcsObj, settings = {}) {
             out.customData = { tabBreaks: {}, startPoint: {} };
         }
 
+        // v2 (.xs) only uses FILL_VECTOR_ENGRAVING — the v1 'COLOR_FILL_ENGRAVE'
+        // processingType is not recognized by Studio's v2 reader and causes
+        // displays to render as outlines without any fill. Force it here for
+        // both the display and the profile we emit.
+        if (out.processingType && out.processingType !== 'FILL_VECTOR_ENGRAVING') {
+            out.processingType = 'FILL_VECTOR_ENGRAVING';
+        }
+
         displays.push(out);
 
         if (settingsForDisplay) {
-            const processingType = settingsForDisplay.processingType;
+            const processingType = 'FILL_VECTOR_ENGRAVING';
             const cust = { ...settingsForDisplay.customize };
 
             // v2 expects a richer customize/values block. Normalize the test-grid

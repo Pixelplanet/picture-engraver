@@ -45,6 +45,11 @@ export const LASER_TYPES = {
         hasDefaultMap: true,
         addFocusWarning: false,
         defaultDefocus: 0,
+        // Override extId/extName when emitting v2 (.xs) — Studio's v2 only
+        // recognizes GS004-CLASS-4 ("F2 Ultra") for the dual MOPA+Blue head.
+        // Using GS009-CLASS-1 in .xs causes the file to load as F2 Ultra UV.
+        xsExtId: 'GS004-CLASS-4',
+        xsExtName: 'F2 Ultra',
     },
     mopa_single: {
         id: 'mopa_single',

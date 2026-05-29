@@ -87,8 +87,8 @@ describe('TestGridGenerator → .xs (v2) output', () => {
         const zip = await unzip(xs);
         const profiles = JSON.parse(await zip.files['profiles.json'].async('string')).profiles;
         const first = profiles[Object.keys(profiles)[0]];
-        expect(first.processingType).toBe('COLOR_FILL_ENGRAVE');
-        expect(first.values.processingType).toBe('COLOR_FILL_ENGRAVE');
+        expect(first.processingType).toBe('FILL_VECTOR_ENGRAVING');
+        expect(first.values.processingType).toBe('FILL_VECTOR_ENGRAVING');
         expect(first.values.pulseWidth).toBeDefined();
         expect(first.values.mopaFrequency).toBeDefined();
         expect(first.values.defocus).toBe(false);
