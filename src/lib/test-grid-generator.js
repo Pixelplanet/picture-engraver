@@ -77,14 +77,14 @@ export class TestGridGenerator {
 
     // Per-extId workspace size (mm). Each Studio device has a fixed canvas
     // matching its laser-bed dimensions:
-    //   GS006          → F2                  → 110 × 110
+    //   GS006          → F2                  → 115 × 115
     //   GS009-CLASS-4  → F2 Ultra UV         → 200 × 200
     //   GS004-CLASS-4  → F2 Ultra Dual       → 220 × 220
     //   GS007-CLASS-4  → F2 Ultra Single MOPA → 220 × 220
     //   GS009-CLASS-1  → legacy MOPA id (xs remaps to GS004-CLASS-4) → 220
     getWorkspaceSize() {
         switch (this._extId) {
-            case 'GS006':         return 110;
+            case 'GS006':         return 115;
             case 'GS009-CLASS-4': return 200;
             case 'GS004-CLASS-4': return 220;
             case 'GS007-CLASS-4': return 220;
