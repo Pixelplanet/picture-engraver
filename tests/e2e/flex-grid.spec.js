@@ -66,4 +66,54 @@ test.describe('Flexible test grid (Axis Picker Matrix)', () => {
             !/lasertools\.org|CORS|Failed to load resource|net::ERR/i.test(e));
         expect(appErrors).toEqual([]);
     });
+
+    test('exposes presets, labels, booklet and progressive-refine controls', async ({ page }) => {
+        const errors = [];
+        page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
+        page.on('pageerror', (err) => errors.push(err.message));
+
+        await page.addInitScript(() => {
+            localStorage.setItem('pictureEngraver_onboarding', 'completed');
+            localStorage.setItem('pictureEngraver_onboarding_testgrid', 'completed');
+            localStorage.setItem('pictureEngraverSettings', JSON.stringify({
+                activeDevice: 'f2_ultra_uv', power: 70, speed: 425, passes: 1,
+                freqMin: 40, freqMax: 80, lpiMin: 300, lpiMax: 2000
+            }));
+        });
+
+        await page.goto('/');
+        await page.click('#btnTestGrid');
+        await page.click('button[data-modal-tab="custom"]');
+        await page.selectOption('#gridLayoutMode', 'flex');
+
+        // Smart range suggestions
+        await page.click('#btnFlexSuggest');
+
+        // Preset dropdown should contain at least one built-in template
+        const presetOptions = await page.locator('#gridPresetSelect option').count();
+        expect(presetOptions).toBeGreaterThan(1);
+
+        // Axis tick labels toggle exists and is checkable
+        await page.check('#flexShowLabels');
+        await expect(page.locator('#flexShowLabels')).toBeChecked();
+
+        // Booklet: enabling reveals fields and populates the 3rd-variable list
+        await page.check('#flexBookletEnable');
+        await expect(page.locator('#flexBookletFields')).toBeVisible();
+        const bookletParams = await page.locator('#flexBookletParam option').count();
+        expect(bookletParams).toBeGreaterThan(0);
+
+        // Progressive refine: enable, render preview, set a winner, zoom in
+        await page.check('#flexRefineEnable');
+        await expect(page.locator('#flexRefineFields')).toBeVisible();
+        await page.click('#btnPreviewGrid');
+        await page.fill('#flexRefineCol', '2');
+        await page.fill('#flexRefineRow', '2');
+        await page.click('#btnFlexRefine');
+        await expect(page.locator('#flexRefineHint')).toContainText('Zoomed');
+
+        const appErrors = errors.filter(e =>
+            !/lasertools\.org|CORS|Failed to load resource|net::ERR/i.test(e));
+        expect(appErrors).toEqual([]);
+    });
 });

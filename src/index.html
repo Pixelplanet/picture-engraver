@@ -477,7 +477,29 @@
                         </select>
                         <button class="btn btn-secondary btn-sm" id="btnGenerateBooklet" type="button">Generate booklet (.zip)</button>
                       </div>
-                      <p class="hint" id="flexBookletHint" style="font-size:0.78em; color:#888; margin:6px 0 0;"></p>
+                  <div id="flexRefineControl" style="margin-top:12px; border-top:1px solid #2a2a2a; padding-top:10px;">
+                    <label class="checkbox-row" style="display:flex; align-items:center; gap:8px; font-size:0.85em;">
+                      <input type="checkbox" id="flexRefineEnable" />
+                      <span>🎯 Zoom into a winning cell (progressive calibration) <span class="info-icon" title="After a test burn, tell us which cell looked best and we'll rebuild the grid tightly around its X/Y values so the next run fine-tunes the result.">ⓘ</span></span>
+                    </label>
+                    <div id="flexRefineFields" style="display:none; margin-top:8px;">
+                      <p class="hint" style="font-size:0.78em; color:#888; margin:0 0 8px;">Click the winning cell in the preview, or enter its position. Row 1 / Col 1 is the top-left cell.</p>
+                      <div class="range-inputs-row">
+                        <div class="setting-row"><label>Col</label><input class="input" id="flexRefineCol" type="number" min="1" value="1" /></div>
+                        <div class="setting-row"><label>Row</label><input class="input" id="flexRefineRow" type="number" min="1" value="1" /></div>
+                        <div class="setting-row">
+                          <label>Zoom</label>
+                          <select class="input" id="flexRefineZoom">
+                            <option value="1">Tight (±1 cell)</option>
+                            <option value="2" selected>Medium (±2 cells)</option>
+                            <option value="3">Wide (±3 cells)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="flex-actions-row">
+                        <button class="btn btn-secondary btn-sm" id="btnFlexRefine" type="button">Zoom into winner</button>
+                      </div>
+                      <p class="hint" id="flexRefineHint" style="font-size:0.78em; color:#888; margin:6px 0 0;"></p>
                     </div>
                   </div>
                 </div>
