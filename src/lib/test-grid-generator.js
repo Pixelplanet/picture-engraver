@@ -103,6 +103,19 @@ export class TestGridGenerator {
         return result;
     }
 
+    // Evenly spaced values without integer rounding (for defocus mm, which is
+    // fractional). Rounds to `decimals` places to keep QR/labels tidy.
+    linspaceF(min, max, steps, decimals = 2) {
+        const f = Math.pow(10, decimals);
+        const round = (v) => Math.round(v * f) / f;
+        if (steps <= 1) return [round(min)];
+        const result = [];
+        for (let i = 0; i < steps; i++) {
+            result.push(round(min + (max - min) * i / (steps - 1)));
+        }
+        return result;
+    }
+
     generateUUID() {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
             const r = Math.random() * 16 | 0;
@@ -171,7 +184,7 @@ export class TestGridGenerator {
         const crossHatch = extraParams._crossHatch !== undefined ? extraParams._crossHatch : !!this.settings.crossHatch;
 
         // Strip internal-only keys before spreading into XCS data
-        const { _planType, _crossHatch, ...xcsParams } = extraParams;
+        const { _planType, _crossHatch, _defocus, ...xcsParams } = extraParams;
 
         const customize = {
             bitmapEngraveMode: 'normal',
@@ -189,8 +202,12 @@ export class TestGridGenerator {
             ...xcsParams
         };
 
-        // Defocus injection (used by the .xs writer; harmless to xcs consumers)
-        const defocusMm = typeof this.settings.defocus === 'number' ? this.settings.defocus : 0;
+        // Defocus injection (used by the .xs writer; harmless to xcs consumers).
+        // A per-cell override (_defocus) takes precedence over the global setting,
+        // enabling defocus-axis test grids where each row uses a different focus.
+        const defocusMm = typeof extraParams._defocus === 'number'
+            ? extraParams._defocus
+            : (typeof this.settings.defocus === 'number' ? this.settings.defocus : 0);
         if (defocusMm > 0) {
             customize.defocus = true;
             customize.defocus_distance = defocusMm;
@@ -272,8 +289,25 @@ export class TestGridGenerator {
                 df: typeof s.defocus === 'number' ? s.defocus : 0,
                 t: 'mopa'
             });
+        } else if (s.gridMode === 'defocus') {
+            // UV defocus-axis grid (v4 — X=LPC, Y=defocus mm, fixed frequency).
+            // Only meaningful for .xs export (per-layer focus).
+            const fixedFreq = Math.round(typeof s.freq === 'number' ? s.freq : s.freqMin);
+            return JSON.stringify({
+                v: 4,
+                t: 'uv_defocus',
+                l: [s.lpiMax, s.lpiMin, numCols],
+                d: [
+                    typeof s.defocusMin === 'number' ? s.defocusMin : 0,
+                    typeof s.defocusMax === 'number' ? s.defocusMax : 6,
+                    numRows
+                ],
+                f: fixedFreq,
+                p: s.power,
+                s: s.speed,
+                m: material
+            });
         } else {
-            // UV Encoding (v3 — adds defocus)
             return JSON.stringify({
                 v: 3,
                 l: [s.lpiMax, s.lpiMin, numCols],
@@ -329,6 +363,30 @@ export class TestGridGenerator {
                         xAxisLabel: xLabel,
                         yAxisLabel: yLabel,
                         gridMode: mode
+                    };
+                }
+
+                // UV defocus-axis grid (v4): X = LPC, Y = defocus (mm), fixed freq.
+                if (raw.t === 'uv_defocus') {
+                    const cols = raw.l[2];
+                    const rows = raw.d[2];
+                    const xValues = this.linspace(raw.l[0], raw.l[1], cols);
+                    const yValues = this.linspaceF(raw.d[0], raw.d[1], rows);
+                    return {
+                        found: true,
+                        data: raw,
+                        version: raw.v,
+                        material: raw.m || 'stainless_304',
+                        defocus: yValues,
+                        defocusValues: yValues,
+                        fixedFrequency: raw.f,
+                        lpiValues: xValues,
+                        freqValues: yValues,
+                        xAxisLabel: 'LPC',
+                        yAxisLabel: 'Defocus (mm)',
+                        gridMode: 'defocus',
+                        power: raw.p,
+                        speed: raw.s
                     };
                 }
 
@@ -532,8 +590,22 @@ export class TestGridGenerator {
         const qrY = globalOffsetY + effectiveGridH - QR_SIZE_MM;
 
         // Generate values
+        // Defocus mode: X axis = LPC (unchanged), Y axis = defocus distance (mm),
+        // frequency held fixed. Only possible in .xs (per-layer focus). Standard
+        // mode: X = LPC, Y = frequency.
+        const isDefocusGrid = s.gridMode === 'defocus';
+        const fixedFreq = Math.round(typeof s.freq === 'number' ? s.freq : s.freqMin);
         const lpiValues = this.linspace(s.lpiMax, s.lpiMin, numCols);
-        const freqValues = this.linspace(s.freqMin, s.freqMax, numRows);
+        const freqValues = isDefocusGrid
+            ? new Array(numRows).fill(fixedFreq)
+            : this.linspace(s.freqMin, s.freqMax, numRows);
+        const defocusValues = isDefocusGrid
+            ? this.linspaceF(
+                typeof s.defocusMin === 'number' ? s.defocusMin : 0,
+                typeof s.defocusMax === 'number' ? s.defocusMax : 6,
+                numRows
+            )
+            : null;
 
         const displays = [];
         const displaySettings = [];
@@ -557,6 +629,7 @@ export class TestGridGenerator {
 
                 const frequency = Math.round(freqValues[row]);
                 const lpi = Math.round(lpiValues[col]);
+                const cellDefocus = isDefocusGrid ? defocusValues[row] : undefined;
 
                 // Generate color based on position
                 const hue = (col / numCols) * 0.7;
@@ -569,18 +642,27 @@ export class TestGridGenerator {
                 // Create cell path
                 const path = `M0 0 L${s.cellSize} 0 L${s.cellSize} ${s.cellSize} L0 ${s.cellSize} Z`;
 
+                const cellLabel = isDefocusGrid
+                    ? `D${cellDefocus}mm / L${lpi}`
+                    : `F${frequency}kHz / L${lpi}`;
+
                 const display = this.createPathDisplay(
                     displayId,
-                    `F${frequency}kHz / L${lpi}`,
+                    cellLabel,
                     colorHex, colorInt,
                     x, y, s.cellSize, s.cellSize,
                     zOrder, path,
                     false
                 );
 
+                const extraCellParams = isDefocusGrid ? { _defocus: cellDefocus } : {};
+
                 displays.push(display);
-                displaySettings.push([displayId, this.createDisplaySettings(frequency, lpi, s.power, s.speed, s.passes)]);
-                layerData[colorHex] = { name: `${frequency}kHz/${lpi}LPC`, order: zOrder, visible: true };
+                displaySettings.push([displayId, this.createDisplaySettings(frequency, lpi, s.power, s.speed, s.passes, extraCellParams)]);
+                layerData[colorHex] = {
+                    name: isDefocusGrid ? `${cellDefocus}mm/${lpi}LPC` : `${frequency}kHz/${lpi}LPC`,
+                    order: zOrder, visible: true
+                };
 
                 zOrder++;
                 cellCount++;
@@ -672,7 +754,9 @@ export class TestGridGenerator {
                 excStartCol,
                 excStartRow,
                 lpiValues,
-                freqValues
+                freqValues,
+                defocusValues,
+                gridMode: isDefocusGrid ? 'defocus' : 'standard'
             }
         };
     }

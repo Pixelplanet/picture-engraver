@@ -583,3 +583,63 @@ reference saves):
 - `GS009-CLASS-4` (F2 Ultra UV): **200 × 200 mm**
 - `GS004-CLASS-4` (F2 Ultra Dual): **220 × 220 mm**
 - `GS007-CLASS-4` (F2 Ultra Single): **220 × 220 mm**
+
+## 10. Per-layer defocus and the defocus-axis test grid
+
+The single most useful capability the `.xs` format adds over `.xcs` is
+**per-profile focus control**. Every profile in `profiles.json` carries:
+
+```json
+"defocus": true,            // false = engrave at focus
+"defocus_distance": 4       // mm of focus offset when defocus === true
+```
+
+In `.xcs` there is no per-layer focus — the operator sets one manual focus
+offset for the whole job (hence the legacy "raise focus by 4 mm" reminder).
+Because `.xs` stores focus **per profile**, each layer/cell of a design can be
+engraved at a different focus offset in a single run.
+
+### 10.1 Encoding rules (verified)
+- `defocus: false` ⇒ engrave at focus. Studio still expects a numeric
+  `defocus_distance`; write `1` as the inert placeholder (matches Studio saves).
+- `defocus: true` ⇒ `defocus_distance` is the offset in millimetres
+  (fractional values such as `0.75`, `2.25` are accepted).
+- The flag is per profile, so a grid that assigns a distinct profile to each
+  cell can sweep focus across the grid.
+
+### 10.2 Defocus-axis test grid (our generator)
+`TestGridGenerator` supports `gridMode: 'defocus'` for non-MOPA (UV / IR /
+blue-diode) lasers. It produces a business-card grid where:
+
+- **X axis = LPC** (lines/cm), identical to the standard grid.
+- **Y axis = defocus distance (mm)**, swept via `linspaceF(defocusMin,
+  defocusMax, numRows)` (fractional, not integer-rounded).
+- **Frequency, power and speed are held fixed** (frequency is encoded once).
+
+Each cell becomes its own profile with its own `defocus_distance`, so opening
+the file in Studio shows physically different focus per row. This grid is
+**`.xs`-only** — exporting it as `.xcs` would silently collapse to a single
+focus and defeat the purpose, so the generator forces `.xs`.
+
+### 10.3 QR payload (v4, `t: "uv_defocus"`)
+The settings QR for a defocus grid uses a dedicated discriminator so the
+analyzer can label the axes correctly without corrupting the frequency/LPC
+colour-map pipeline:
+
+```json
+{
+  "v": 4,
+  "t": "uv_defocus",
+  "l": [lpiMax, lpiMin, numCols],   // X axis (LPC), high→low
+  "d": [defocusMin, defocusMax, numRows], // Y axis (mm), low→high
+  "f": 80,                          // fixed frequency (kHz)
+  "p": 80,                          // fixed power (%)
+  "s": 200,                         // fixed speed (mm/s)
+  "m": "stainless_304"              // material id
+}
+```
+
+The analyzer recognises `uv_defocus` and reads out the LPC and defocus ranges,
+but intentionally does **not** auto-build a colour map from it: a focus sweep is
+a visual-tuning aid, and feeding defocus values into the freq/LPC-coupled colour
+map would mislabel downstream engraving settings.

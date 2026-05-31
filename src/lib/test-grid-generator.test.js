@@ -105,6 +105,75 @@ describe('TestGridGenerator', () => {
             expect(data.v).toBe(3);
             expect(data.t).toBe('uv');
         });
+
+        it('should encode UV defocus grid as v4 (uv_defocus)', () => {
+            const gen = new TestGridGenerator({
+                activeDevice: 'f2_ultra_uv',
+                activeLaserType: 'uv',
+                gridMode: 'defocus',
+                lpiMax: 2000, lpiMin: 500,
+                defocusMin: 0, defocusMax: 6,
+                freq: 80, power: 80, speed: 200
+            });
+            const json = gen.encodeSettings(14, 9);
+            const data = JSON.parse(json);
+
+            expect(data.v).toBe(4);
+            expect(data.t).toBe('uv_defocus');
+            expect(data.l).toEqual([2000, 500, 14]);
+            expect(data.d).toEqual([0, 6, 9]);
+            expect(data.f).toBe(80);
+            expect(data.p).toBe(80);
+            expect(data.s).toBe(200);
+            expect(data.m).toBe('stainless_304');
+        });
+    });
+
+    describe('linspaceF', () => {
+        it('should generate fractional evenly spaced values', () => {
+            expect(generator.linspaceF(0, 6, 9)).toEqual([0, 0.75, 1.5, 2.25, 3, 3.75, 4.5, 5.25, 6]);
+        });
+
+        it('should round to given decimals', () => {
+            expect(generator.linspaceF(0, 1, 3, 2)).toEqual([0, 0.5, 1]);
+        });
+    });
+
+    describe('defocus-axis grid', () => {
+        const gen = new TestGridGenerator({
+            activeDevice: 'f2_ultra_uv',
+            activeLaserType: 'uv',
+            gridMode: 'defocus',
+            lpiMax: 2000, lpiMin: 500,
+            defocusMin: 0, defocusMax: 6,
+            freq: 80, power: 80, speed: 200
+        });
+
+        it('should report defocus mode and a per-row defocus axis in gridInfo', () => {
+            const { gridInfo } = gen.generateBusinessCardGrid();
+            expect(gridInfo.gridMode).toBe('defocus');
+            expect(Array.isArray(gridInfo.defocusValues)).toBe(true);
+            expect(gridInfo.defocusValues.length).toBe(gridInfo.numRows);
+            // Frequency held fixed across rows
+            const uniqueFreqs = new Set(gridInfo.freqValues);
+            expect(uniqueFreqs.size).toBe(1);
+        });
+
+        it('should bake a varying per-cell defocus_distance into the profiles', () => {
+            const { xcs } = gen.generateBusinessCardGrid();
+            const parsed = JSON.parse(xcs);
+            const displaySettings = parsed.device.data.value[0][1].displays.value;
+            const distances = new Set();
+            for (const [, ds] of displaySettings) {
+                const cz = ds?.data?.FILL_VECTOR_ENGRAVING?.parameter?.customize;
+                if (cz && cz.defocus === true && typeof cz.defocus_distance === 'number') {
+                    distances.add(cz.defocus_distance);
+                }
+            }
+            // Multiple distinct focus distances proves the Y axis sweeps defocus
+            expect(distances.size).toBeGreaterThan(1);
+            expect(distances.has(6)).toBe(true);
+        });
     });
 
     describe('createDisplaySettings', () => {

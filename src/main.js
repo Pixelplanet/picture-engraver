@@ -3088,6 +3088,14 @@ function updateTestGridUI() {
 
     if (isMopaLike) {
         if (elMopaControl) elMopaControl.style.display = '';
+        const elUvModeControl = document.getElementById('uvGridModeControl');
+        if (elUvModeControl) elUvModeControl.style.display = 'none';
+        const btnXcsMopa = document.getElementById('btnGenerateGrid');
+        if (btnXcsMopa) { btnXcsMopa.disabled = false; btnXcsMopa.title = ''; }
+        const cntDefocusFixedM = document.getElementById('cntDefocusFixed');
+        const cntDefocusRangeM = document.getElementById('cntDefocusRange');
+        if (cntDefocusFixedM) cntDefocusFixedM.style.display = '';
+        if (cntDefocusRangeM) cntDefocusRangeM.style.display = 'none';
 
         const mode = elFixedParam ? elFixedParam.value : 'frequency';
 
@@ -3148,12 +3156,18 @@ function updateTestGridUI() {
     } else {
         // UV Mode
         if (elMopaControl) elMopaControl.style.display = 'none';
+        const elUvModeControl = document.getElementById('uvGridModeControl');
+        const elUvMode = document.getElementById('gridUvMode');
+        const elUvModeHint = document.getElementById('gridUvModeHint');
+        if (elUvModeControl) elUvModeControl.style.display = '';
+        const uvMode = elUvMode ? elUvMode.value : 'standard';
+        const isDefocusGrid = uvMode === 'defocus';
 
         // Restore UV default values into custom grid inputs
         const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
         setVal('gridFreqMin', 40);
         setVal('gridFreqMax', 90);
-        setVal('gridFreqFixed', 40);
+        setVal('gridFreqFixed', 80);
         setVal('gridLpiFixed', 1000);
         setVal('gridPowerMin', 10);
         setVal('gridPowerMax', 20);
@@ -3166,18 +3180,46 @@ function updateTestGridUI() {
         if (hFreq) hFreq.textContent = 'Frequency (kHz)';
         if (hLpi) hLpi.textContent = 'Lines/cm (LPC)';
 
-        // UV: Vary Freq & LPI. Fixed Power & Speed.
-        if (cntFreqRange) cntFreqRange.style.display = '';
-        if (cntFreqFixed) cntFreqFixed.style.display = 'none';
-
+        // LPC is always the X axis for UV grids
         if (cntLpiRange) cntLpiRange.style.display = '';
         if (cntLpiFixed) cntLpiFixed.style.display = 'none';
 
+        // Power & Speed are fixed for UV grids
         if (cntPowerRange) cntPowerRange.style.display = 'none';
         if (cntPowerFixed) cntPowerFixed.style.display = '';
-
         if (cntSpeedRange) cntSpeedRange.style.display = 'none';
         if (cntSpeedFixed) cntSpeedFixed.style.display = '';
+
+        // Defocus / Frequency axis toggling
+        const cntDefocusFixed = document.getElementById('cntDefocusFixed');
+        const cntDefocusRange = document.getElementById('cntDefocusRange');
+        const btnXcs = document.getElementById('btnGenerateGrid');
+
+        if (isDefocusGrid) {
+            // Y axis = defocus, frequency held fixed
+            if (hFreq) hFreq.textContent = 'Frequency (kHz) — fixed';
+            if (cntFreqRange) cntFreqRange.style.display = 'none';
+            if (cntFreqFixed) cntFreqFixed.style.display = '';
+            if (cntDefocusFixed) cntDefocusFixed.style.display = 'none';
+            if (cntDefocusRange) cntDefocusRange.style.display = '';
+            if (elUvModeHint) elUvModeHint.style.display = '';
+            // .xcs cannot store per-layer focus — force .xs only
+            if (btnXcs) {
+                btnXcs.disabled = true;
+                btnXcs.title = '.xcs cannot store per-layer focus. Use .xs for defocus grids.';
+            }
+        } else {
+            // Y axis = frequency (standard)
+            if (cntFreqRange) cntFreqRange.style.display = '';
+            if (cntFreqFixed) cntFreqFixed.style.display = 'none';
+            if (cntDefocusFixed) cntDefocusFixed.style.display = '';
+            if (cntDefocusRange) cntDefocusRange.style.display = 'none';
+            if (elUvModeHint) elUvModeHint.style.display = 'none';
+            if (btnXcs) {
+                btnXcs.disabled = false;
+                btnXcs.title = '';
+            }
+        }
     }
 }
 
@@ -3536,6 +3578,15 @@ function setupTestGrid() {
     const fixedParam = document.getElementById('gridFixedParam');
     if (fixedParam) {
         fixedParam.addEventListener('change', () => {
+            updateTestGridUI();
+            updateGridPreview();
+        });
+    }
+
+    // UV Grid Mode (standard vs defocus axis)
+    const uvModeParam = document.getElementById('gridUvMode');
+    if (uvModeParam) {
+        uvModeParam.addEventListener('change', () => {
             updateTestGridUI();
             updateGridPreview();
         });
@@ -4826,10 +4877,10 @@ function getCustomGridSettings() {
         return settings;
     } else {
         const gridMatEl = document.getElementById('gridMaterial');
-        // Standard UV Mapping
-        return {
-            freqMin: parseInt(document.getElementById('gridFreqMin').value),
-            freqMax: parseInt(document.getElementById('gridFreqMax').value),
+        const uvModeEl = document.getElementById('gridUvMode');
+        const uvMode = uvModeEl ? uvModeEl.value : 'standard';
+
+        const base = {
             lpiMin: parseInt(document.getElementById('gridLpiMin').value),
             lpiMax: parseInt(document.getElementById('gridLpiMax').value),
 
@@ -4847,6 +4898,29 @@ function getCustomGridSettings() {
             material: gridMatEl ? gridMatEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID),
             activeDevice: deviceId,
             activeLaserType: laserTypeId,
+        };
+
+        if (uvMode === 'defocus') {
+            // Defocus-axis grid: X = LPC, Y = defocus (mm), frequency held fixed.
+            const dMinEl = document.getElementById('gridDefocusMin');
+            const dMaxEl = document.getElementById('gridDefocusMax');
+            const clampDf = (v, def) => Math.max(0, Math.min(20, isNaN(v) ? def : v));
+            const freqFixedEl = document.getElementById('gridFreqFixed');
+            return {
+                ...base,
+                gridMode: 'defocus',
+                freq: parseInt(freqFixedEl ? freqFixedEl.value : 80) || 80,
+                defocusMin: clampDf(parseFloat(dMinEl ? dMinEl.value : 0), 0),
+                defocusMax: clampDf(parseFloat(dMaxEl ? dMaxEl.value : 6), 6),
+                exportFormat: 'xs',
+            };
+        }
+
+        // Standard UV Mapping
+        return {
+            ...base,
+            freqMin: parseInt(document.getElementById('gridFreqMin').value),
+            freqMax: parseInt(document.getElementById('gridFreqMax').value),
             defocus,
         };
     }
@@ -5017,7 +5091,8 @@ async function clientSideStandardGrid(deviceId, laserTypeId, laser, filename, fm
 
 async function generateCustomGridXCS(formatOverride) {
     const customSettings = getCustomGridSettings();
-    const fmt = formatOverride === 'xs' ? 'xs' : 'xcs';
+    // Defocus-axis grids require per-layer focus, which only .xs supports.
+    const fmt = (customSettings.gridMode === 'defocus' || formatOverride === 'xs') ? 'xs' : 'xcs';
     const ext = fmt;
 
     // Always regenerate to capture latest settings if reused
@@ -5236,8 +5311,7 @@ async function analyzeGridImage(img) {
         analyzerState.lpiValues = qrResult.lpiValues;
 
         // MOPA v3
-        if ((s.v >= 3 || s.ax) && s.t === 'mopa') {
-            analyzerState.numCols = s.c || 14;
+        if ((s.v >= 3 || s.ax) && s.t === 'mopa') {            analyzerState.numCols = s.c || 14;
             analyzerState.numRows = s.r || 9;
             analyzerState.xAxisLabel = qrResult.xAxisLabel;
             analyzerState.yAxisLabel = qrResult.yAxisLabel;
@@ -5254,12 +5328,27 @@ async function analyzeGridImage(img) {
                 <div class="detected-value"><span>Mode</span> <span>${(qrResult.gridMode || 'Flexible').toUpperCase()}</span></div>
                 <div class="detected-value"><span>Laser Type</span> <span>MOPA</span></div>
             `;
+        } else if (s.t === 'uv_defocus') {
+            // UV defocus-axis grid: X = LPC, Y = defocus (mm), frequency fixed.
+            analyzerState.isMopa = false;
+            analyzerState.numCols = s.l ? s.l[2] : 14;
+            analyzerState.numRows = s.d ? s.d[2] : 9;
+            analyzerState.xAxisLabel = qrResult.xAxisLabel;
+            analyzerState.yAxisLabel = qrResult.yAxisLabel;
+
+            const lpcRange = `${qrResult.lpiValues[0]} - ${qrResult.lpiValues[qrResult.lpiValues.length - 1]}`;
+            const dfVals = qrResult.defocusValues || qrResult.freqValues;
+            const dfRange = `${dfVals[0]} - ${dfVals[dfVals.length - 1]} mm`;
+
+            settingsDiv.innerHTML = `
+                <div class="detected-value"><span>LPC Range</span> <span>${lpcRange}</span></div>
+                <div class="detected-value"><span>Defocus Range</span> <span>${dfRange}</span></div>
+                <div class="detected-value"><span>Grid Size</span> <span>${analyzerState.numCols} × ${analyzerState.numRows}</span></div>
+                <div class="detected-value"><span>Fixed Frequency</span> <span>${qrResult.fixedFrequency ?? '?'} kHz</span></div>
+                <div class="detected-value"><span>Power / Speed</span> <span>${s.p ?? '?'}% / ${s.s ?? '?'} mm/s</span></div>
+                <div class="detected-value"><span>Mode</span> <span>DEFOCUS</span></div>
+            `;
         } else {
-            // Legacy
-            const type = s.type || s.t || 'uv';
-            analyzerState.isMopa = type === 'mopa';
-            analyzerState.numCols = s.lpi ? s.lpi[2] : 14;
-            analyzerState.numRows = s.freq ? s.freq[2] : 9;
 
             if (analyzerState.isMopa) {
                 analyzerState.mopaLpc = s.d || s.l || 5000;

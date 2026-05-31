@@ -27,3 +27,21 @@ for (const c of COMBOS) {
     writeFileSync(path, buf);
     console.log(`wrote ${path}  (${buf.length} bytes)`);
 }
+
+// Defocus-axis grid sample (UV only — X = LPC, Y = defocus mm, fixed frequency).
+const defocusGen = new TestGridGenerator({
+    activeDevice: 'f2_ultra_uv',
+    activeLaserType: 'uv',
+    exportFormat: 'xs',
+    gridMode: 'defocus',
+    defocusMin: 0,
+    defocusMax: 6,
+    freq: 80,
+    power: 80,
+    speed: 200,
+});
+const { xs: defocusXs } = await defocusGen.generateBusinessCardGridXS();
+const defocusBuf = Buffer.isBuffer(defocusXs) ? defocusXs : Buffer.from(await defocusXs.arrayBuffer());
+const defocusPath = resolve(outDir, 'TestGrid_F2_Ultra_UV_Defocus.xs');
+writeFileSync(defocusPath, defocusBuf);
+console.log(`wrote ${defocusPath}  (${defocusBuf.length} bytes)`);

@@ -406,6 +406,18 @@
                     <option value="speed">Fixed Speed (Vary Power & Freq)</option>
                   </select>
                 </div>
+                <!-- UV Control: Grid Mode Selection -->
+                <div class="setting-group" id="uvGridModeControl" style="display:none;">
+                  <h3>Grid Mode</h3>
+                  <select class="input" id="gridUvMode">
+                    <option value="standard">Standard (Frequency × LPC)</option>
+                    <option value="defocus">Defocus (Defocus × LPC) — .xs only</option>
+                  </select>
+                  <p class="hint" id="gridUvModeHint" style="display:none; font-size:0.78em; color:#888; margin:6px 0 0;">
+                    Each row uses a different focus offset, baked into the .xs file.
+                    Export as <strong>.xs</strong> only — <strong>.xcs</strong> cannot store per-layer focus.
+                  </p>
+                </div>
                 <!-- Material Selection — dev mode only -->
                 <div class="setting-group dev-only" id="gridMaterialGroup" style="display:none;">
                   <h3>Material <span style="font-size:0.75em; color:#f90; font-weight:normal;">[DEV]</span></h3>
@@ -524,9 +536,21 @@
                       <label>Cross Hatch</label>
                       <input type="checkbox" class="checkbox" id="gridCrossHatch" checked>
                     </div>
-                    <div class="setting-row">
+                    <div class="setting-row" id="cntDefocusFixed">
                       <label>Defocus (mm, 0=off)</label>
                       <input type="number" class="input" id="gridDefocus" value="0" min="0" max="20" step="0.5">
+                    </div>
+                    <!-- Defocus Range (defocus-axis grid, hidden by default) -->
+                    <div id="cntDefocusRange" class="range-inputs-row" style="display:none">
+                      <label class="range-label">Defocus Range (mm)</label>
+                      <div class="setting-row">
+                        <label>Min</label>
+                        <input type="number" class="input" id="gridDefocusMin" value="0" min="0" max="20" step="0.5">
+                      </div>
+                      <div class="setting-row">
+                        <label>Max</label>
+                        <input type="number" class="input" id="gridDefocusMax" value="6" min="0" max="20" step="0.5">
+                      </div>
                     </div>
                   </div>
                 </div>
