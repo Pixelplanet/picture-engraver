@@ -405,6 +405,23 @@
                     <option value="flex">Custom axes (pick any 2)</option>
                   </select>
                 </div>
+                <!-- Presets: save / load / templates (Idea 4) -->
+                <div class="setting-group" id="gridPresetControl">
+                  <h3>Presets <span class="info-icon" title="Save your grid configurations or start from a curated template.">ⓘ</span></h3>
+                  <div class="preset-row">
+                    <select class="input" id="gridPresetSelect">
+                      <option value="">— Select a preset —</option>
+                    </select>
+                    <button class="btn btn-secondary btn-sm" id="btnPresetLoad" type="button">Load</button>
+                  </div>
+                  <div class="flex-actions-row">
+                    <button class="btn btn-secondary btn-sm" id="btnPresetSave" type="button" title="Save the current configuration">💾 Save…</button>
+                    <button class="btn btn-secondary btn-sm" id="btnPresetDelete" type="button" title="Delete the selected saved preset">🗑 Delete</button>
+                    <button class="btn btn-secondary btn-sm" id="btnPresetExport" type="button" title="Export the current configuration to a .json file">⬇ Export</button>
+                    <button class="btn btn-secondary btn-sm" id="btnPresetImport" type="button" title="Import presets from a .json file">⬆ Import</button>
+                    <input type="file" id="presetImportInput" accept=".json,application/json" hidden>
+                  </div>
+                </div>
                 <!-- MOPA Control: Fixed Parameter Selection -->
                 <div class="setting-group" id="mopaFixedControl" style="display:none;">
                   <h3>Fixed Parameter</h3>
@@ -431,6 +448,9 @@
                   <h3>Axis Picker <span class="info-icon" title="Choose exactly one X and one Y variable. Everything else is held constant.">ⓘ</span></h3>
                   <div id="flexAxisMatrix" class="flex-axis-matrix"></div>
                   <p class="hint" id="flexAxisHint" style="font-size:0.78em; color:#888; margin:8px 0 0;"></p>
+                  <div class="flex-actions-row">
+                    <button class="btn btn-secondary btn-sm" id="btnFlexSuggest" type="button" title="Fill ranges from calibrated material + laser defaults">✨ Suggest ranges</button>
+                  </div>
                 </div>
                 <!-- Material Selection — dev mode only -->
                 <div class="setting-group dev-only" id="gridMaterialGroup" style="display:none;">

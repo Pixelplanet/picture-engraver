@@ -2321,6 +2321,29 @@ select option {
   opacity: 0.5;
 }
 
+.flex-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.preset-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.preset-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.flex-actions-row .btn-sm {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
 /* Info Bar */
 .grid-info {
   display: flex;
