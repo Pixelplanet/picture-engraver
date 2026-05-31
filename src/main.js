@@ -10,6 +10,7 @@ import '@fontsource/inter/600.css';
 import '@fontsource/inter/700.css';
 
 import { TestGridGenerator } from './lib/test-grid-generator.js';
+import JSZip from 'jszip';
 import { SettingsStorage } from './lib/settings-storage.js';
 import { ImageProcessor } from './lib/image-processor.js';
 import { Pixelator } from './lib/pixelator.js';
@@ -3648,6 +3649,25 @@ function setupTestGrid() {
         });
     }
 
+    // 3rd-axis booklet (Idea 7)
+    const flexBookletEnable = document.getElementById('flexBookletEnable');
+    const flexBookletFields = document.getElementById('flexBookletFields');
+    if (flexBookletEnable && flexBookletFields) {
+        flexBookletEnable.addEventListener('change', () => {
+            flexBookletFields.style.display = flexBookletEnable.checked ? 'block' : 'none';
+            if (flexBookletEnable.checked) refreshBookletParamOptions();
+        });
+    }
+    const flexBookletParam = document.getElementById('flexBookletParam');
+    if (flexBookletParam) flexBookletParam.addEventListener('change', seedBookletRange);
+    const btnGenerateBooklet = document.getElementById('btnGenerateBooklet');
+    if (btnGenerateBooklet) {
+        btnGenerateBooklet.addEventListener('click', () => {
+            const fmtEl = document.getElementById('flexBookletFormat');
+            generateCustomGridBooklet(fmtEl ? fmtEl.value : 'xcs');
+        });
+    }
+
     // Grid presets + templates (Idea 4)
     const btnPresetLoad = document.getElementById('btnPresetLoad');
     if (btnPresetLoad) btnPresetLoad.addEventListener('click', loadSelectedPreset);
@@ -5000,6 +5020,7 @@ function setFlexRole(paramId, newRole, isMopa) {
     renderFlexMatrix(isMopa);
     updateTestGridUI();
     updateGridPreview();
+    if (typeof refreshBookletParamOptions === 'function') refreshBookletParamOptions();
 }
 
 function readFlexInputs(isMopa) {
@@ -5106,6 +5127,117 @@ function buildFlexConfig(isMopa) {
         constants: { ...flexState.constants },
         requiresXs,
     };
+}
+
+// ── 3rd-axis booklet (Idea 7) ───────────────────────────────────────────────
+// Populate the booklet variable dropdown with params that are NOT currently the
+// X or Y axis (and valid for the active laser class). Seeds Min/Max from the
+// current range/constant for the chosen variable.
+function refreshBookletParamOptions() {
+    const sel = document.getElementById('flexBookletParam');
+    if (!sel) return;
+    const isMopa = activeLaserClass() === 'mopa';
+    ensureFlexState(isMopa);
+    const prev = sel.value;
+    const avail = FLEX_PARAMS.filter(p => !(p.mopaOnly && !isMopa) && flexState.roles[p.id] === 'const');
+    sel.innerHTML = '';
+    avail.forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.id;
+        o.textContent = `${p.label} (${p.unit})`;
+        sel.appendChild(o);
+    });
+    if (prev && avail.some(p => p.id === prev)) sel.value = prev;
+    seedBookletRange();
+}
+
+function seedBookletRange() {
+    const sel = document.getElementById('flexBookletParam');
+    const minEl = document.getElementById('flexBookletMin');
+    const maxEl = document.getElementById('flexBookletMax');
+    if (!sel || !minEl || !maxEl || !sel.value) return;
+    const isMopa = activeLaserClass() === 'mopa';
+    ensureFlexState(isMopa);
+    const defaults = getFlexSuggestions(isMopa)[sel.value];
+    const r = (flexState.ranges && flexState.ranges[sel.value]) || (defaults && { min: defaults.range[0], max: defaults.range[1] });
+    if (r) {
+        minEl.value = r.min;
+        maxEl.value = r.max;
+    }
+}
+
+async function generateCustomGridBooklet(format) {
+    const hint = document.getElementById('flexBookletHint');
+    const setHint = (msg) => { if (hint) hint.textContent = msg; };
+
+    const base = getCustomGridSettings();
+    if (base.gridMode !== 'flexible') {
+        showToast('Booklets require the Custom Axes layout', 'error');
+        return;
+    }
+    const paramEl = document.getElementById('flexBookletParam');
+    const param = paramEl ? paramEl.value : '';
+    const meta = FLEX_PARAMS.find(p => p.id === param);
+    if (!param || !meta) { showToast('Pick a 3rd variable for the booklet', 'error'); return; }
+    if (param === base.flex.xParam || param === base.flex.yParam) {
+        showToast('The 3rd variable must differ from the X and Y axes', 'error');
+        return;
+    }
+
+    const min = parseFloat(document.getElementById('flexBookletMin').value);
+    const max = parseFloat(document.getElementById('flexBookletMax').value);
+    let steps = parseInt(document.getElementById('flexBookletSteps').value) || 3;
+    steps = Math.max(2, Math.min(12, steps));
+    if (isNaN(min) || isNaN(max)) { showToast('Enter a valid Min and Max', 'error'); return; }
+
+    // Per-page values for the swept variable
+    const values = [];
+    for (let i = 0; i < steps; i++) {
+        const t = steps === 1 ? 0 : i / (steps - 1);
+        let v = min + (max - min) * t;
+        v = meta.float ? Math.round(v * 10) / 10 : Math.round(v);
+        values.push(v);
+    }
+
+    // Defocus can only be baked into .xs; force it when relevant.
+    const fmt = (meta.requiresXs || base.exportFormat === 'xs' || format === 'xs') ? 'xs' : 'xcs';
+    const deviceId = state.settings.activeDevice || 'f2_ultra_uv';
+    const baseName = getSmartGridFilename('Booklet', base, deviceId);
+
+    setHint(`Building ${values.length} pages…`);
+    const zip = new JSZip();
+    try {
+        for (const v of values) {
+            const cfg = JSON.parse(JSON.stringify(base));
+            cfg.flex.constants[param] = v;
+            const generator = new TestGridGenerator(cfg);
+            const tag = `${meta.label.replace(/\s+/g, '')}_${v}${meta.unit.replace(/[^a-zA-Z]/g, '')}`;
+            const fname = `${baseName}_${tag}.${fmt}`;
+            if (fmt === 'xs') {
+                const { xs } = await generator.generateBusinessCardGridXS();
+                zip.file(fname, xs);
+            } else {
+                const { xcs } = generator.generateBusinessCardGrid();
+                zip.file(fname, xcs);
+            }
+        }
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const zipName = `${baseName}_${meta.label.replace(/\s+/g, '')}-sweep.zip`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = zipName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setHint(`Done — ${values.length} pages (${fmt}).`);
+        showToast(`Booklet ready: ${values.length} pages`, 'success');
+    } catch (err) {
+        Logger.error('Booklet generation failed', err);
+        setHint('Booklet generation failed.');
+        showToast('Booklet generation failed', 'error');
+    }
 }
 
 // ── Grid presets + template gallery (Idea 4) ────────────────────────────────

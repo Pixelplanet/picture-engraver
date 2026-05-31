@@ -455,6 +455,31 @@
                     <input type="checkbox" id="flexShowLabels" />
                     <span>Engrave axis tick labels along the edges <span class="info-icon" title="Burns the numeric value of each row/column next to the grid so the card is self-explanatory without the QR code.">ⓘ</span></span>
                   </label>
+                  <div id="flexBookletControl" style="margin-top:12px; border-top:1px solid #2a2a2a; padding-top:10px;">
+                    <label class="checkbox-row" style="display:flex; align-items:center; gap:8px; font-size:0.85em;">
+                      <input type="checkbox" id="flexBookletEnable" />
+                      <span>📚 Sweep a 3rd variable across pages (booklet) <span class="info-icon" title="Generates one full grid per value of a third variable and bundles them into a single .zip — explore three dimensions at once.">ⓘ</span></span>
+                    </label>
+                    <div id="flexBookletFields" style="display:none; margin-top:8px;">
+                      <div class="setting-row">
+                        <label>3rd variable</label>
+                        <select class="input" id="flexBookletParam"></select>
+                      </div>
+                      <div class="range-inputs-row">
+                        <div class="setting-row"><label>Min</label><input class="input" id="flexBookletMin" type="number" step="any" /></div>
+                        <div class="setting-row"><label>Max</label><input class="input" id="flexBookletMax" type="number" step="any" /></div>
+                        <div class="setting-row"><label>Pages</label><input class="input" id="flexBookletSteps" type="number" min="2" max="12" value="3" /></div>
+                      </div>
+                      <div class="flex-actions-row">
+                        <select class="input" id="flexBookletFormat" style="max-width:90px;">
+                          <option value="xcs">.xcs</option>
+                          <option value="xs">.xs</option>
+                        </select>
+                        <button class="btn btn-secondary btn-sm" id="btnGenerateBooklet" type="button">Generate booklet (.zip)</button>
+                      </div>
+                      <p class="hint" id="flexBookletHint" style="font-size:0.78em; color:#888; margin:6px 0 0;"></p>
+                    </div>
+                  </div>
                 </div>
                 <!-- Material Selection — dev mode only -->
                 <div class="setting-group dev-only" id="gridMaterialGroup" style="display:none;">
