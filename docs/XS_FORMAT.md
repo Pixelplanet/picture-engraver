@@ -701,3 +701,32 @@ the constants for the non-axis variables. As with the defocus grid, a flexible
 grid is treated as a visual-tuning aid: the X/Y read-outs are surfaced but the
 freq/LPC colour-map pipeline is only meaningfully seeded by the standard
 Frequency × LPC calibration grid.
+
+### 11.4 Productivity features layered on flexible grids
+
+These all build on `generateFlexibleGrid` and require no new `.xs` structure —
+they either drive the same generator with different inputs or add extra fill
+displays alongside the cells:
+
+- **Smart range suggestions** — `getFlexSuggestions()` (main.js) merges the
+  calibrated per-material, per-laser defaults from `material-registry.js` over
+  the static `getFlexDefaults` fallbacks, so a freshly opened grid is seeded with
+  sensible ranges for the active device.
+- **Self-labeled grids** (`settings.showAxisLabels`) — `renderPixelText()` draws
+  each row/column value with a 3×5 pixel font as **solid, fill-engravable
+  compound paths** placed in the left and bottom margins. They are emitted as
+  ordinary `PATH` displays with their own `displaySettings`, so they survive the
+  XCS→XS conversion unchanged and render solid in Studio (same
+  `FILL_VECTOR_ENGRAVING` rule as the cells — see §9.1).
+- **3rd-axis booklet** — the UI loops over N values of a third variable, clones
+  the flexible settings with that constant overridden, generates one grid per
+  value, and bundles them with JSZip. `.xs` pages (each already a zip) are nested
+  inside the outer `.zip`; defocus sweeps force `.xs` because per-layer focus is
+  v2-only (§10).
+- **Grid presets / templates** — portable JSON snapshots of the axis roles,
+  ranges, constants and common layout fields; curated built-in templates are
+  filtered by the active laser class. Pure UI state, no file-format impact.
+- **Progressive refine** — after a preview the user marks the winning cell and a
+  zoom width; the X/Y ranges are rebuilt as a tight neighbourhood around that
+  cell's values (`center ± step × k`, clamped to sane bounds, power capped at
+  100) and the grid re-renders for a fine-tuning pass.
