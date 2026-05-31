@@ -2233,6 +2233,94 @@ select option {
   font-weight: 500;
 }
 
+/* ── Axis Picker Matrix (flexible test grids) ─────────────────────────────── */
+.flex-axis-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.flex-axis-row {
+  display: grid;
+  grid-template-columns: 84px auto 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.flex-axis-row.is-axis {
+  border-color: var(--accent-primary, #ff6b35);
+}
+
+.flex-axis-row .flex-axis-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.flex-axis-row .flex-axis-name small {
+  display: block;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.flex-role-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.flex-role-toggle button {
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  cursor: pointer;
+  min-width: 26px;
+}
+
+.flex-role-toggle button + button {
+  border-left: 1px solid var(--border-primary);
+}
+
+.flex-role-toggle button.active {
+  background: var(--accent-primary, #ff6b35);
+  color: #fff;
+}
+
+.flex-role-toggle button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.flex-axis-values {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.flex-axis-values .input {
+  width: 64px;
+  flex-shrink: 0;
+}
+
+.flex-axis-values .flex-range-sep {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.flex-axis-row.is-disabled {
+  opacity: 0.5;
+}
+
 /* Info Bar */
 .grid-info {
   display: flex;

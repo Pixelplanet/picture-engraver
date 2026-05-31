@@ -176,6 +176,101 @@ describe('TestGridGenerator', () => {
         });
     });
 
+    describe('flexible (any-2-axis) grid', () => {
+        const flexUV = (flex) => new TestGridGenerator({
+            activeDevice: 'f2_ultra_uv',
+            activeLaserType: 'uv',
+            gridMode: 'flexible',
+            cellSize: 5, cellGap: 1,
+            flex,
+        });
+
+        it('should sweep the chosen X and Y params and hold the rest constant', () => {
+            const gen = flexUV({
+                xParam: 'power', yParam: 'speed',
+                ranges: { power: { min: 10, max: 80 }, speed: { min: 200, max: 1500 } },
+                constants: { frequency: 80, power: 70, speed: 425, lpc: 1000, defocus: 0, pulseWidth: 80 },
+            });
+            const { gridInfo } = gen.generateBusinessCardGrid();
+            expect(gridInfo.gridMode).toBe('flexible');
+            expect(gridInfo.xParam).toBe('power');
+            expect(gridInfo.yParam).toBe('speed');
+            // X axis = power: distinct values across columns
+            expect(new Set(gridInfo.lpiValues).size).toBeGreaterThan(1);
+            // Y axis = speed: distinct values across rows
+            expect(new Set(gridInfo.freqValues).size).toBeGreaterThan(1);
+            expect(gridInfo.xAxisLabel).toContain('Power');
+            expect(gridInfo.yAxisLabel).toContain('Speed');
+        });
+
+        it('should bake per-cell defocus when defocus is an axis', () => {
+            const gen = flexUV({
+                xParam: 'frequency', yParam: 'defocus',
+                ranges: { frequency: { min: 40, max: 90 }, defocus: { min: 0, max: 6 } },
+                constants: { frequency: 80, power: 70, speed: 425, lpc: 1000, defocus: 0, pulseWidth: 80 },
+            });
+            const { xcs } = gen.generateBusinessCardGrid();
+            const parsed = JSON.parse(xcs);
+            const displaySettings = parsed.device.data.value[0][1].displays.value;
+            const distances = new Set();
+            for (const [, ds] of displaySettings) {
+                const cz = ds?.data?.FILL_VECTOR_ENGRAVING?.parameter?.customize;
+                if (cz && cz.defocus === true && typeof cz.defocus_distance === 'number') {
+                    distances.add(cz.defocus_distance);
+                }
+            }
+            expect(distances.size).toBeGreaterThan(1);
+        });
+
+        it('should encode a v6 flex QR payload and round-trip through analyzeImage', () => {
+            const gen = flexUV({
+                xParam: 'power', yParam: 'speed',
+                ranges: { power: { min: 10, max: 80 }, speed: { min: 200, max: 1500 } },
+                constants: { frequency: 80, power: 70, speed: 425, lpc: 1000, defocus: 0, pulseWidth: 80 },
+            });
+            const json = gen.encodeSettings(14, 9);
+            const data = JSON.parse(json);
+            expect(data.v).toBe(6);
+            expect(data.t).toBe('flex');
+            expect(data.x.p).toBe('power');
+            expect(data.y.p).toBe('speed');
+            expect(data.x.r).toEqual([10, 80]);
+            expect(data.y.r).toEqual([200, 1500]);
+            expect(data.c.f).toBe(80);
+            expect(data.c.l).toBe(1000);
+            expect(data.laser).toBe('uv');
+        });
+
+        it('should work for MOPA lasers with pulseWidth as an axis', () => {
+            const gen = new TestGridGenerator({
+                activeDevice: 'f2_ultra_mopa',
+                activeLaserType: 'mopa',
+                gridMode: 'flexible',
+                cellSize: 5, cellGap: 1,
+                flex: {
+                    xParam: 'pulseWidth', yParam: 'speed',
+                    ranges: { pulseWidth: { min: 2, max: 350 }, speed: { min: 200, max: 1200 } },
+                    constants: { frequency: 200, power: 14, speed: 400, lpc: 5000, defocus: 0, pulseWidth: 80 },
+                },
+            });
+            const { gridInfo } = gen.generateBusinessCardGrid();
+            expect(gridInfo.gridMode).toBe('flexible');
+            expect(new Set(gridInfo.lpiValues).size).toBeGreaterThan(1);
+            const json = gen.encodeSettings(gridInfo.numCols, gridInfo.numRows);
+            expect(JSON.parse(json).laser).toBe('mopa');
+        });
+
+        it('should guard against identical X and Y params', () => {
+            const gen = flexUV({
+                xParam: 'power', yParam: 'power',
+                ranges: { power: { min: 10, max: 80 } },
+                constants: { frequency: 80, power: 70, speed: 425, lpc: 1000, defocus: 0, pulseWidth: 80 },
+            });
+            const cfg = gen.resolveFlexConfig();
+            expect(cfg.xParam).not.toBe(cfg.yParam);
+        });
+    });
+
     describe('createDisplaySettings', () => {
         it('should create UV-like settings without mopaFrequency', () => {
             const settings = generator.createDisplaySettings(50, 1000, 70, 425, 1);

@@ -397,6 +397,14 @@
             <div class="custom-grid-layout">
 
               <div class="custom-grid-settings-panel">
+                <!-- Layout: Guided vs Custom Axes (any 2 variables) -->
+                <div class="setting-group" id="gridLayoutControl">
+                  <h3>Layout</h3>
+                  <select class="input" id="gridLayoutMode">
+                    <option value="guided">Guided presets</option>
+                    <option value="flex">Custom axes (pick any 2)</option>
+                  </select>
+                </div>
                 <!-- MOPA Control: Fixed Parameter Selection -->
                 <div class="setting-group" id="mopaFixedControl" style="display:none;">
                   <h3>Fixed Parameter</h3>
@@ -417,6 +425,12 @@
                     Each row uses a different focus offset, baked into the .xs file.
                     Export as <strong>.xs</strong> only — <strong>.xcs</strong> cannot store per-layer focus.
                   </p>
+                </div>
+                <!-- Custom Axes Matrix (rendered dynamically per laser type) -->
+                <div class="setting-group" id="flexAxisControl" style="display:none;">
+                  <h3>Axis Picker <span class="info-icon" title="Choose exactly one X and one Y variable. Everything else is held constant.">ⓘ</span></h3>
+                  <div id="flexAxisMatrix" class="flex-axis-matrix"></div>
+                  <p class="hint" id="flexAxisHint" style="font-size:0.78em; color:#888; margin:8px 0 0;"></p>
                 </div>
                 <!-- Material Selection — dev mode only -->
                 <div class="setting-group dev-only" id="gridMaterialGroup" style="display:none;">

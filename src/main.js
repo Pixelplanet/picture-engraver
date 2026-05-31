@@ -3067,6 +3067,40 @@ function updateTestGridUI() {
         if (elPasses) elPasses.innerHTML = '<strong>Passes:</strong> 1';
     }
 
+    // Grid layout mode: guided presets vs. custom axes (flexible)
+    const layoutModeEl = document.getElementById('gridLayoutMode');
+    const layoutMode = layoutModeEl ? layoutModeEl.value : 'guided';
+    const flexControl = document.getElementById('flexAxisControl');
+    // Guided-only param groups (hidden in custom-axes mode)
+    const guidedGroups = ['groupFreq', 'groupLpi', 'subGroupPower', 'subGroupSpeed',
+        'cntDefocusFixed', 'cntDefocusRange', 'mopaFixedControl', 'uvGridModeControl'];
+
+    if (layoutMode === 'flex') {
+        if (flexControl) flexControl.style.display = '';
+        guidedGroups.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+        renderFlexMatrix(isMopaLike);
+
+        // Force .xs when an axis requires per-layer focus (defocus)
+        const flex = buildFlexConfig(isMopaLike);
+        const btnXcsFlex = document.getElementById('btnGenerateGrid');
+        if (btnXcsFlex) {
+            if (flex.requiresXs) {
+                btnXcsFlex.disabled = true;
+                btnXcsFlex.title = '.xcs cannot store per-layer focus. Use .xs for defocus grids.';
+            } else {
+                btnXcsFlex.disabled = false;
+                btnXcsFlex.title = '';
+            }
+        }
+        return;
+    }
+
+    // Guided mode: ensure flex matrix hidden and guided groups restored
+    if (flexControl) flexControl.style.display = 'none';
+    ['groupFreq', 'groupLpi', 'subGroupPower', 'subGroupSpeed'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.style.display = '';
+    });
+
     // UI Elements
     const elMopaControl = document.getElementById('mopaFixedControl');
     const elFixedParam = document.getElementById('gridFixedParam');
@@ -3587,6 +3621,15 @@ function setupTestGrid() {
     const uvModeParam = document.getElementById('gridUvMode');
     if (uvModeParam) {
         uvModeParam.addEventListener('change', () => {
+            updateTestGridUI();
+            updateGridPreview();
+        });
+    }
+
+    // Grid layout mode (guided presets vs custom axes)
+    const layoutModeParam = document.getElementById('gridLayoutMode');
+    if (layoutModeParam) {
+        layoutModeParam.addEventListener('change', () => {
             updateTestGridUI();
             updateGridPreview();
         });
@@ -4810,6 +4853,182 @@ function drawSamplingMarkers(ctx, corners, numCols, numRows, qrStartCol, qrStart
     }
 }
 
+// ── Flexible (any-2-axis) test grid: Axis Picker Matrix ─────────────────────
+const FLEX_PARAMS = [
+    { id: 'frequency', label: 'Frequency', unit: 'kHz', float: false },
+    { id: 'power', label: 'Power', unit: '%', float: false },
+    { id: 'speed', label: 'Speed', unit: 'mm/s', float: false },
+    { id: 'lpc', label: 'Density', unit: 'lines/cm', float: false },
+    { id: 'defocus', label: 'Defocus', unit: 'mm', float: true, requiresXs: true },
+    { id: 'pulseWidth', label: 'Pulse Width', unit: 'ns', float: false, mopaOnly: true },
+];
+
+function getFlexDefaults(isMopa) {
+    if (isMopa) {
+        return {
+            frequency: { def: 200, range: [200, 1200] },
+            power: { def: 14, range: [10, 40] },
+            speed: { def: 400, range: [200, 1200] },
+            lpc: { def: 5000, range: [2000, 5000] },
+            defocus: { def: 0, range: [0, 6] },
+            pulseWidth: { def: 80, range: [2, 350] },
+        };
+    }
+    return {
+        frequency: { def: 80, range: [40, 90] },
+        power: { def: 70, range: [40, 90] },
+        speed: { def: 425, range: [200, 1500] },
+        lpc: { def: 1000, range: [500, 2000] },
+        defocus: { def: 0, range: [0, 6] },
+        pulseWidth: { def: 80, range: [2, 350] },
+    };
+}
+
+let flexState = null;
+let flexLaserClass = null; // 'mopa' | 'uv' — reseed when laser class changes
+
+function ensureFlexState(isMopa) {
+    const cls = isMopa ? 'mopa' : 'uv';
+    if (flexState && flexLaserClass === cls) return flexState;
+    const defs = getFlexDefaults(isMopa);
+    flexState = { roles: {}, ranges: {}, constants: {} };
+    FLEX_PARAMS.forEach(p => {
+        flexState.constants[p.id] = defs[p.id].def;
+        flexState.ranges[p.id] = { min: defs[p.id].range[0], max: defs[p.id].range[1] };
+        flexState.roles[p.id] = 'const';
+    });
+    // Sensible default axes (Speed × Power works for every laser)
+    flexState.roles.speed = 'x';
+    flexState.roles.power = 'y';
+    flexLaserClass = cls;
+    return flexState;
+}
+
+function setFlexRole(paramId, newRole, isMopa) {
+    ensureFlexState(isMopa);
+    if (newRole === 'const') {
+        flexState.roles[paramId] = 'const';
+    } else {
+        // newRole is 'x' or 'y' — swap with the current holder of that role
+        const holder = Object.keys(flexState.roles)
+            .find(k => k !== paramId && flexState.roles[k] === newRole);
+        const oldRole = flexState.roles[paramId];
+        flexState.roles[paramId] = newRole;
+        if (holder) {
+            flexState.roles[holder] = (oldRole === 'x' || oldRole === 'y') ? oldRole : 'const';
+        }
+    }
+    renderFlexMatrix(isMopa);
+    updateTestGridUI();
+    updateGridPreview();
+}
+
+function readFlexInputs(isMopa) {
+    ensureFlexState(isMopa);
+    FLEX_PARAMS.forEach(p => {
+        if (p.mopaOnly && !isMopa) return;
+        const role = flexState.roles[p.id];
+        const num = (el) => p.float ? parseFloat(el.value) : parseInt(el.value);
+        if (role === 'const') {
+            const el = document.getElementById(`flexConst_${p.id}`);
+            if (el && el.value !== '') flexState.constants[p.id] = num(el);
+        } else {
+            const minEl = document.getElementById(`flexMin_${p.id}`);
+            const maxEl = document.getElementById(`flexMax_${p.id}`);
+            if (minEl && minEl.value !== '') flexState.ranges[p.id].min = num(minEl);
+            if (maxEl && maxEl.value !== '') flexState.ranges[p.id].max = num(maxEl);
+        }
+    });
+}
+
+function renderFlexMatrix(isMopa) {
+    const container = document.getElementById('flexAxisMatrix');
+    if (!container) return;
+    ensureFlexState(isMopa);
+    const visible = FLEX_PARAMS.filter(p => !(p.mopaOnly && !isMopa));
+
+    container.innerHTML = '';
+    visible.forEach(p => {
+        const role = flexState.roles[p.id];
+        const row = document.createElement('div');
+        row.className = 'flex-axis-row' + (role !== 'const' ? ' is-axis' : '');
+
+        const name = document.createElement('div');
+        name.className = 'flex-axis-name';
+        name.innerHTML = `${p.label}<small>${p.unit}${p.requiresXs ? ' · .xs' : ''}</small>`;
+        row.appendChild(name);
+
+        const toggle = document.createElement('div');
+        toggle.className = 'flex-role-toggle';
+        ['x', 'y', 'const'].forEach(r => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = r === 'const' ? '•' : r.toUpperCase();
+            btn.title = r === 'const' ? 'Hold constant' : `Use as ${r.toUpperCase()} axis`;
+            if (role === r) btn.classList.add('active');
+            btn.addEventListener('click', () => setFlexRole(p.id, r, isMopa));
+            toggle.appendChild(btn);
+        });
+        row.appendChild(toggle);
+
+        const values = document.createElement('div');
+        values.className = 'flex-axis-values';
+        const step = p.float ? '0.5' : '1';
+        if (role === 'const') {
+            const inp = document.createElement('input');
+            inp.type = 'number'; inp.className = 'input'; inp.id = `flexConst_${p.id}`;
+            inp.step = step; inp.value = flexState.constants[p.id];
+            inp.addEventListener('input', () => { readFlexInputs(isMopa); updateGridPreview(); });
+            values.appendChild(inp);
+        } else {
+            const minI = document.createElement('input');
+            minI.type = 'number'; minI.className = 'input'; minI.id = `flexMin_${p.id}`;
+            minI.step = step; minI.value = flexState.ranges[p.id].min;
+            const sep = document.createElement('span'); sep.className = 'flex-range-sep'; sep.textContent = '→';
+            const maxI = document.createElement('input');
+            maxI.type = 'number'; maxI.className = 'input'; maxI.id = `flexMax_${p.id}`;
+            maxI.step = step; maxI.value = flexState.ranges[p.id].max;
+            [minI, maxI].forEach(i => i.addEventListener('input', () => { readFlexInputs(isMopa); updateGridPreview(); }));
+            values.appendChild(minI); values.appendChild(sep); values.appendChild(maxI);
+        }
+        row.appendChild(values);
+        container.appendChild(row);
+    });
+
+    const hint = document.getElementById('flexAxisHint');
+    if (hint) {
+        const xP = visible.find(p => flexState.roles[p.id] === 'x');
+        const yP = visible.find(p => flexState.roles[p.id] === 'y');
+        const needsXs = (xP && xP.requiresXs) || (yP && yP.requiresXs);
+        if (!xP || !yP) {
+            hint.textContent = 'Pick exactly one X and one Y variable.';
+        } else {
+            let txt = `X = ${xP.label}, Y = ${yP.label}. All other variables held constant.`;
+            if (needsXs) txt += ' Defocus axis → export as .xs only.';
+            hint.textContent = txt;
+        }
+    }
+}
+
+// Build the s.flex config consumed by TestGridGenerator.resolveFlexConfig().
+function buildFlexConfig(isMopa) {
+    readFlexInputs(isMopa);
+    const xP = FLEX_PARAMS.find(p => flexState.roles[p.id] === 'x');
+    const yP = FLEX_PARAMS.find(p => flexState.roles[p.id] === 'y');
+    const ranges = {};
+    FLEX_PARAMS.forEach(p => {
+        ranges[p.id] = { min: flexState.ranges[p.id].min, max: flexState.ranges[p.id].max };
+    });
+    const requiresXs = !!((xP && xP.requiresXs) || (yP && yP.requiresXs));
+    return {
+        xParam: xP ? xP.id : 'speed',
+        yParam: yP ? yP.id : 'power',
+        ranges,
+        constants: { ...flexState.constants },
+        requiresXs,
+    };
+}
+
 function getCustomGridSettings() {
     const deviceId = resolveDeviceId(state.settings.activeDevice || 'f2_ultra_uv');
     const laserTypeId = state.settings.activeLaserType || null;
@@ -4818,6 +5037,29 @@ function getCustomGridSettings() {
 
     const defocusEl = document.getElementById('gridDefocus');
     const defocus = defocusEl ? Math.max(0, Math.min(20, parseFloat(defocusEl.value) || 0)) : (state.settings.defocus || 0);
+
+    // Custom-axes (flexible) layout — pick any two variables as X/Y.
+    const layoutEl = document.getElementById('gridLayoutMode');
+    if (layoutEl && layoutEl.value === 'flex') {
+        const flex = buildFlexConfig(isMopaLike);
+        const gridMatEl = document.getElementById('gridMaterial');
+        return {
+            activeDevice: deviceId,
+            activeLaserType: laserTypeId,
+            gridMode: 'flexible',
+            flex,
+            cellSize: Math.max(1, Math.min(10, parseInt(document.getElementById('gridCellSize').value) || 5)),
+            cellGap: (() => {
+                const val = parseFloat(document.getElementById('gridCellGap').value);
+                return Math.max(0, Math.min(5, isNaN(val) ? 1 : val));
+            })(),
+            passes: parseInt(document.getElementById('gridPasses').value) || 1,
+            crossHatch: document.getElementById('gridCrossHatch').checked,
+            fillGaps: false,
+            material: gridMatEl ? gridMatEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID),
+            exportFormat: flex.requiresXs ? 'xs' : undefined,
+        };
+    }
 
     if (isMopaLike) {
         const fixedMode = document.getElementById('gridFixedParam') ? document.getElementById('gridFixedParam').value : 'frequency';
@@ -5013,7 +5255,12 @@ function getSmartGridFilename(prefix, settings, deviceId) {
     const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
     let name = `${prefix}_${deviceLabel}_${laserLabel}_${materialLabel}`;
 
-    if (isMopaLike) {
+    if (settings.gridMode === 'flexible' && settings.flex) {
+        const x = settings.flex.xParam, y = settings.flex.yParam;
+        const xr = (settings.flex.ranges && settings.flex.ranges[x]) || {};
+        const yr = (settings.flex.ranges && settings.flex.ranges[y]) || {};
+        name += `_${x}${xr.min}-${xr.max}_${y}${yr.min}-${yr.max}`;
+    } else if (isMopaLike) {
         name += `_S${settings.speedMin}-${settings.speedMax}_F${settings.freqMin}-${settings.freqMax}`;
     } else {
         name += `_LPC${settings.lpiMin}-${settings.lpiMax}_F${settings.freqMin}-${settings.freqMax}`;
@@ -5092,7 +5339,7 @@ async function clientSideStandardGrid(deviceId, laserTypeId, laser, filename, fm
 async function generateCustomGridXCS(formatOverride) {
     const customSettings = getCustomGridSettings();
     // Defocus-axis grids require per-layer focus, which only .xs supports.
-    const fmt = (customSettings.gridMode === 'defocus' || formatOverride === 'xs') ? 'xs' : 'xcs';
+    const fmt = (customSettings.gridMode === 'defocus' || customSettings.exportFormat === 'xs' || formatOverride === 'xs') ? 'xs' : 'xcs';
     const ext = fmt;
 
     // Always regenerate to capture latest settings if reused
@@ -5310,8 +5557,37 @@ async function analyzeGridImage(img) {
         analyzerState.freqValues = qrResult.freqValues;
         analyzerState.lpiValues = qrResult.lpiValues;
 
-        // MOPA v3
-        if ((s.v >= 3 || s.ax) && s.t === 'mopa') {            analyzerState.numCols = s.c || 14;
+        // Flexible (any-2-axis) grid — generic v6 payload.
+        if (s.t === 'flex') {
+            analyzerState.isMopa = (s.laser === 'mopa');
+            analyzerState.numCols = s.n || 14;
+            analyzerState.numRows = s.r || 9;
+            analyzerState.xAxisLabel = qrResult.xAxisLabel;
+            analyzerState.yAxisLabel = qrResult.yAxisLabel;
+
+            const xv = qrResult.lpiValues || [];
+            const yv = qrResult.freqValues || [];
+            const xRange = xv.length ? `${xv[0]} - ${xv[xv.length - 1]}` : '?';
+            const yRange = yv.length ? `${yv[0]} - ${yv[yv.length - 1]}` : '?';
+            const c = s.c || {};
+            const heldKeys = { f: 'Frequency', p: 'Power', s: 'Speed', l: 'Density', d: 'Defocus', pw: 'Pulse' };
+            const heldUnits = { f: 'kHz', p: '%', s: 'mm/s', l: 'LPC', d: 'mm', pw: 'ns' };
+            // Show constants except the two that are axes
+            const axisShort = { frequency: 'f', power: 'p', speed: 's', lpc: 'l', defocus: 'd', pulseWidth: 'pw' };
+            const xKey = axisShort[s.x?.p], yKey = axisShort[s.y?.p];
+            const constRows = Object.keys(heldKeys)
+                .filter(k => k !== xKey && k !== yKey && c[k] !== undefined && c[k] !== null)
+                .map(k => `<div class="detected-value"><span>${heldKeys[k]}</span> <span>${c[k]} ${heldUnits[k]}</span></div>`)
+                .join('');
+
+            settingsDiv.innerHTML = `
+                <div class="detected-value"><span>${qrResult.xAxisLabel}</span> <span>${xRange}</span></div>
+                <div class="detected-value"><span>${qrResult.yAxisLabel}</span> <span>${yRange}</span></div>
+                <div class="detected-value"><span>Grid Size</span> <span>${analyzerState.numCols} × ${analyzerState.numRows}</span></div>
+                ${constRows}
+                <div class="detected-value"><span>Mode</span> <span>CUSTOM AXES</span></div>
+            `;
+        } else if ((s.v >= 3 || s.ax) && s.t === 'mopa') {            analyzerState.numCols = s.c || 14;
             analyzerState.numRows = s.r || 9;
             analyzerState.xAxisLabel = qrResult.xAxisLabel;
             analyzerState.yAxisLabel = qrResult.yAxisLabel;

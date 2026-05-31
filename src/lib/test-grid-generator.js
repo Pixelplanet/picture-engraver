@@ -260,6 +260,29 @@ export class TestGridGenerator {
         const type = isMopaLike ? 'mopa' : 'uv';
         const material = s.material || 'stainless_304';
 
+        // Flexible (any-axis) grid — generic v6 payload for all laser types.
+        if (s.gridMode === 'flexible') {
+            const cfg = this.resolveFlexConfig();
+            return JSON.stringify({
+                v: 6,
+                t: 'flex',
+                x: { p: cfg.xParam, r: [cfg.xRange.min, cfg.xRange.max] },
+                y: { p: cfg.yParam, r: [cfg.yRange.min, cfg.yRange.max] },
+                c: {
+                    f: cfg.constants.frequency,
+                    p: cfg.constants.power,
+                    s: cfg.constants.speed,
+                    l: cfg.constants.lpc,
+                    d: cfg.constants.defocus,
+                    pw: cfg.constants.pulseWidth,
+                },
+                n: numCols,
+                r: numRows,
+                m: material,
+                laser: isMopaLike ? 'mopa' : 'uv',
+            });
+        }
+
         if (isMopaLike) {
             // MOPA Flexible Encoding (v4 — adds material)
             const mode = s.gridMode || 'frequency';
@@ -328,6 +351,31 @@ export class TestGridGenerator {
         if (code) {
             try {
                 const raw = JSON.parse(code.data);
+
+                // Flexible (any-axis) grid — generic v6 payload.
+                if (raw.t === 'flex') {
+                    const meta = this.getFlexParamMeta();
+                    const cols = raw.n || 14;
+                    const rows = raw.r || 9;
+                    const xMeta = meta[raw.x?.p] || { label: raw.x?.p || 'X', unit: '', float: false };
+                    const yMeta = meta[raw.y?.p] || { label: raw.y?.p || 'Y', unit: '', float: false };
+                    const xValues = xMeta.float ? this.linspaceF(raw.x.r[0], raw.x.r[1], cols) : this.linspace(raw.x.r[0], raw.x.r[1], cols);
+                    const yValues = yMeta.float ? this.linspaceF(raw.y.r[0], raw.y.r[1], rows) : this.linspace(raw.y.r[0], raw.y.r[1], rows);
+                    return {
+                        found: true,
+                        data: raw,
+                        version: raw.v,
+                        material: raw.m || 'stainless_304',
+                        lpiValues: xValues,
+                        freqValues: yValues,
+                        xAxisLabel: `${xMeta.label} (${xMeta.unit})`,
+                        yAxisLabel: `${yMeta.label} (${yMeta.unit})`,
+                        gridMode: 'flex',
+                        xParam: raw.x?.p,
+                        yParam: raw.y?.p,
+                        constants: raw.c,
+                    };
+                }
 
                 // MOPA v3/v4 Flexible
                 if ((raw.v >= 3 || raw.ax) && raw.t === 'mopa') {
@@ -464,6 +512,11 @@ export class TestGridGenerator {
         const s = this.settings;
         const canvasId = this.generateUUID();
         const now = Date.now();
+
+        // Flexible (any-axis) grid takes precedence for all laser types.
+        if (s.gridMode === 'flexible') {
+            return this.generateFlexibleGrid(canvasId, now);
+        }
 
         // FIXED QR CODE LOGIC (17mm x 17mm with 1mm gap)
         const QR_SIZE_MM = 17;
@@ -1000,6 +1053,248 @@ export class TestGridGenerator {
                 xAxisLabel: mode === 'speed' ? 'Power (%)' : 'Speed (mm/s)',
                 yAxisLabel: mode === 'frequency' ? 'Power (%)' : 'Frequency (kHz)',
                 gridMode: mode
+            }
+        };
+    }
+
+    // ── Flexible (any-axis) grid ───────────────────────────────────────────────
+    // Maps each user-facing variable to the underlying createDisplaySettings knob.
+    getFlexParamMeta() {
+        return {
+            frequency:  { label: 'Frequency',   unit: 'kHz',      knob: 'frequency',  float: false },
+            power:      { label: 'Power',        unit: '%',        knob: 'power',      float: false },
+            speed:      { label: 'Speed',        unit: 'mm/s',     knob: 'speed',      float: false },
+            lpc:        { label: 'LPC',          unit: 'lines/cm', knob: 'lpc',        float: false },
+            defocus:    { label: 'Defocus',      unit: 'mm',       knob: 'defocus',    float: true,  requiresXs: true },
+            pulseWidth: { label: 'Pulse Width',  unit: 'ns',       knob: 'pulseWidth', float: false, mopaOnly: true },
+        };
+    }
+
+    // Resolve the flexible-grid configuration (axes, ranges, constants) from
+    // settings, applying sensible per-laser defaults. Shared by the generator
+    // and the QR encoder so both agree on axis endpoints.
+    resolveFlexConfig() {
+        const s = this.settings;
+        const deviceId = resolveDeviceId(s.activeDevice || 'f2_ultra_uv');
+        const laserTypeId = s.activeLaserType || null;
+        const laser = getLaserConfig(deviceId, laserTypeId);
+        const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
+        const meta = this.getFlexParamMeta();
+
+        const flex = s.flex || {};
+        const pick = (v, fb) => (typeof v === 'number' && !isNaN(v)) ? v : fb;
+
+        const constants = {
+            frequency:  pick(flex.constants?.frequency,  pick(s.freq, isMopaLike ? 200 : 80)),
+            power:      pick(flex.constants?.power,      pick(s.power, isMopaLike ? 14 : 70)),
+            speed:      pick(flex.constants?.speed,      pick(s.speed, isMopaLike ? 400 : 425)),
+            lpc:        pick(flex.constants?.lpc,        pick(s.lpi, isMopaLike ? 5000 : 1000)),
+            defocus:    pick(flex.constants?.defocus,    pick(s.defocus, getDefaultDefocus(deviceId, laserTypeId))),
+            pulseWidth: pick(flex.constants?.pulseWidth, pick(s.pulseWidth, 80)),
+        };
+
+        const defRange = {
+            frequency:  [isMopaLike ? 200 : 40, isMopaLike ? 1200 : 90],
+            power:      [10, 80],
+            speed:      [200, 1500],
+            lpc:        [500, 2000],
+            defocus:    [0, 6],
+            pulseWidth: [2, 350],
+        };
+
+        let xParam = flex.xParam || 'speed';
+        let yParam = flex.yParam || (xParam === 'power' ? 'frequency' : 'power');
+        // Guard: axes must differ and must be valid for this laser
+        if (!meta[xParam]) xParam = 'speed';
+        if (!meta[yParam] || yParam === xParam) yParam = xParam === 'power' ? 'frequency' : 'power';
+
+        const getRange = (p) => {
+            const r = (flex.ranges && flex.ranges[p]) || {};
+            const d = defRange[p] || [0, 1];
+            return { min: pick(r.min, d[0]), max: pick(r.max, d[1]) };
+        };
+
+        return {
+            isMopaLike, laser, deviceId, laserTypeId, meta,
+            xParam, yParam,
+            xRange: getRange(xParam),
+            yRange: getRange(yParam),
+            constants,
+            requiresXs: !!(meta[xParam]?.requiresXs || meta[yParam]?.requiresXs),
+        };
+    }
+
+    // Build a flexible test grid: any two variables on X/Y, the rest constant.
+    // Works for every laser type (UV/IR/Blue and MOPA-like).
+    generateFlexibleGrid(canvasId, now) {
+        const s = this.settings;
+        const cfg = this.resolveFlexConfig();
+        const { isMopaLike, laser, meta, xParam, yParam, xRange, yRange, constants } = cfg;
+
+        const QR_SIZE_MM = 17;
+        const QR_GAP_MM = 1;
+
+        const availableWidth = s.cardWidth - (s.margin * 2);
+        const availableHeight = s.cardHeight - (s.margin * 2);
+        const totalCellSize = s.cellSize + s.cellGap;
+
+        let numCols = Math.floor((availableWidth + s.cellGap) / totalCellSize);
+        let numRows = Math.floor((availableHeight + s.cellGap) / totalCellSize);
+        if (numCols < 1) numCols = 1;
+        if (numRows < 1) numRows = 1;
+
+        // Axis values (defocus uses fractional spacing)
+        const axisVals = (param, range, steps) => meta[param].float
+            ? this.linspaceF(range.min, range.max, steps)
+            : this.linspace(range.min, range.max, steps);
+        const xValues = axisVals(xParam, xRange, numCols);
+        const yValues = axisVals(yParam, yRange, numRows);
+
+        // Layout / centering (same approach as the other grids)
+        const effectiveGridW = numCols * s.cellSize + (numCols - 1) * s.cellGap;
+        const effectiveGridH = numRows * s.cellSize + (numRows - 1) * s.cellGap;
+
+        const workspaceSize = this.getWorkspaceSize();
+        const cardOffsetX = (workspaceSize - s.cardWidth) / 2;
+        const cardOffsetY = (workspaceSize - s.cardHeight) / 2;
+        const contentOffsetX = s.margin + (availableWidth - effectiveGridW) / 2;
+        const contentOffsetY = s.margin + (availableHeight - effectiveGridH) / 2;
+        const globalOffsetX = cardOffsetX + contentOffsetX;
+        const globalOffsetY = cardOffsetY + contentOffsetY;
+
+        const colPitch = s.cellSize + s.cellGap;
+        const rowPitch = s.cellSize + s.cellGap;
+        const colsReserved = Math.ceil((QR_SIZE_MM + QR_GAP_MM) / colPitch);
+        const rowsReserved = Math.ceil((QR_SIZE_MM + QR_GAP_MM) / rowPitch);
+        const excStartCol = numCols - colsReserved;
+        const excStartRow = numRows - rowsReserved;
+
+        const qrX = globalOffsetX + effectiveGridW - QR_SIZE_MM;
+        const qrY = globalOffsetY + effectiveGridH - QR_SIZE_MM;
+
+        const displays = [];
+        const displaySettings = [];
+        const layerData = {};
+        let zOrder = 1;
+        let cellCount = 0;
+
+        const abbr = (p) => meta[p].label.charAt(0);
+
+        for (let row = 0; row < numRows; row++) {
+            for (let col = 0; col < numCols; col++) {
+                if (col >= excStartCol && row >= excStartRow) continue;
+
+                // Per-cell knob values: constants overridden by the two axes
+                const knobs = { ...constants };
+                knobs[xParam] = xValues[col];
+                knobs[yParam] = yValues[row];
+
+                const x = globalOffsetX + col * colPitch;
+                const y = globalOffsetY + row * rowPitch;
+
+                const hue = (col / numCols) * 0.7;
+                const lightness = 0.3 + (row / numRows) * 0.4;
+                const rgb = this.hslToRgb(hue, 0.8, lightness);
+                const colorHex = this.colorToHex(rgb.r, rgb.g, rgb.b);
+                const colorInt = this.colorToInt(rgb.r, rgb.g, rgb.b);
+
+                const path = `M${x} ${y} L${x + s.cellSize} ${y} L${x + s.cellSize} ${y + s.cellSize} L${x} ${y + s.cellSize} Z`;
+                const id = this.generateUUID();
+                const displayName = `${abbr(xParam)}${xValues[col]} ${abbr(yParam)}${yValues[row]}`;
+
+                const display = this.createPathDisplay(id, displayName, colorHex, colorInt, x, y, s.cellSize, s.cellSize, zOrder, path);
+                displays.push(display);
+
+                const extraParams = { _defocus: knobs.defocus };
+                if (isMopaLike) {
+                    extraParams.mopaFrequency = knobs.frequency;
+                    extraParams.pulseWidth = knobs.pulseWidth;
+                    extraParams.processingLightSource = laser ? laser.lightSource : 'red';
+                    extraParams._planType = laser ? laser.planType : 'red';
+                }
+
+                displaySettings.push([id, this.createDisplaySettings(
+                    knobs.frequency, knobs.lpc, knobs.power, knobs.speed, s.passes || 1, extraParams
+                )]);
+                layerData[colorHex] = { name: displayName, order: zOrder++, visible: true };
+                cellCount++;
+            }
+        }
+
+        // QR Code
+        const qrData = this.encodeSettings(numCols, numRows);
+        const qrPath = this.generateQRPath(qrData, 0, 0, QR_SIZE_MM);
+        const qrDisplayId = this.generateUUID();
+        const qrDisplay = this.createPathDisplay(qrDisplayId, 'Settings QR Code', '#000000', 0, qrX, qrY, QR_SIZE_MM, QR_SIZE_MM, zOrder, qrPath, true);
+        displays.push(qrDisplay);
+        const qrExtra = { _crossHatch: !!s.qrCrossHatch };
+        if (isMopaLike) {
+            qrExtra.mopaFrequency = s.qrFrequency || 90;
+            qrExtra.pulseWidth = s.pulseWidth || 80;
+            qrExtra.processingLightSource = laser ? laser.lightSource : 'red';
+            qrExtra._planType = laser ? laser.planType : 'red';
+        }
+        displaySettings.push([qrDisplayId, this.createDisplaySettings(s.qrFrequency || 90, s.qrLpi || 2500, s.qrPower || 17.5, s.qrSpeed || 150, 1, qrExtra)]);
+        layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
+
+        const extId = laser ? laser.extId : 'GS009-CLASS-4';
+        const extName = laser ? laser.extName : 'F2 Ultra UV';
+        const lightSource = laser ? laser.lightSource : 'uv';
+
+        const xcs = {
+            canvasId,
+            canvas: [{
+                id: canvasId,
+                title: `Flex ${meta[xParam].label}×${meta[yParam].label}`,
+                layerData,
+                groupData: {},
+                displays
+            }],
+            extId, extName,
+            version: '1.3.6',
+            created: now,
+            modify: now,
+            device: {
+                id: extId,
+                power: laser ? laser.powerLevels : [5],
+                data: {
+                    dataType: 'Map',
+                    value: [[canvasId, {
+                        mode: 'LASER_PLANE',
+                        data: { LASER_PLANE: { material: getXtoolMaterialId(this.settings.material || DEFAULT_MATERIAL_ID), lightSourceMode: lightSource, thickness: isMopaLike ? 0 : 117, isProcessByLayer: false, pathPlanning: 'auto', fillPlanning: 'separate' } },
+                        displays: { dataType: 'Map', value: displaySettings }
+                    }]]
+                },
+                materialList: [],
+                materialTypeList: [],
+                customProjectData: { tangentialCuttingUuids: [], flyCutUuid2CanvasIds: {} }
+            }
+        };
+
+        return {
+            xcs: JSON.stringify(xcs),
+            gridInfo: {
+                width: s.cardWidth,
+                height: s.cardHeight,
+                numCols, numRows,
+                totalCells: cellCount,
+                qrData,
+                qrSize: QR_SIZE_MM,
+                qrX, qrY,
+                gapX: s.cellGap,
+                gapY: s.cellGap,
+                effectiveGridW,
+                effectiveGridH,
+                globalOffsetX,
+                globalOffsetY,
+                excStartCol,
+                excStartRow,
+                lpiValues: xValues,
+                freqValues: yValues,
+                xAxisLabel: `${meta[xParam].label} (${meta[xParam].unit})`,
+                yAxisLabel: `${meta[yParam].label} (${meta[yParam].unit})`,
+                gridMode: 'flexible',
+                xParam, yParam
             }
         };
     }

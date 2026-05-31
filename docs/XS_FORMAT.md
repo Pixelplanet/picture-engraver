@@ -643,3 +643,61 @@ The analyzer recognises `uv_defocus` and reads out the LPC and defocus ranges,
 but intentionally does **not** auto-build a colour map from it: a focus sweep is
 a visual-tuning aid, and feeding defocus values into the freq/LPC-coupled colour
 map would mislabel downstream engraving settings.
+
+## 11. Flexible (any-2-axis) test grids
+
+The custom test-grid generator can place **any two** of the six per-layer
+variables on the X and Y axes and hold the rest constant — for **every** laser
+type (UV/IR/Blue and MOPA-like). This is implemented by a single unified engine
+(`generateFlexibleGrid`) that reuses the same centering, QR-exclusion and
+`createDisplaySettings` baking logic as the rigid grids.
+
+### 11.1 Variables and how they map to a layer
+
+| User variable | Unit      | Lasers          | Maps to `createDisplaySettings` knob |
+|---------------|-----------|-----------------|--------------------------------------|
+| Frequency     | kHz       | all             | `frequency` (+ `mopaFrequency` on MOPA) |
+| Power         | %         | all             | `power` |
+| Speed         | mm/s      | all             | `speed` |
+| Density (LPC) | lines/cm  | all             | `lpi` |
+| Defocus       | mm        | all (**.xs only**) | `_defocus` → per-layer `defocus_distance` |
+| Pulse Width   | ns        | MOPA-type only  | `pulseWidth` |
+
+Choosing **Defocus** as an axis forces the export to `.xs`, because `.xcs`
+cannot store per-layer focus (see §10). The UI disables the `.xcs` button in
+that case; the generator sets `requiresXs` on the resolved config.
+
+### 11.2 QR payload (v6, `t: "flex"`)
+
+A single generic schema describes any axis combination. The two axis params are
+named, each with a `[min, max]` range, and all six variables are echoed as
+constants so the analyzer can display the held values:
+
+```json
+{
+  "v": 6,
+  "t": "flex",
+  "x": { "p": "power",  "r": [10, 80] },   // X axis param + range
+  "y": { "p": "speed",  "r": [200, 1500] },// Y axis param + range
+  "c": { "f": 80, "p": 70, "s": 425, "l": 1000, "d": 0, "pw": 80 }, // constants
+  "n": 14,            // numCols
+  "r": 9,             // numRows
+  "m": "stainless_304",
+  "laser": "uv"       // "uv" | "mopa" (drives extId remap and bed size)
+}
+```
+
+Param short codes in `c`: `f`=frequency, `p`=power, `s`=speed, `l`=lpc (density),
+`d`=defocus, `pw`=pulseWidth. Axis param ids in `x.p`/`y.p` use the long names
+(`frequency`, `power`, `speed`, `lpc`, `defocus`, `pulseWidth`).
+
+Defocus axes use **fractional** spacing (`linspaceF`, 2 decimals); all other
+axes are integer-rounded (`linspace`).
+
+### 11.3 Analyzer behaviour
+
+The analyzer decodes `flex`, labels both axes from the param metadata, and shows
+the constants for the non-axis variables. As with the defocus grid, a flexible
+grid is treated as a visual-tuning aid: the X/Y read-outs are surfaced but the
+freq/LPC colour-map pipeline is only meaningfully seeded by the standard
+Frequency × LPC calibration grid.
