@@ -174,6 +174,54 @@ export class TestGridGenerator {
         };
     }
 
+    // Minimal 3×5 pixel font for rendering numeric axis tick labels as solid
+    // (fill-engravable) compound paths. Supports digits, '.', '-', and a space.
+    getPixelFont() {
+        if (this._pixelFont) return this._pixelFont;
+        const f = {
+            '0': ['111', '101', '101', '101', '111'],
+            '1': ['010', '110', '010', '010', '111'],
+            '2': ['111', '001', '111', '100', '111'],
+            '3': ['111', '001', '111', '001', '111'],
+            '4': ['101', '101', '111', '001', '001'],
+            '5': ['111', '100', '111', '001', '111'],
+            '6': ['111', '100', '111', '101', '111'],
+            '7': ['111', '001', '010', '010', '010'],
+            '8': ['111', '101', '111', '101', '111'],
+            '9': ['111', '101', '111', '001', '111'],
+            '.': ['000', '000', '000', '000', '010'],
+            '-': ['000', '000', '111', '000', '000'],
+            ' ': ['000', '000', '000', '000', '000'],
+        };
+        this._pixelFont = f;
+        return f;
+    }
+
+    // Render a numeric string as a compound dPath of filled pixel squares.
+    // Returns { dPath, width, height }. Origin (x,y) is the top-left of the text.
+    renderPixelText(text, x, y, px) {
+        const font = this.getPixelFont();
+        const advance = 4 * px; // 3 px glyph + 1 px spacing
+        let dPath = '';
+        let cursor = x;
+        for (const ch of String(text)) {
+            const glyph = font[ch] || font[' '];
+            for (let r = 0; r < 5; r++) {
+                for (let c = 0; c < 3; c++) {
+                    if (glyph[r][c] !== '1') continue;
+                    const px0 = cursor + c * px;
+                    const py0 = y + r * px;
+                    const px1 = px0 + px;
+                    const py1 = py0 + px;
+                    dPath += `M${px0} ${py0} L${px1} ${py0} L${px1} ${py1} L${px0} ${py1} Z`;
+                }
+            }
+            cursor += advance;
+        }
+        const width = Math.max(0, text.length * advance - px);
+        return { dPath, width, height: 5 * px };
+    }
+
     createDisplaySettings(frequency, lpi, power, speed, passes, extraParams = {}) {
         // Determine laser capabilities from extraParams or active laser config
         const hasMopaFreq = !!extraParams.mopaFrequency;
@@ -1236,6 +1284,49 @@ export class TestGridGenerator {
         }
         displaySettings.push([qrDisplayId, this.createDisplaySettings(s.qrFrequency || 90, s.qrLpi || 2500, s.qrPower || 17.5, s.qrSpeed || 150, 1, qrExtra)]);
         layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
+
+        // Self-labeled grid (Idea 2): engrave axis tick values along the left
+        // (Y values) and bottom (X values) edges. Opt-in via settings.showAxisLabels.
+        if (s.showAxisLabels) {
+            const px = 0.3; // mm per pixel
+            const labelH = 5 * px;
+            const fmt = (p, v) => meta[p].float ? (Math.round(v * 10) / 10).toFixed(1) : String(Math.round(v));
+
+            const labelExtra = { _crossHatch: false };
+            if (isMopaLike) {
+                labelExtra.mopaFrequency = s.qrFrequency || 90;
+                labelExtra.pulseWidth = s.pulseWidth || 80;
+                labelExtra.processingLightSource = laser ? laser.lightSource : 'red';
+                labelExtra._planType = laser ? laser.planType : 'red';
+            }
+            const labelSettings = () => this.createDisplaySettings(
+                s.qrFrequency || 90, s.qrLpi || 2500, s.qrPower || 17.5, s.qrSpeed || 150, 1, { ...labelExtra }
+            );
+            const pushLabel = (text, lx, ly) => {
+                const { dPath, width, height } = this.renderPixelText(text, lx, ly, px);
+                if (!dPath) return;
+                const lid = this.generateUUID();
+                displays.push(this.createPathDisplay(lid, `Label ${text}`, '#000000', 0, lx, ly, width, height, ++zOrder, dPath, true));
+                displaySettings.push([lid, labelSettings()]);
+            };
+
+            // X tick values centered below each column
+            const xLabelY = globalOffsetY + effectiveGridH + 0.6;
+            for (let col = 0; col < numCols; col++) {
+                const text = fmt(xParam, xValues[col]);
+                const w = Math.max(0, text.length * 4 * px - px);
+                const cx = globalOffsetX + col * colPitch + s.cellSize / 2 - w / 2;
+                pushLabel(text, cx, xLabelY);
+            }
+            // Y tick values right-aligned to the left of each row
+            for (let row = 0; row < numRows; row++) {
+                const text = fmt(yParam, yValues[row]);
+                const w = Math.max(0, text.length * 4 * px - px);
+                const lx = globalOffsetX - 0.6 - w;
+                const ly = globalOffsetY + row * rowPitch + s.cellSize / 2 - labelH / 2;
+                pushLabel(text, lx, ly);
+            }
+        }
 
         const extId = laser ? laser.extId : 'GS009-CLASS-4';
         const extName = laser ? laser.extName : 'F2 Ultra UV';

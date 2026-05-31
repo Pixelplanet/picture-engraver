@@ -269,6 +269,40 @@ describe('TestGridGenerator', () => {
             const cfg = gen.resolveFlexConfig();
             expect(cfg.xParam).not.toBe(cfg.yParam);
         });
+
+        it('should add edge tick-label displays when showAxisLabels is set', () => {
+            const base = {
+                xParam: 'power', yParam: 'speed',
+                ranges: { power: { min: 10, max: 80 }, speed: { min: 200, max: 1500 } },
+                constants: { frequency: 80, power: 70, speed: 425, lpc: 1000, defocus: 0, pulseWidth: 80 },
+            };
+            const plain = flexUV(base).generateBusinessCardGrid();
+            const labeledGen = new TestGridGenerator({
+                activeDevice: 'f2_ultra_uv', activeLaserType: 'uv',
+                gridMode: 'flexible', cellSize: 5, cellGap: 1,
+                showAxisLabels: true, flex: base,
+            });
+            const labeled = labeledGen.generateBusinessCardGrid();
+            const countDisplays = (xcs) => JSON.parse(xcs).canvas[0].displays.length;
+            // Labels add one display per row + one per column on top of the base grid.
+            const extra = countDisplays(labeled.xcs) - countDisplays(plain.xcs);
+            expect(extra).toBe(labeled.gridInfo.numCols + labeled.gridInfo.numRows);
+            // Every label is a fill display so it renders solid in .xs.
+            const named = JSON.parse(labeled.xcs).canvas[0].displays.filter(d => d.name.startsWith('Label '));
+            expect(named.length).toBeGreaterThan(0);
+            expect(named.every(d => d.isFill === true && d.isCompoundPath === true)).toBe(true);
+        });
+
+        it('renderPixelText emits solid pixel rects for digits and skips blanks', () => {
+            const gen = flexUV({ xParam: 'power', yParam: 'speed' });
+            const { dPath, width, height } = gen.renderPixelText('12', 0, 0, 0.3);
+            expect(dPath).toContain('M');
+            expect(dPath).toContain('Z');
+            expect(width).toBeGreaterThan(0);
+            expect(height).toBeCloseTo(1.5, 5);
+            // A space produces no geometry.
+            expect(gen.renderPixelText('   ', 0, 0, 0.3).dPath).toBe('');
+        });
     });
 
     describe('createDisplaySettings', () => {

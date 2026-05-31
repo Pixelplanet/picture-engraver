@@ -5177,6 +5177,7 @@ function snapshotGridConfig(name) {
         cellGap: parseFloat(document.getElementById('gridCellGap').value),
         passes: parseInt(document.getElementById('gridPasses').value) || 1,
         crossHatch: document.getElementById('gridCrossHatch').checked,
+        showAxisLabels: !!(document.getElementById('flexShowLabels') && document.getElementById('flexShowLabels').checked),
         material: matEl ? matEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID),
     };
 
@@ -5222,6 +5223,8 @@ function applyGridConfig(cfg) {
         setVal('gridPasses', cfg.common.passes);
         const ch = document.getElementById('gridCrossHatch');
         if (ch && typeof cfg.common.crossHatch === 'boolean') ch.checked = cfg.common.crossHatch;
+        const lbl = document.getElementById('flexShowLabels');
+        if (lbl && typeof cfg.common.showAxisLabels === 'boolean') lbl.checked = cfg.common.showAxisLabels;
         const matEl = document.getElementById('gridMaterial');
         if (matEl && cfg.common.material) {
             matEl.value = cfg.common.material;
@@ -5428,6 +5431,7 @@ function getCustomGridSettings() {
             activeLaserType: laserTypeId,
             gridMode: 'flexible',
             flex,
+            showAxisLabels: !!(document.getElementById('flexShowLabels') && document.getElementById('flexShowLabels').checked),
             cellSize: Math.max(1, Math.min(10, parseInt(document.getElementById('gridCellSize').value) || 5)),
             cellGap: (() => {
                 const val = parseFloat(document.getElementById('gridCellGap').value);
