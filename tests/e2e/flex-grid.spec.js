@@ -116,4 +116,53 @@ test.describe('Flexible test grid (Axis Picker Matrix)', () => {
             !/lasertools\.org|CORS|Failed to load resource|net::ERR/i.test(e));
         expect(appErrors).toEqual([]);
     });
+
+    test('modal tabs are siblings and the Analyze tab loads its drop zone', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('pictureEngraver_onboarding', 'completed');
+            localStorage.setItem('pictureEngraver_onboarding_testgrid', 'completed');
+            localStorage.setItem('pictureEngraverSettings', JSON.stringify({ activeDevice: 'f2_ultra_uv' }));
+        });
+
+        await page.goto('/');
+        await page.click('#btnTestGrid');
+
+        // Regression: the three tab panels must be direct siblings of .modal-body.
+        // A previous unbalanced <div> in the custom-grid booklet section nested
+        // #tabAnalyzer inside .custom-grid-layout, so the Analyze tab never loaded.
+        const parents = await page.evaluate(() =>
+            ['tabStandard', 'tabCustom', 'tabAnalyzer'].map(id => {
+                const el = document.getElementById(id);
+                return el && el.parentElement ? el.parentElement.className : null;
+            }));
+        for (const cls of parents) expect(cls).toContain('modal-body');
+
+        // Switching to the Analyze tab reveals its upload drop zone.
+        await page.click('button[data-modal-tab="analyzer"]');
+        await expect(page.locator('#tabAnalyzer')).toBeVisible();
+        await expect(page.locator('#analyzerDropZone')).toBeVisible();
+    });
+
+    test('axis tick labels render in the preview without clipping', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('pictureEngraver_onboarding', 'completed');
+            localStorage.setItem('pictureEngraver_onboarding_testgrid', 'completed');
+            localStorage.setItem('pictureEngraverSettings', JSON.stringify({ activeDevice: 'f2_ultra_uv' }));
+        });
+
+        await page.goto('/');
+        await page.click('#btnTestGrid');
+        await page.click('button[data-modal-tab="custom"]');
+        await page.selectOption('#gridLayoutMode', 'flex');
+
+        // Without labels the canvas hugs the 85mm card (×4 px/mm = 340px).
+        await page.click('#btnPreviewGrid');
+        const baseW = await page.evaluate(() => document.getElementById('gridPreviewCanvas').width);
+
+        // Enabling labels adds a left/bottom gutter so edge labels aren't clipped.
+        await page.check('#flexShowLabels');
+        await page.click('#btnPreviewGrid');
+        const labelW = await page.evaluate(() => document.getElementById('gridPreviewCanvas').width);
+        expect(labelW).toBeGreaterThan(baseW);
+    });
 });

@@ -446,6 +446,17 @@
                 <!-- Custom Axes Matrix (rendered dynamically per laser type) -->
                 <div class="setting-group" id="flexAxisControl" style="display:none;">
                   <h3>Axis Picker <span class="info-icon" title="Choose exactly one X and one Y variable. Everything else is held constant.">ⓘ</span></h3>
+                  <p class="flex-axis-intro">
+                    Build a grid from <strong>any two</strong> variables. Pick one
+                    <strong>X</strong> (columns) and one <strong>Y</strong> (rows); every other
+                    variable stays fixed at its <strong>•</strong> value. Axis variables show a
+                    <em>min&nbsp;→&nbsp;max</em> range; constant ones show a single value.
+                  </p>
+                  <div class="flex-axis-legend">
+                    <span><span class="flex-legend-chip chip-x">X</span> columns</span>
+                    <span><span class="flex-legend-chip chip-y">Y</span> rows</span>
+                    <span><span class="flex-legend-chip chip-const">•</span> hold constant</span>
+                  </div>
                   <div id="flexAxisMatrix" class="flex-axis-matrix"></div>
                   <p class="hint" id="flexAxisHint" style="font-size:0.78em; color:#888; margin:8px 0 0;"></p>
                   <div class="flex-actions-row">
@@ -477,6 +488,8 @@
                         </select>
                         <button class="btn btn-secondary btn-sm" id="btnGenerateBooklet" type="button">Generate booklet (.zip)</button>
                       </div>
+                    </div>
+                  </div>
                   <div id="flexRefineControl" style="margin-top:12px; border-top:1px solid #2a2a2a; padding-top:10px;">
                     <label class="checkbox-row" style="display:flex; align-items:center; gap:8px; font-size:0.85em;">
                       <input type="checkbox" id="flexRefineEnable" />

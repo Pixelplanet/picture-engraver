@@ -3649,6 +3649,13 @@ function setupTestGrid() {
         });
     }
 
+    // Axis tick labels toggle (Idea 2) — reflect immediately in the preview
+    const flexShowLabels = document.getElementById('flexShowLabels');
+    if (flexShowLabels) flexShowLabels.addEventListener('change', updateGridPreview);
+    // Cross-hatch also affects the engraved result — refresh the preview
+    const gridCrossHatchEl = document.getElementById('gridCrossHatch');
+    if (gridCrossHatchEl) gridCrossHatchEl.addEventListener('change', updateGridPreview);
+
     // Progressive refine: zoom into a winning cell (Idea 1)
     const flexRefineEnable = document.getElementById('flexRefineEnable');
     const flexRefineFields = document.getElementById('flexRefineFields');
@@ -5082,6 +5089,7 @@ function renderFlexMatrix(isMopa) {
             btn.type = 'button';
             btn.textContent = r === 'const' ? '•' : r.toUpperCase();
             btn.title = r === 'const' ? 'Hold constant' : `Use as ${r.toUpperCase()} axis`;
+            btn.classList.add('role-' + r);
             if (role === r) btn.classList.add('active');
             btn.addEventListener('click', () => setFlexRole(p.id, r, isMopa));
             toggle.appendChild(btn);
@@ -5163,7 +5171,10 @@ function flexPreviewGeometry(gridInfo, settings) {
     const effectiveGridH = gridInfo.effectiveGridH || (gridInfo.numRows * cellSize + (gridInfo.numRows - 1) * gapY);
     const startX = margin + (availableWidth - effectiveGridW) / 2;
     const startY = margin + (availableHeight - effectiveGridH) / 2;
-    return { scale, startX, startY, cellSize, gapX, gapY };
+    // Mirror the label gutter added by drawGridToCanvas so click→cell mapping
+    // and the highlight overlay stay aligned when axis labels are shown.
+    const padL = (settings.showAxisLabels && gridInfo.gridMode === 'flexible') ? 8 : 0;
+    return { scale, startX: startX + padL, startY, cellSize, gapX, gapY };
 }
 
 function onGridPreviewClick(e) {
@@ -6038,12 +6049,22 @@ function drawGridToCanvas(canvasId, settings) {
     const ctx = canvas.getContext('2d');
 
     const scale = 4; // pixels per mm
-    canvas.width = gridInfo.width * scale;
-    canvas.height = gridInfo.height * scale;
+
+    // When axis tick labels are enabled, widen the canvas with a gutter on the
+    // left (Y values) and bottom (X values) so the echoed labels aren't clipped
+    // — the engraved labels sit just outside the card outline.
+    const labelGutter = !!(settings.showAxisLabels && gridInfo.gridMode === 'flexible');
+    const padL = labelGutter ? 8 : 0;
+    const padB = labelGutter ? 5 : 0;
+
+    canvas.width = (gridInfo.width + padL) * scale;
+    canvas.height = (gridInfo.height + padB) * scale;
 
     // Background
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (padL) ctx.translate(padL * scale, 0);
 
     // Draw cells
     const margin = settings.margin || 1;
@@ -6081,10 +6102,11 @@ function drawGridToCanvas(canvasId, settings) {
             const y = (startY + row * (cellSize + gapY)) * scale;
             const size = cellSize * scale;
 
-            // Hue based on LPI (cols), Lightness based on Freq (rows)
-            const hue = (col / gridInfo.numCols) * 240;
-            const sat = 70;
-            const light = 40 + (row / gridInfo.numRows) * 40;
+            // Mirror the generator's cell colouring (hslToRgb: hue 0–0.7,
+            // sat 0.8, lightness 0.3–0.7) so the preview matches the output.
+            const hue = (col / gridInfo.numCols) * 0.7 * 360;
+            const sat = 80;
+            const light = (0.3 + (row / gridInfo.numRows) * 0.4) * 100;
 
             ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
             ctx.fillRect(x, y, size, size);
@@ -6114,6 +6136,34 @@ function drawGridToCanvas(canvasId, settings) {
         ctx.fillStyle = '#000';
         ctx.fillRect(qrX, qrY, qrSize, qrSize);
     }
+
+    // Axis tick labels (Idea 2) — draw a readable echo of the engraved labels so
+    // the preview reflects the "Engrave axis tick labels" option.
+    if (settings.showAxisLabels && gridInfo.gridMode === 'flexible' &&
+        Array.isArray(gridInfo.lpiValues) && Array.isArray(gridInfo.freqValues)) {
+        const xParam = gridInfo.xParam;
+        const yParam = gridInfo.yParam;
+        const floatParam = (p) => p === 'defocus';
+        const fmt = (p, v) => floatParam(p) ? (Math.round(v * 10) / 10).toFixed(1) : String(Math.round(v));
+        const fontPx = Math.max(7, Math.min(12, cellSize * scale * 0.32));
+        ctx.fillStyle = '#111';
+        ctx.font = `${fontPx}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const xLabelY = (startY + effectiveGridH + 0.4) * scale;
+        for (let col = 0; col < gridInfo.numCols; col++) {
+            const cx = (startX + col * (cellSize + gapX) + cellSize / 2) * scale;
+            ctx.fillText(fmt(xParam, gridInfo.lpiValues[col]), cx, xLabelY);
+        }
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let row = 0; row < gridInfo.numRows; row++) {
+            const cy = (startY + row * (cellSize + gapY) + cellSize / 2) * scale;
+            ctx.fillText(fmt(yParam, gridInfo.freqValues[row]), (startX - 0.6) * scale, cy);
+        }
+    }
+
+    if (padL) ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     return gridInfo;
 }

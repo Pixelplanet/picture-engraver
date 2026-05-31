@@ -872,7 +872,7 @@ select option {
 }
 
 .modal-xl {
-  max-width: 1000px;
+  max-width: 1160px;
 }
 
 .modal-header {
@@ -2122,13 +2122,13 @@ select option {
 
 .custom-grid-layout {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 360px 1fr;
   gap: var(--spacing-md);
   margin-top: var(--spacing-md);
-  align-items: start;
+  align-items: stretch;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 860px) {
   .custom-grid-layout {
     grid-template-columns: 1fr;
   }
@@ -2165,6 +2165,18 @@ select option {
   min-width: 0;
   position: sticky;
   top: var(--spacing-md);
+  align-self: start;
+  max-height: calc(100vh - 220px);
+}
+
+.custom-grid-preview-panel .grid-preview {
+  flex: 1 1 auto;
+  min-height: 360px;
+}
+
+.custom-grid-preview-panel .grid-preview canvas {
+  max-width: 100%;
+  max-height: 60vh;
 }
 
 .grid-settings-columns {
@@ -2240,12 +2252,57 @@ select option {
   gap: 6px;
 }
 
+.flex-axis-intro {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+
+.flex-axis-intro strong { color: var(--text-primary); }
+
+.flex-axis-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.flex-axis-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.flex-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.flex-legend-chip.chip-x { background: #ff6b35; }
+.flex-legend-chip.chip-y { background: #3b82f6; }
+.flex-legend-chip.chip-const {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-primary);
+}
+
 .flex-axis-row {
   display: grid;
-  grid-template-columns: 84px auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
-  padding: 6px;
+  padding: 6px 8px;
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-md);
   background: var(--bg-tertiary);
@@ -2259,6 +2316,8 @@ select option {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+  min-width: 0;
+  line-height: 1.2;
 }
 
 .flex-axis-row .flex-axis-name small {
@@ -2281,9 +2340,9 @@ select option {
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
-  padding: 4px 8px;
+  padding: 4px 7px;
   cursor: pointer;
-  min-width: 26px;
+  min-width: 22px;
 }
 
 .flex-role-toggle button + button {
@@ -2295,6 +2354,13 @@ select option {
   color: #fff;
 }
 
+.flex-role-toggle button.role-x.active { background: #ff6b35; }
+.flex-role-toggle button.role-y.active { background: #3b82f6; }
+.flex-role-toggle button.role-const.active {
+  background: var(--text-tertiary, #6b7280);
+  color: #fff;
+}
+
 .flex-role-toggle button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -2302,19 +2368,34 @@ select option {
 
 .flex-axis-values {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
   justify-content: flex-end;
 }
 
 .flex-axis-values .input {
-  width: 64px;
+  width: 50px;
   flex-shrink: 0;
+  padding-left: 6px;
+  padding-right: 6px;
+  text-align: center;
+}
+
+/* Remove number spinner arrows in the axis matrix to reclaim horizontal space */
+.flex-axis-values .input::-webkit-outer-spin-button,
+.flex-axis-values .input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.flex-axis-values .input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 .flex-axis-values .flex-range-sep {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .flex-axis-row.is-disabled {
@@ -2409,19 +2490,27 @@ select option {
   color: var(--accent-primary);
 }
 
-/* Tooltip Text */
+/* Tooltip Text — left-anchored so icons near the panel's left edge are not
+   clipped by the modal's horizontal overflow boundary. Wraps instead of one
+   long nowrap line. */
 .info-icon::after {
   content: attr(title);
   position: absolute;
-  bottom: 110%;
-  left: 50%;
-  transform: translateX(-50%) translateY(10px);
+  bottom: 150%;
+  left: -8px;
+  transform: translateY(10px);
   background: var(--bg-tertiary);
   color: var(--text-primary);
   padding: 8px 12px;
   border-radius: var(--radius-md);
-  white-space: nowrap;
+  white-space: normal;
+  width: max-content;
+  max-width: 240px;
   font-size: var(--font-size-xs);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: 1.35;
   border: 1px solid var(--border-primary);
   z-index: 1000;
   box-shadow: var(--shadow-lg);
@@ -2434,27 +2523,26 @@ select option {
 .info-icon:hover::after {
   opacity: 1;
   visibility: visible;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 
 /* Tooltip Arrow */
 .info-icon::before {
   content: '';
   position: absolute;
-  bottom: 110%;
-  left: 50%;
-  margin-left: -5px;
+  bottom: 150%;
+  left: 2px;
+  margin-left: 0;
   border-width: 5px;
   border-style: solid;
   border-color: var(--border-primary) transparent transparent transparent;
   width: 0;
   height: 0;
-  z-index: 1000;
+  z-index: 1001;
   opacity: 0;
   transition: opacity 0.2s;
   visibility: hidden;
   transform: translateY(10px);
-  /* Match text movement */
 }
 
 .info-icon:hover::before {
