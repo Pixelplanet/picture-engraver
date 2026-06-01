@@ -219,8 +219,8 @@
               <input type="number" class="input" id="settingPulseWidth" value="80" min="1">
             </div>
             <div class="setting-row" id="rowDefocus">
-              <label>Defocus (mm, 0=off)</label>
-              <input type="number" class="input" id="settingDefocus" value="4" min="0" max="20" step="0.5">
+              <label>Defocus (mm; 1–12, below 1 = off)</label>
+              <input type="number" class="input" id="settingDefocus" value="4" min="0" max="12" step="0.1">
             </div>
           </div>
 
@@ -490,31 +490,6 @@
                       </div>
                     </div>
                   </div>
-                  <div id="flexRefineControl" style="margin-top:12px; border-top:1px solid #2a2a2a; padding-top:10px;">
-                    <label class="checkbox-row" style="display:flex; align-items:center; gap:8px; font-size:0.85em;">
-                      <input type="checkbox" id="flexRefineEnable" />
-                      <span>🎯 Zoom into a winning cell (progressive calibration) <span class="info-icon" title="After a test burn, tell us which cell looked best and we'll rebuild the grid tightly around its X/Y values so the next run fine-tunes the result.">ⓘ</span></span>
-                    </label>
-                    <div id="flexRefineFields" style="display:none; margin-top:8px;">
-                      <p class="hint" style="font-size:0.78em; color:#888; margin:0 0 8px;">Click the winning cell in the preview, or enter its position. Row 1 / Col 1 is the top-left cell.</p>
-                      <div class="range-inputs-row">
-                        <div class="setting-row"><label>Col</label><input class="input" id="flexRefineCol" type="number" min="1" value="1" /></div>
-                        <div class="setting-row"><label>Row</label><input class="input" id="flexRefineRow" type="number" min="1" value="1" /></div>
-                        <div class="setting-row">
-                          <label>Zoom</label>
-                          <select class="input" id="flexRefineZoom">
-                            <option value="1">Tight (±1 cell)</option>
-                            <option value="2" selected>Medium (±2 cells)</option>
-                            <option value="3">Wide (±3 cells)</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div class="flex-actions-row">
-                        <button class="btn btn-secondary btn-sm" id="btnFlexRefine" type="button">Zoom into winner</button>
-                      </div>
-                      <p class="hint" id="flexRefineHint" style="font-size:0.78em; color:#888; margin:6px 0 0;"></p>
-                    </div>
-                  </div>
                 </div>
                 <!-- Material Selection — dev mode only -->
                 <div class="setting-group dev-only" id="gridMaterialGroup" style="display:none;">
@@ -635,19 +610,19 @@
                       <input type="checkbox" class="checkbox" id="gridCrossHatch" checked>
                     </div>
                     <div class="setting-row" id="cntDefocusFixed">
-                      <label>Defocus (mm, 0=off)</label>
-                      <input type="number" class="input" id="gridDefocus" value="0" min="0" max="20" step="0.5">
+                      <label>Defocus (mm; 1–12, below 1 = off)</label>
+                      <input type="number" class="input" id="gridDefocus" value="0" min="0" max="12" step="0.1">
                     </div>
                     <!-- Defocus Range (defocus-axis grid, hidden by default) -->
                     <div id="cntDefocusRange" class="range-inputs-row" style="display:none">
-                      <label class="range-label">Defocus Range (mm)</label>
+                      <label class="range-label">Defocus Range (mm; 1–12)</label>
                       <div class="setting-row">
                         <label>Min</label>
-                        <input type="number" class="input" id="gridDefocusMin" value="0" min="0" max="20" step="0.5">
+                        <input type="number" class="input" id="gridDefocusMin" value="1" min="0" max="12" step="0.1">
                       </div>
                       <div class="setting-row">
                         <label>Max</label>
-                        <input type="number" class="input" id="gridDefocusMax" value="6" min="0" max="20" step="0.5">
+                        <input type="number" class="input" id="gridDefocusMax" value="6" min="0" max="12" step="0.1">
                       </div>
                     </div>
                   </div>

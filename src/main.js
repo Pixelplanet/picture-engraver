@@ -28,7 +28,7 @@ import { multiGridPalette, initializeMultiGridPalette } from './lib/multi-grid-p
 import { GridImagePicker } from './lib/grid-image-picker.js';
 import { initFrequencyLimiter } from './lib/ui-enhancements.js';
 import { getMaterialsForLaser, getMaterialById, getMaterialDefaults, DEFAULT_MATERIAL_ID } from './lib/material-registry.js';
-import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey, isDeviceVisible, getDefaultDefocus } from './lib/device-registry.js';
+import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey, isDeviceVisible, getDefaultDefocus, normalizeDefocus } from './lib/device-registry.js';
 
 
 
@@ -3287,7 +3287,7 @@ function saveSettings() {
         whiteSpeed: parseInt(document.getElementById('settingWhiteSpeed').value),
         whitePower: parseInt(document.getElementById('settingWhitePower').value),
 
-        defocus: elements.settingDefocus ? parseFloat(elements.settingDefocus.value) || 0 : (state.settings.defocus || 0),
+        defocus: elements.settingDefocus ? normalizeDefocus(parseFloat(elements.settingDefocus.value)) : normalizeDefocus(state.settings.defocus),
     };
 
     SettingsStorage.save(state.settings);
@@ -3655,23 +3655,6 @@ function setupTestGrid() {
     // Cross-hatch also affects the engraved result — refresh the preview
     const gridCrossHatchEl = document.getElementById('gridCrossHatch');
     if (gridCrossHatchEl) gridCrossHatchEl.addEventListener('change', updateGridPreview);
-
-    // Progressive refine: zoom into a winning cell (Idea 1)
-    const flexRefineEnable = document.getElementById('flexRefineEnable');
-    const flexRefineFields = document.getElementById('flexRefineFields');
-    if (flexRefineEnable && flexRefineFields) {
-        flexRefineEnable.addEventListener('change', () => {
-            flexRefineFields.style.display = flexRefineEnable.checked ? 'block' : 'none';
-            if (flexRefineEnable.checked) updateGridPreview(); else { flexRefineSel = null; updateGridPreview(); }
-        });
-    }
-    const btnFlexRefine = document.getElementById('btnFlexRefine');
-    if (btnFlexRefine) btnFlexRefine.addEventListener('click', refineAroundWinner);
-    const gridPreviewCanvasEl = document.getElementById('gridPreviewCanvas');
-    if (gridPreviewCanvasEl) {
-        gridPreviewCanvasEl.addEventListener('click', onGridPreviewClick);
-        gridPreviewCanvasEl.style.cursor = 'crosshair';
-    }
 
     // 3rd-axis booklet (Idea 7)
     const flexBookletEnable = document.getElementById('flexBookletEnable');
@@ -4946,7 +4929,7 @@ function getFlexDefaults(isMopa) {
             power: { def: 14, range: [10, 40] },
             speed: { def: 400, range: [200, 1200] },
             lpc: { def: 5000, range: [2000, 5000] },
-            defocus: { def: 0, range: [0, 6] },
+            defocus: { def: 0, range: [1, 12] },
             pulseWidth: { def: 80, range: [2, 350] },
         };
     }
@@ -4955,7 +4938,7 @@ function getFlexDefaults(isMopa) {
         power: { def: 70, range: [40, 90] },
         speed: { def: 425, range: [200, 1500] },
         lpc: { def: 1000, range: [500, 2000] },
-        defocus: { def: 0, range: [0, 6] },
+        defocus: { def: 0, range: [1, 12] },
         pulseWidth: { def: 80, range: [2, 350] },
     };
 }
@@ -5152,140 +5135,6 @@ function buildFlexConfig(isMopa) {
         constants: { ...flexState.constants },
         requiresXs,
     };
-}
-
-// ── Progressive refine: zoom into a winning cell (Idea 1) ───────────────────
-let flexRefineCtx = null; // { gridInfo, settings } from the last flex preview
-let flexRefineSel = null; // { col, row } 0-based selection
-
-// Geometry shared with drawGridToCanvas, used to map canvas clicks → cells.
-function flexPreviewGeometry(gridInfo, settings) {
-    const scale = 4; // px per mm (matches drawGridToCanvas)
-    const margin = settings.margin || 1;
-    const cellSize = settings.cellSize || 5;
-    const gapX = gridInfo.gapX !== undefined ? gridInfo.gapX : (settings.cellGap || 1);
-    const gapY = gridInfo.gapY !== undefined ? gridInfo.gapY : (settings.cellGap || 1);
-    const availableWidth = gridInfo.width - margin * 2;
-    const availableHeight = gridInfo.height - margin * 2;
-    const effectiveGridW = gridInfo.effectiveGridW || (gridInfo.numCols * cellSize + (gridInfo.numCols - 1) * gapX);
-    const effectiveGridH = gridInfo.effectiveGridH || (gridInfo.numRows * cellSize + (gridInfo.numRows - 1) * gapY);
-    const startX = margin + (availableWidth - effectiveGridW) / 2;
-    const startY = margin + (availableHeight - effectiveGridH) / 2;
-    // Mirror the label gutter added by drawGridToCanvas so click→cell mapping
-    // and the highlight overlay stay aligned when axis labels are shown.
-    const padL = (settings.showAxisLabels && gridInfo.gridMode === 'flexible') ? 8 : 0;
-    return { scale, startX: startX + padL, startY, cellSize, gapX, gapY };
-}
-
-function onGridPreviewClick(e) {
-    if (!flexRefineCtx) return;
-    const enable = document.getElementById('flexRefineEnable');
-    if (!enable || !enable.checked) return;
-    const canvas = document.getElementById('gridPreviewCanvas');
-    if (!canvas) return;
-    const { gridInfo, settings } = flexRefineCtx;
-    const g = flexPreviewGeometry(gridInfo, settings);
-    const rect = canvas.getBoundingClientRect();
-    const cssX = e.clientX - rect.left;
-    const cssY = e.clientY - rect.top;
-    const px = cssX * (canvas.width / rect.width);
-    const py = cssY * (canvas.height / rect.height);
-    const mmX = px / g.scale;
-    const mmY = py / g.scale;
-    const col = Math.round((mmX - g.startX) / (g.cellSize + g.gapX));
-    const row = Math.round((mmY - g.startY) / (g.cellSize + g.gapY));
-    if (col < 0 || col >= gridInfo.numCols || row < 0 || row >= gridInfo.numRows) return;
-    // Skip the QR exclusion corner
-    if (gridInfo.excStartCol !== undefined && col >= gridInfo.excStartCol &&
-        gridInfo.excStartRow !== undefined && row >= gridInfo.excStartRow) return;
-    flexRefineSel = { col, row };
-    const colEl = document.getElementById('flexRefineCol');
-    const rowEl = document.getElementById('flexRefineRow');
-    if (colEl) colEl.value = col + 1;
-    if (rowEl) rowEl.value = row + 1;
-    drawRefineHighlight();
-    const hint = document.getElementById('flexRefineHint');
-    if (hint && gridInfo.lpiValues && gridInfo.freqValues) {
-        hint.textContent = `Selected ${gridInfo.xAxisLabel} ${gridInfo.lpiValues[col]}, ${gridInfo.yAxisLabel} ${gridInfo.freqValues[row]}`;
-    }
-}
-
-function drawRefineHighlight() {
-    if (!flexRefineCtx || !flexRefineSel) return;
-    const enable = document.getElementById('flexRefineEnable');
-    if (!enable || !enable.checked) return;
-    const canvas = document.getElementById('gridPreviewCanvas');
-    if (!canvas) return;
-    const { gridInfo, settings } = flexRefineCtx;
-    if (flexRefineSel.col >= gridInfo.numCols || flexRefineSel.row >= gridInfo.numRows) return;
-    const g = flexPreviewGeometry(gridInfo, settings);
-    const ctx = canvas.getContext('2d');
-    const x = (g.startX + flexRefineSel.col * (g.cellSize + g.gapX)) * g.scale;
-    const y = (g.startY + flexRefineSel.row * (g.cellSize + g.gapY)) * g.scale;
-    const size = g.cellSize * g.scale;
-    ctx.save();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#00e0ff';
-    ctx.strokeRect(x - 1, y - 1, size + 2, size + 2);
-    ctx.restore();
-}
-
-function refineAroundWinner() {
-    const hint = document.getElementById('flexRefineHint');
-    const setHint = (m) => { if (hint) hint.textContent = m; };
-    if (!flexRefineCtx) { showToast('Render a preview first', 'error'); return; }
-    const { gridInfo } = flexRefineCtx;
-    const isMopa = activeLaserClass() === 'mopa';
-
-    const colEl = document.getElementById('flexRefineCol');
-    const rowEl = document.getElementById('flexRefineRow');
-    let col = (parseInt(colEl && colEl.value) || 1) - 1;
-    let row = (parseInt(rowEl && rowEl.value) || 1) - 1;
-    col = Math.max(0, Math.min(gridInfo.numCols - 1, col));
-    row = Math.max(0, Math.min(gridInfo.numRows - 1, row));
-
-    const xParam = gridInfo.xParam;
-    const yParam = gridInfo.yParam;
-    const xVals = gridInfo.lpiValues || [];
-    const yVals = gridInfo.freqValues || [];
-    if (!xParam || !yParam || !xVals.length || !yVals.length) {
-        showToast('Refine needs a flexible grid preview', 'error');
-        return;
-    }
-    const k = parseInt(document.getElementById('flexRefineZoom').value) || 2;
-
-    ensureFlexState(isMopa);
-    readFlexInputs(isMopa);
-
-    const metaOf = (id) => FLEX_PARAMS.find(p => p.id === id) || { float: false };
-    const stepOf = (vals) => vals.length > 1 ? Math.abs(vals[1] - vals[0]) : Math.max(1, Math.abs(vals[0] || 1) * 0.1);
-
-    const narrow = (param, vals, idx) => {
-        const meta = metaOf(param);
-        const center = vals[idx];
-        const step = stepOf(vals);
-        let min = center - step * k;
-        let max = center + step * k;
-        if (min > max) { const t = min; min = max; max = t; }
-        if (param !== 'defocus') min = Math.max(0, min);
-        if (param === 'power') max = Math.min(100, max);
-        if (meta.float) { min = Math.round(min * 10) / 10; max = Math.round(max * 10) / 10; }
-        else { min = Math.round(min); max = Math.round(max); }
-        if (min === max) max = min + (meta.float ? 0.1 : 1);
-        flexState.ranges[param] = { min, max };
-        return { min, max };
-    };
-
-    const xr = narrow(xParam, xVals, col);
-    const yr = narrow(yParam, yVals, row);
-
-    flexRefineSel = null;
-    renderFlexMatrix(isMopa);
-    updateTestGridUI();
-    updateGridPreview();
-    const xl = metaOf(xParam).label, yl = metaOf(yParam).label;
-    setHint(`Zoomed: ${xl} ${xr.min}–${xr.max}, ${yl} ${yr.min}–${yr.max}. Re-export to fine-tune.`);
-    showToast('Grid zoomed around the winning cell', 'success');
 }
 
 // ── 3rd-axis booklet (Idea 7) ───────────────────────────────────────────────
@@ -5710,7 +5559,7 @@ function getCustomGridSettings() {
     const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
 
     const defocusEl = document.getElementById('gridDefocus');
-    const defocus = defocusEl ? Math.max(0, Math.min(20, parseFloat(defocusEl.value) || 0)) : (state.settings.defocus || 0);
+    const defocus = defocusEl ? normalizeDefocus(parseFloat(defocusEl.value)) : normalizeDefocus(state.settings.defocus);
 
     // Custom-axes (flexible) layout — pick any two variables as X/Y.
     const layoutEl = document.getElementById('gridLayoutMode');
@@ -5821,13 +5670,13 @@ function getCustomGridSettings() {
             // Defocus-axis grid: X = LPC, Y = defocus (mm), frequency held fixed.
             const dMinEl = document.getElementById('gridDefocusMin');
             const dMaxEl = document.getElementById('gridDefocusMax');
-            const clampDf = (v, def) => Math.max(0, Math.min(20, isNaN(v) ? def : v));
+            const clampDf = (v, def) => normalizeDefocus(isNaN(v) ? def : v);
             const freqFixedEl = document.getElementById('gridFreqFixed');
             return {
                 ...base,
                 gridMode: 'defocus',
                 freq: parseInt(freqFixedEl ? freqFixedEl.value : 80) || 80,
-                defocusMin: clampDf(parseFloat(dMinEl ? dMinEl.value : 0), 0),
+                defocusMin: clampDf(parseFloat(dMinEl ? dMinEl.value : 1), 1),
                 defocusMax: clampDf(parseFloat(dMaxEl ? dMaxEl.value : 6), 6),
                 exportFormat: 'xs',
             };
@@ -5852,14 +5701,6 @@ function updateGridPreview() {
         if (infoSize) infoSize.textContent = `${gridInfo.numCols} × ${gridInfo.numRows}`;
         const infoCells = document.getElementById('gridInfoCells');
         if (infoCells) infoCells.textContent = gridInfo.totalCells;
-    }
-
-    // Track context for the "zoom into winner" refine tool (Idea 1)
-    if (gridInfo && settings.gridMode === 'flexible') {
-        flexRefineCtx = { gridInfo, settings };
-        drawRefineHighlight();
-    } else {
-        flexRefineCtx = null;
     }
 }
 /*

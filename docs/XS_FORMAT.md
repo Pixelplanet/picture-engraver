@@ -602,10 +602,25 @@ engraved at a different focus offset in a single run.
 ### 10.1 Encoding rules (verified)
 - `defocus: false` ⇒ engrave at focus. Studio still expects a numeric
   `defocus_distance`; write `1` as the inert placeholder (matches Studio saves).
-- `defocus: true` ⇒ `defocus_distance` is the offset in millimetres
-  (fractional values such as `0.75`, `2.25` are accepted).
+- `defocus: true` ⇒ `defocus_distance` is the offset in millimetres.
 - The flag is per profile, so a grid that assigns a distinct profile to each
   cell can sweep focus across the grid.
+
+#### Application constraints (Picture Engraver)
+Although the format itself accepts any positive `defocus_distance`, this
+application normalises every defocus value through `normalizeDefocus()`
+(`src/lib/device-registry.js`) before it is written:
+
+- **Positive only**, valid range **1–12 mm**, snapped to **0.1 mm** increments.
+- **Anything below 1 mm is treated as OFF** — it is collapsed to `0`, which is
+  written as `defocus: false`, `defocus_distance: 1` (the inert placeholder).
+- Values above 12 mm are clamped to 12; non-finite/non-numeric input → OFF.
+
+This is applied consistently at every entry point: the admin/global defocus
+setting, the custom-grid fixed-defocus field, the defocus-axis range, the flex
+constants/axis, and the per-cell `_defocus` override. Because `.xs` carries the
+focus offset in the file, the legacy "raise focus by N mm" manual reminder is
+not shown for `.xs` exports.
 
 ### 10.2 Defocus-axis test grid (our generator)
 `TestGridGenerator` supports `gridMode: 'defocus'` for non-MOPA (UV / IR /

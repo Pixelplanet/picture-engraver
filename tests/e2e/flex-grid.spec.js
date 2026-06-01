@@ -67,7 +67,7 @@ test.describe('Flexible test grid (Axis Picker Matrix)', () => {
         expect(appErrors).toEqual([]);
     });
 
-    test('exposes presets, labels, booklet and progressive-refine controls', async ({ page }) => {
+    test('exposes presets, labels and booklet controls', async ({ page }) => {
         const errors = [];
         page.on('console', (msg) => { if (msg.type() === 'error') errors.push(msg.text()); });
         page.on('pageerror', (err) => errors.push(err.message));
@@ -103,14 +103,10 @@ test.describe('Flexible test grid (Axis Picker Matrix)', () => {
         const bookletParams = await page.locator('#flexBookletParam option').count();
         expect(bookletParams).toBeGreaterThan(0);
 
-        // Progressive refine: enable, render preview, set a winner, zoom in
-        await page.check('#flexRefineEnable');
-        await expect(page.locator('#flexRefineFields')).toBeVisible();
-        await page.click('#btnPreviewGrid');
-        await page.fill('#flexRefineCol', '2');
-        await page.fill('#flexRefineRow', '2');
-        await page.click('#btnFlexRefine');
-        await expect(page.locator('#flexRefineHint')).toContainText('Zoomed');
+        // Progressive-refine controls are removed for now (to be reworked into a
+        // dedicated Refinement tab) — they must not be present.
+        await expect(page.locator('#flexRefineEnable')).toHaveCount(0);
+        await expect(page.locator('#btnFlexRefine')).toHaveCount(0);
 
         const appErrors = errors.filter(e =>
             !/lasertools\.org|CORS|Failed to load resource|net::ERR/i.test(e));

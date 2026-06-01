@@ -358,6 +358,30 @@ export function getDefaultDefocus(deviceId, laserTypeId) {
 }
 
 /**
+ * Canonical defocus constraints for the .xs format.
+ * Defocus is a positive distance in millimetres, valid between 1 and 12mm in
+ * 0.1mm increments. Anything below 1mm is treated as OFF (0) — there is no
+ * "partial" defocus below the 1mm floor.
+ */
+export const DEFOCUS_MIN = 1;
+export const DEFOCUS_MAX = 12;
+export const DEFOCUS_STEP = 0.1;
+
+/**
+ * Normalise a raw defocus value to the canonical rules above.
+ * Returns 0 when the value is off (below the 1mm floor, NaN, or non-positive);
+ * otherwise clamps to [1, 12] and snaps to the nearest 0.1mm.
+ * @param {number} value
+ * @returns {number}
+ */
+export function normalizeDefocus(value) {
+    const n = typeof value === 'number' ? value : parseFloat(value);
+    if (!isFinite(n) || n < DEFOCUS_MIN) return 0;
+    const clamped = Math.min(DEFOCUS_MAX, n);
+    return Math.round(clamped * 10) / 10;
+}
+
+/**
  * Get the settingsKey for the active laser (used for material-registry lookups).
  * MOPA-type lasers share the 'mopa' key; UV uses 'uv'; others use their own.
  * @param {string} deviceId

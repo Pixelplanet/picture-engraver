@@ -21,7 +21,7 @@
 import JSZip from 'jszip';
 import { XCSGenerator } from './xcs-generator.js';
 import { getXtoolMaterialId, DEFAULT_MATERIAL_ID } from './material-registry.js';
-import { getLaserConfig, resolveDeviceId, getDefaultDefocus } from './device-registry.js';
+import { getLaserConfig, resolveDeviceId, getDefaultDefocus, normalizeDefocus } from './device-registry.js';
 
 const SCHEMA_VERSION = '2.0.0';
 const PROTOCOL = 'xcs-workspace-v2';
@@ -404,24 +404,28 @@ export class XSGenerator {
         const def = this.settings.defocus;
         // Boolean: just enable/disable using laser default distance
         if (typeof def === 'boolean') {
-            return def
-                ? { enabled: true, distance: getDefaultDefocus(deviceId, laserTypeId) || 1 }
-                : { enabled: false, distance: 1 };
+            if (!def) return { enabled: false, distance: 1 };
+            const d = normalizeDefocus(getDefaultDefocus(deviceId, laserTypeId));
+            return d > 0 ? { enabled: true, distance: d } : { enabled: false, distance: 1 };
         }
-        // Number: explicit distance (mm). 0 disables.
+        // Number: explicit distance (mm). Normalised to 1–12mm / 0.1 steps;
+        // anything below the 1mm floor disables defocus (treated as off).
         if (typeof def === 'number' && isFinite(def)) {
-            return def > 0
-                ? { enabled: true, distance: def }
+            const d = normalizeDefocus(def);
+            return d > 0
+                ? { enabled: true, distance: d }
                 : { enabled: false, distance: 1 };
         }
         // Object: { enabled, distance }
         if (def && typeof def === 'object') {
-            const enabled = !!def.enabled || (typeof def.distance === 'number' && def.distance > 0);
-            const distance = typeof def.distance === 'number' && def.distance > 0 ? def.distance : 1;
-            return { enabled, distance };
+            const d = normalizeDefocus(def.distance);
+            const enabled = (!!def.enabled || d > 0) && d > 0;
+            return enabled
+                ? { enabled: true, distance: d }
+                : { enabled: false, distance: 1 };
         }
         // Fallback to laser-default
-        const fallback = getDefaultDefocus(deviceId, laserTypeId);
+        const fallback = normalizeDefocus(getDefaultDefocus(deviceId, laserTypeId));
         return fallback > 0
             ? { enabled: true, distance: fallback }
             : { enabled: false, distance: 1 };

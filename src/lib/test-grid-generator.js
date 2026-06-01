@@ -7,7 +7,7 @@ import jsQR from 'jsqr';
 import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import { getXtoolMaterialId, DEFAULT_MATERIAL_ID } from './material-registry.js';
-import { getLaserConfig, getDeviceConfig, resolveDeviceId, getDefaultDefocus } from './device-registry.js';
+import { getLaserConfig, getDeviceConfig, resolveDeviceId, getDefaultDefocus, normalizeDefocus } from './device-registry.js';
 import { XSGenerator } from './xs-generator.js';
 
 export class TestGridGenerator {
@@ -253,9 +253,11 @@ export class TestGridGenerator {
         // Defocus injection (used by the .xs writer; harmless to xcs consumers).
         // A per-cell override (_defocus) takes precedence over the global setting,
         // enabling defocus-axis test grids where each row uses a different focus.
-        const defocusMm = typeof extraParams._defocus === 'number'
+        // Normalised to the canonical 1–12mm / 0.1mm rules; below 1mm is OFF.
+        const rawDefocus = typeof extraParams._defocus === 'number'
             ? extraParams._defocus
             : (typeof this.settings.defocus === 'number' ? this.settings.defocus : 0);
+        const defocusMm = normalizeDefocus(rawDefocus);
         if (defocusMm > 0) {
             customize.defocus = true;
             customize.defocus_distance = defocusMm;
@@ -1146,7 +1148,7 @@ export class TestGridGenerator {
             power:      [10, 80],
             speed:      [200, 1500],
             lpc:        [500, 2000],
-            defocus:    [0, 6],
+            defocus:    [1, 12],
             pulseWidth: [2, 350],
         };
 

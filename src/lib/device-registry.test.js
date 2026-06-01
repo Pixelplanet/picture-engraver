@@ -4,7 +4,8 @@ import {
     resolveDeviceId, getDeviceConfig, getLaserConfig,
     getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions,
     isVirtualDevice, getSettingsKey, getDeviceFamilies,
-    getDeviceFamiliesWithVisibility
+    getDeviceFamiliesWithVisibility,
+    normalizeDefocus, DEFOCUS_MIN, DEFOCUS_MAX, DEFOCUS_STEP
 } from './device-registry.js';
 
 describe('Device Registry', () => {
@@ -402,6 +403,54 @@ describe('Device Registry', () => {
             const virtualFamily = families.find(g => g.family.id === 'virtual');
             expect(virtualFamily.devices).toHaveLength(1);
             expect(virtualFamily.devices[0].id).toBe('svg_export');
+        });
+    });
+
+    // ── Defocus normalisation ───────────────────────────────────────────────
+    describe('normalizeDefocus', () => {
+        it('exposes the canonical 1–12mm / 0.1mm constants', () => {
+            expect(DEFOCUS_MIN).toBe(1);
+            expect(DEFOCUS_MAX).toBe(12);
+            expect(DEFOCUS_STEP).toBe(0.1);
+        });
+
+        it('treats anything below 1mm as off (0)', () => {
+            expect(normalizeDefocus(0)).toBe(0);
+            expect(normalizeDefocus(0.5)).toBe(0);
+            expect(normalizeDefocus(0.99)).toBe(0);
+        });
+
+        it('treats negative values as off (0)', () => {
+            expect(normalizeDefocus(-3)).toBe(0);
+        });
+
+        it('keeps valid values inside the 1–12mm range', () => {
+            expect(normalizeDefocus(1)).toBe(1);
+            expect(normalizeDefocus(4)).toBe(4);
+            expect(normalizeDefocus(12)).toBe(12);
+        });
+
+        it('clamps values above 12mm to 12', () => {
+            expect(normalizeDefocus(15)).toBe(12);
+            expect(normalizeDefocus(99)).toBe(12);
+        });
+
+        it('snaps to the nearest 0.1mm', () => {
+            expect(normalizeDefocus(4.06)).toBe(4.1);
+            expect(normalizeDefocus(4.04)).toBe(4);
+            expect(normalizeDefocus(2.55)).toBeCloseTo(2.6, 5);
+        });
+
+        it('returns 0 for non-finite / non-numeric input', () => {
+            expect(normalizeDefocus(NaN)).toBe(0);
+            expect(normalizeDefocus(Infinity)).toBe(0);
+            expect(normalizeDefocus(undefined)).toBe(0);
+            expect(normalizeDefocus('abc')).toBe(0);
+        });
+
+        it('parses numeric strings', () => {
+            expect(normalizeDefocus('5.5')).toBe(5.5);
+            expect(normalizeDefocus('0.3')).toBe(0);
         });
     });
 });
