@@ -170,6 +170,21 @@ export function createAdminRouter(adminSettings) {
             qrLpi: d.qrLpi,
             qrSize: d.qrSize,
             qrCrossHatch: d.qrCrossHatch,
+            // Grid defaults so the custom (flex) generator can seed its axes,
+            // ranges and constants from the admin-configured values.
+            lpiMin: d.lpiMin,
+            lpiMax: d.lpiMax,
+            freqMin: d.freqMin,
+            freqMax: d.freqMax,
+            speedMin: d.speedMin,
+            speedMax: d.speedMax,
+            power: d.power,
+            speed: d.speed,
+            lpi: d.lpi,
+            pulseWidth: d.pulseWidth,
+            defocus: d.defocus,
+            passes: d.passes,
+            gridMode: d.gridMode,
         });
     });
 

@@ -32,13 +32,13 @@ test('custom grid: flex picker, options consolidated, invert + fill-area work', 
     // Flex-only options (axis tick labels) are available in flex mode.
     await expect(page.locator('#optShowLabelsRow')).toBeVisible();
 
-    // Invert button on the Power (Y) axis swaps Start/End values.
-    const powerRow = page.locator('#flexAxisMatrix .flex-axis-row', { hasText: 'Power' });
-    const minBefore = await powerRow.locator('#flexMin_power').inputValue();
-    const maxBefore = await powerRow.locator('#flexMax_power').inputValue();
-    await powerRow.locator('.flex-range-sep').click();
-    await expect(powerRow.locator('#flexMin_power')).toHaveValue(maxBefore);
-    await expect(powerRow.locator('#flexMax_power')).toHaveValue(minBefore);
+    // Invert button on the Frequency (Y) axis swaps Start/End values.
+    const freqRow = page.locator('#flexAxisMatrix .flex-axis-row', { hasText: 'Frequency' });
+    const minBefore = await freqRow.locator('#flexMin_frequency').inputValue();
+    const maxBefore = await freqRow.locator('#flexMax_frequency').inputValue();
+    await freqRow.locator('.flex-range-sep').click();
+    await expect(freqRow.locator('#flexMin_frequency')).toHaveValue(maxBefore);
+    await expect(freqRow.locator('#flexMax_frequency')).toHaveValue(minBefore);
 
     // Fill-area toggle works without errors
     await page.check('#gridFillArea');

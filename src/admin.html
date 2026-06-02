@@ -598,7 +598,7 @@ function openModal(title, bodyHtml, onMount) {
 
 function openTestGridPreviewModal(gridInfo, xcsLength) {
   const settings = (savedSettings && savedSettings[activeLaser]) || (allSettings.testGridDefaults && allSettings.testGridDefaults[activeLaser]) || {};
-  const isMopa = !!gridInfo.gridMode; // MOPA grids include gridMode
+  const isMopa = ['power', 'speed', 'frequency'].includes(gridInfo.gridMode); // MOPA grids vary one of these
   const numCols = gridInfo.numCols || 0;
   const numRows = gridInfo.numRows || 0;
   const xVals = gridInfo.lpiValues || [];

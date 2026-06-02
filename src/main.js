@@ -2951,9 +2951,12 @@ function setupModals() {
     elements.btnTestGrid.addEventListener('click', () => {
         openModal(elements.testGridModal);
 
-        // Pull QR engraving settings from the admin portal so the QR code and
-        // axis tick labels are engraved with the configured parameters.
-        loadQrDefaults().then(() => { if (typeof updateGridPreview === 'function') updateGridPreview(); });
+        // Pull QR + grid defaults from the admin portal so the QR code, axis
+        // tick labels and the flex axis seed all use the configured parameters.
+        loadQrDefaults().then(() => {
+            if (typeof updateTestGridUI === 'function') updateTestGridUI();
+            if (typeof updateGridPreview === 'function') updateGridPreview();
+        });
 
         // Show Test Grid Info if needed
         if (window.onboarding && !window.onboarding.hasCompletedTestGridTour()) {
@@ -4983,15 +4986,40 @@ function getFlexSuggestions(isMopa) {
     apply('speed', 'speed', 'speedRange');
     apply('lpc', 'lpi', 'lpiRange');
     if (typeof md.pulseWidth === 'number') out.pulseWidth.def = md.pulseWidth;
+
+    // Admin-portal test-grid defaults take precedence over the material-registry
+    // and static fallbacks, so the custom generator respects what the admin set.
+    const a = activeQrDefaults || {};
+    const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : undefined;
+    if (num(a.freqMin) !== undefined && num(a.freqMax) !== undefined) {
+        out.frequency.range = [a.freqMin, a.freqMax];
+        out.frequency.def = a.freqMin;
+    }
+    if (num(a.lpiMin) !== undefined && num(a.lpiMax) !== undefined) {
+        out.lpc.range = [a.lpiMin, a.lpiMax];
+    }
+    if (num(a.speedMin) !== undefined && num(a.speedMax) !== undefined) {
+        out.speed.range = [a.speedMin, a.speedMax];
+    }
+    if (num(a.power) !== undefined) out.power.def = a.power;
+    if (num(a.speed) !== undefined) out.speed.def = a.speed;
+    if (num(a.lpi) !== undefined) out.lpc.def = a.lpi;
+    if (num(a.pulseWidth) !== undefined) out.pulseWidth.def = a.pulseWidth;
+    if (num(a.defocus) !== undefined) out.defocus.def = a.defocus;
     return out;
 }
 
 let flexState = null;
 let flexLaserClass = null; // 'mopa' | 'uv' — reseed when laser class changes
+let flexSeededAdminKey = null; // settingsKey whose admin defaults seeded the state
 
 function ensureFlexState(isMopa) {
     const cls = isMopa ? 'mopa' : 'uv';
-    if (flexState && flexLaserClass === cls) return flexState;
+    // Track whether admin defaults were available when we seeded. When they
+    // arrive after an early fallback seed (modal opens before the fetch
+    // resolves) we reseed once so the admin-configured values are respected.
+    const adminKey = activeQrDefaults ? getActiveSettingsKey() : null;
+    if (flexState && flexLaserClass === cls && flexSeededAdminKey === adminKey) return flexState;
     const defs = getFlexSuggestions(isMopa);
     flexState = { roles: {}, ranges: {}, constants: {} };
     FLEX_PARAMS.forEach(p => {
@@ -4999,10 +5027,21 @@ function ensureFlexState(isMopa) {
         flexState.ranges[p.id] = { min: defs[p.id].range[0], max: defs[p.id].range[1] };
         flexState.roles[p.id] = 'const';
     });
-    // Sensible default axes (Speed × Power works for every laser)
-    flexState.roles.speed = 'x';
-    flexState.roles.power = 'y';
+    if (isMopa) {
+        // MOPA standard grid varies Speed × Frequency (power/lpc/pulse fixed).
+        flexState.roles.speed = 'x';
+        flexState.roles.frequency = 'y';
+    } else {
+        // UV / diode: hold Power & Speed fixed, vary Density (LPC) and Frequency.
+        flexState.roles.lpc = 'x';
+        flexState.roles.frequency = 'y';
+        // Highest energy belongs on the left, so invert the LPC (X) axis by
+        // default — start high, end low.
+        const lr = flexState.ranges.lpc;
+        if (lr.min < lr.max) { const t = lr.min; lr.min = lr.max; lr.max = t; }
+    }
     flexLaserClass = cls;
+    flexSeededAdminKey = adminKey;
     return flexState;
 }
 

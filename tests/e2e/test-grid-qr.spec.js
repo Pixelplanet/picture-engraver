@@ -74,10 +74,11 @@ test.describe('Test Grid QR Code Verification', () => {
         await expect(page.locator('#tabCustom')).toBeVisible();
         await expect(page.locator('#flexAxisMatrix .flex-axis-row').first()).toBeVisible();
 
-        // On UV the default axes are Speed (X) × Power (Y); Frequency is a held
-        // constant. Change the constant frequency — the preview auto-updates.
-        await page.fill('#flexConst_frequency', '55');
-        await page.locator('#flexConst_frequency').blur();
+        // On UV the default axes are Density/LPC (X) × Frequency (Y); Speed and
+        // Power are held constant. Change the constant speed — the preview
+        // auto-updates.
+        await page.fill('#flexConst_speed', '333');
+        await page.locator('#flexConst_speed').blur();
         await page.waitForTimeout(500);
 
         // The flex QR payload is large (QR version 9), so decoding the small
@@ -101,9 +102,9 @@ test.describe('Test Grid QR Code Verification', () => {
         expect(result.hasBlack, 'QR code not drawn on the preview canvas').toBe(true);
 
         const qrContent = JSON.parse(result.qrData);
-        // Flexible payload (v6): t:'flex', constants under c, frequency = c.f
+        // Flexible payload (v6): t:'flex', constants under c, speed = c.s
         expect(qrContent.v).toBe(6);
         expect(qrContent.t).toBe('flex');
-        expect(qrContent.c.f).toBe(55);
+        expect(qrContent.c.s).toBe(333);
     });
 });
