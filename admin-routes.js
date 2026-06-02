@@ -173,6 +173,16 @@ export function createAdminRouter(adminSettings) {
         });
     });
 
+    // ── Public: Grid Presets ─────────────────────────────────────────────────────
+    router.get('/api/testgrid-presets/:laserType', testgridLimiter, (req, res) => {
+        const laserType = req.params.laserType;
+        if (!VALID_LASER_TYPES.includes(laserType)) {
+            return res.status(400).json({ error: `Invalid laser type. Valid: ${VALID_LASER_TYPES.join(', ')}` });
+        }
+        const presets = adminSettings.getTestGridPresets(laserType);
+        res.json(presets);
+    });
+
     // ── Admin API (auth required) ──────────────────────────────────────────
 
     router.get('/admin/api/settings', adminLimiter, requireAdminAuth, (req, res) => {
@@ -238,6 +248,41 @@ export function createAdminRouter(adminSettings) {
         const saved = adminSettings.reset();
         invalidateXcsCache();
         res.json(saved);
+    });
+
+    // ── Grid Preset Management (admin, auth required) ──────────────────────────
+
+    // Upsert a preset for a laser type
+    router.post('/admin/api/testgrid-presets/:laserType', adminLimiter, requireAdminAuth, (req, res) => {
+        const laserType = req.params.laserType;
+        try {
+            const presets = adminSettings.saveTestGridPreset(laserType, req.body);
+            res.json(presets);
+        } catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+
+    // Delete a preset
+    router.delete('/admin/api/testgrid-presets/:laserType/:presetId', adminLimiter, requireAdminAuth, (req, res) => {
+        const { laserType, presetId } = req.params;
+        try {
+            const presets = adminSettings.deleteTestGridPreset(laserType, presetId);
+            res.json(presets);
+        } catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+
+    // Set a preset as default
+    router.put('/admin/api/testgrid-presets/:laserType/:presetId/default', adminLimiter, requireAdminAuth, (req, res) => {
+        const { laserType, presetId } = req.params;
+        try {
+            const presets = adminSettings.setDefaultPreset(laserType, presetId);
+            res.json(presets);
+        } catch (err) {
+            res.status(400).json({ error: err.message });
+        }
     });
 
     // ── Color Map Management (admin, auth required) ────────────────────────

@@ -397,30 +397,13 @@
             <div class="custom-grid-layout">
 
               <div class="custom-grid-settings-panel">
-                <!-- Layout: Guided vs Custom Axes (any 2 variables) -->
-                <div class="setting-group" id="gridLayoutControl">
-                  <h3>Layout</h3>
-                  <select class="input" id="gridLayoutMode">
-                    <option value="guided">Guided presets</option>
-                    <option value="flex">Custom axes (pick any 2)</option>
-                  </select>
-                </div>
-                <!-- Presets: save / load / templates (Idea 4) -->
+                <!-- Presets: server-configured, auto-apply on select -->
                 <div class="setting-group" id="gridPresetControl">
-                  <h3>Presets <span class="info-icon" title="Save your grid configurations or start from a curated template.">ⓘ</span></h3>
-                  <div class="preset-row">
-                    <select class="input" id="gridPresetSelect">
-                      <option value="">— Select a preset —</option>
-                    </select>
-                    <button class="btn btn-secondary btn-sm" id="btnPresetLoad" type="button">Load</button>
-                  </div>
-                  <div class="flex-actions-row">
-                    <button class="btn btn-secondary btn-sm" id="btnPresetSave" type="button" title="Save the current configuration">💾 Save…</button>
-                    <button class="btn btn-secondary btn-sm" id="btnPresetDelete" type="button" title="Delete the selected saved preset">🗑 Delete</button>
-                    <button class="btn btn-secondary btn-sm" id="btnPresetExport" type="button" title="Export the current configuration to a .json file">⬇ Export</button>
-                    <button class="btn btn-secondary btn-sm" id="btnPresetImport" type="button" title="Import presets from a .json file">⬆ Import</button>
-                    <input type="file" id="presetImportInput" accept=".json,application/json" hidden>
-                  </div>
+                  <h3>Preset <span class="info-icon" title="Select a preset to instantly apply its settings. Changes you make are remembered for this session.">ⓘ</span></h3>
+                  <select class="input" id="gridPresetSelect">
+                    <option value="">Loading presets…</option>
+                  </select>
+                  <p class="hint" id="gridPresetHint" style="font-size:0.78em; color:#888; margin:4px 0 0; display:none;"></p>
                 </div>
                 <!-- MOPA Control: Fixed Parameter Selection -->
                 <div class="setting-group" id="mopaFixedControl" style="display:none;">

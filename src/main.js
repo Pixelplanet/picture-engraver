@@ -2956,6 +2956,9 @@ function setupModals() {
         // axis tick labels are engraved with the configured parameters.
         loadQrDefaults().then(() => { if (typeof updateGridPreview === 'function') updateGridPreview(); });
 
+        // Load server-configured presets for the active laser type
+        fetchAndPopulatePresets(getActiveSettingsKeyForPresets());
+
         // Show Test Grid Info if needed
         if (window.onboarding && !window.onboarding.hasCompletedTestGridTour()) {
             setTimeout(() => window.onboarding.showTestGridInfoModal(), 500);
@@ -3058,8 +3061,11 @@ function updateTestGridUI() {
     const laser = getActiveLaserConfig(s);
     const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
 
-    // Keep the preset/template dropdown in sync with the active laser class
-    if (typeof refreshPresetDropdown === 'function') refreshPresetDropdown();
+    // Keep the preset dropdown in sync with the active laser class
+    const laserType = getActiveSettingsKeyForPresets();
+    if (!_serverPresetsCache[laserType]) {
+        fetchAndPopulatePresets(laserType);
+    }
 
     // Update Standard Grid tab description based on device
     const elVar1 = document.getElementById('stdGridVar1');
@@ -3076,8 +3082,7 @@ function updateTestGridUI() {
     }
 
     // Grid layout mode: guided presets vs. custom axes (flexible)
-    const layoutModeEl = document.getElementById('gridLayoutMode');
-    const layoutMode = layoutModeEl ? layoutModeEl.value : 'guided';
+    const layoutMode = _activeLayoutMode || 'guided';
     const flexControl = document.getElementById('flexAxisControl');
     // Guided-only param groups (hidden in custom-axes mode)
     const guidedGroups = ['groupFreq', 'groupLpi', 'subGroupPower', 'subGroupSpeed',
@@ -3645,13 +3650,8 @@ function setupTestGrid() {
     }
 
     // Grid layout mode (guided presets vs custom axes)
-    const layoutModeParam = document.getElementById('gridLayoutMode');
-    if (layoutModeParam) {
-        layoutModeParam.addEventListener('change', () => {
-            updateTestGridUI();
-            updateGridPreview();
-        });
-    }
+    // Note: layout mode is now controlled by the active preset's layoutMode field.
+    // No DOM element for gridLayoutMode exists anymore.
 
     // Axis tick labels toggle (Idea 2) — reflect immediately in the preview
     const flexShowLabels = document.getElementById('flexShowLabels');
@@ -3697,22 +3697,22 @@ function setupTestGrid() {
         });
     }
 
-    // Grid presets + templates (Idea 4)
-    const btnPresetLoad = document.getElementById('btnPresetLoad');
-    if (btnPresetLoad) btnPresetLoad.addEventListener('click', loadSelectedPreset);
-    const btnPresetSave = document.getElementById('btnPresetSave');
-    if (btnPresetSave) btnPresetSave.addEventListener('click', saveCurrentPreset);
-    const btnPresetDelete = document.getElementById('btnPresetDelete');
-    if (btnPresetDelete) btnPresetDelete.addEventListener('click', deleteSelectedPreset);
-    const btnPresetExport = document.getElementById('btnPresetExport');
-    if (btnPresetExport) btnPresetExport.addEventListener('click', exportCurrentPreset);
-    const btnPresetImport = document.getElementById('btnPresetImport');
-    const presetImportInput = document.getElementById('presetImportInput');
-    if (btnPresetImport && presetImportInput) {
-        btnPresetImport.addEventListener('click', () => presetImportInput.click());
-        presetImportInput.addEventListener('change', (e) => {
-            if (e.target.files && e.target.files[0]) importPresetsFromFile(e.target.files[0]);
-            e.target.value = '';
+    // Grid preset select — auto-apply on change
+    const gridPresetSel = document.getElementById('gridPresetSelect');
+    if (gridPresetSel) {
+        gridPresetSel.addEventListener('change', () => {
+            const laserType = getActiveSettingsKeyForPresets();
+            const presets = _serverPresetsCache[laserType] || [];
+            const preset = presets.find(p => p.id === gridPresetSel.value);
+            if (preset) applyPreset(preset);
+        });
+    }
+
+    // Auto-save session override on any setting input in the custom grid panel
+    const customGridPanel = document.getElementById('tabCustom');
+    if (customGridPanel) {
+        customGridPanel.addEventListener('change', (e) => {
+            if (e.target.id !== 'gridPresetSelect') saveSessionOverride();
         });
     }
 
@@ -3768,6 +3768,7 @@ function setupTestGrid() {
 
             if (targetId === 'custom') {
                 updateGridPreview();
+                fetchAndPopulatePresets(getActiveSettingsKeyForPresets());
             } else if (targetId === 'standard') {
                 updateStandardPreview();
             }
@@ -5304,8 +5305,7 @@ async function generateCustomGridBooklet(format) {
     }
 }
 
-// ── Grid presets + template gallery (Idea 4) ────────────────────────────────
-const GRID_PRESETS_KEY = 'pictureEngraver_gridPresets';
+// ── Grid presets (server-configured, session-persistent overrides) ───────────
 
 // Common grid fields captured for every preset (both layout modes).
 const GUIDED_FIELD_IDS = [
@@ -5317,44 +5317,20 @@ const GUIDED_FIELD_IDS = [
     'gridDefocus', 'gridDefocusMin', 'gridDefocusMax',
 ];
 
-// Curated, ready-to-run starting points. `flex.roles` uses x/y/const.
-const BUILTIN_TEMPLATES = [
-    {
-        name: 'UV · Power × Speed', laserClass: 'uv', layoutMode: 'flex',
-        flex: { x: 'power', y: 'speed' },
-    },
-    {
-        name: 'UV · Frequency × Density', laserClass: 'uv', layoutMode: 'flex',
-        flex: { x: 'frequency', y: 'lpc' },
-    },
-    {
-        name: 'UV · Defocus × Density (.xs)', laserClass: 'uv', layoutMode: 'flex',
-        flex: { x: 'lpc', y: 'defocus' },
-    },
-    {
-        name: 'MOPA · Frequency × Power', laserClass: 'mopa', layoutMode: 'flex',
-        flex: { x: 'frequency', y: 'power' },
-    },
-    {
-        name: 'MOPA · Pulse Width × Speed', laserClass: 'mopa', layoutMode: 'flex',
-        flex: { x: 'pulseWidth', y: 'speed' },
-    },
-    {
-        name: 'MOPA · Speed × Power', laserClass: 'mopa', layoutMode: 'flex',
-        flex: { x: 'speed', y: 'power' },
-    },
-];
+// Active preset tracking — updated whenever a preset is applied or settings change.
+let _activePresetId = null;
+let _activeLayoutMode = 'guided';  // 'guided' | 'flex'
+let _serverPresetsCache = {};       // { laserType: preset[] }
 
-function loadUserPresets() {
-    try {
-        const raw = localStorage.getItem(GRID_PRESETS_KEY);
-        const arr = raw ? JSON.parse(raw) : [];
-        return Array.isArray(arr) ? arr : [];
-    } catch { return []; }
-}
-
-function saveUserPresets(arr) {
-    try { localStorage.setItem(GRID_PRESETS_KEY, JSON.stringify(arr)); } catch { /* ignore quota */ }
+function getActiveSettingsKeyForPresets() {
+    const s = state.settings;
+    if (!s) return 'uv';
+    const laser = getActiveLaserConfig(s);
+    if (!laser) return 'uv';
+    if (laser.hasPulseWidth && laser.hasMopaFrequency) {
+        return s.activeLaserType || 'mopa';
+    }
+    return s.activeLaserType || 'uv';
 }
 
 function activeLaserClass() {
@@ -5362,11 +5338,87 @@ function activeLaserClass() {
     return (laser && laser.hasPulseWidth && laser.hasMopaFrequency) ? 'mopa' : 'uv';
 }
 
+async function fetchAndPopulatePresets(laserType) {
+    const sel = document.getElementById('gridPresetSelect');
+    if (!sel) return;
+
+    try {
+        if (!_serverPresetsCache[laserType]) {
+            const res = await fetch(`/api/testgrid-presets/${encodeURIComponent(laserType)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            _serverPresetsCache[laserType] = await res.json();
+        }
+
+        const presets = _serverPresetsCache[laserType] || [];
+        sel.innerHTML = '';
+        if (!presets.length) {
+            sel.innerHTML = '<option value="">— No presets configured —</option>';
+            return;
+        }
+
+        presets.forEach(p => {
+            const o = document.createElement('option');
+            o.value = p.id;
+            o.textContent = p.isDefault ? `★ ${p.name}` : p.name;
+            sel.appendChild(o);
+        });
+
+        // Select the default preset (or restore the previously active one if it exists)
+        const prevId = _activePresetId;
+        const prevOption = prevId && sel.querySelector(`option[value="${CSS.escape(prevId)}"]`);
+        if (prevOption) {
+            sel.value = prevId;
+        } else {
+            const defaultPreset = presets.find(p => p.isDefault) || presets[0];
+            sel.value = defaultPreset.id;
+            applyPreset(defaultPreset);
+        }
+    } catch (err) {
+        Logger.warn('Failed to load presets', err);
+        sel.innerHTML = '<option value="">— Error loading presets —</option>';
+    }
+}
+
+function applyPreset(preset) {
+    if (!preset) return;
+
+    // Check for session override first
+    const laserType = getActiveSettingsKeyForPresets();
+    const overrideKey = `pe_ov:${laserType}:${preset.id}`;
+    let cfg = preset;
+    try {
+        const raw = sessionStorage.getItem(overrideKey);
+        if (raw) {
+            const override = JSON.parse(raw);
+            cfg = { ...preset, ...override, id: preset.id, name: preset.name, isBuiltin: preset.isBuiltin };
+        }
+    } catch { /* use base preset */ }
+
+    _activePresetId = preset.id;
+    _activeLayoutMode = cfg.layoutMode || 'guided';
+
+    applyGridConfig(cfg);
+}
+
+function saveSessionOverride() {
+    if (!_activePresetId) return;
+    const laserType = getActiveSettingsKeyForPresets();
+    const overrideKey = `pe_ov:${laserType}:${_activePresetId}`;
+    try {
+        const snapshot = snapshotGridConfig('override');
+        // Remove identity fields; keep only settings
+        delete snapshot.name;
+        delete snapshot.id;
+        delete snapshot.isBuiltin;
+        delete snapshot.isDefault;
+        sessionStorage.setItem(overrideKey, JSON.stringify(snapshot));
+    } catch { /* quota exceeded — ignore */ }
+}
+
 // Capture the current custom-grid configuration into a portable object.
 function snapshotGridConfig(name) {
     const isMopa = activeLaserClass() === 'mopa';
-    const layoutEl = document.getElementById('gridLayoutMode');
-    const layoutMode = layoutEl ? layoutEl.value : 'guided';
+    const layoutMode = _activeLayoutMode || 'guided';
     const matEl = document.getElementById('gridMaterial');
     const common = {
         cellSize: parseInt(document.getElementById('gridCellSize').value) || 5,
@@ -5434,8 +5486,7 @@ function applyGridConfig(cfg) {
     }
 
     // Layout mode + flex state
-    const layoutEl = document.getElementById('gridLayoutMode');
-    if (layoutEl && cfg.layoutMode) layoutEl.value = cfg.layoutMode;
+    if (cfg.layoutMode) _activeLayoutMode = cfg.layoutMode;
 
     if (cfg.layoutMode === 'flex' && cfg.flex) {
         ensureFlexState(isMopa);
@@ -5464,150 +5515,6 @@ function applyGridConfig(cfg) {
     updateGridPreview();
 }
 
-// Resolve a template definition into a full config the active laser can use.
-function materializeTemplate(tpl) {
-    const isMopa = tpl.laserClass === 'mopa';
-    const sug = getFlexSuggestions(isMopa);
-    const roles = {};
-    FLEX_PARAMS.forEach(p => { roles[p.id] = 'const'; });
-    roles[tpl.flex.x] = 'x';
-    roles[tpl.flex.y] = 'y';
-    const ranges = {}, constants = {};
-    FLEX_PARAMS.forEach(p => {
-        ranges[p.id] = { min: sug[p.id].range[0], max: sug[p.id].range[1] };
-        constants[p.id] = sug[p.id].def;
-    });
-    return {
-        kind: 'picture-engraver-grid-preset', version: 1,
-        name: tpl.name, laserClass: tpl.laserClass, layoutMode: 'flex',
-        common: {
-            cellSize: parseInt(document.getElementById('gridCellSize').value) || 5,
-            cellGap: parseFloat(document.getElementById('gridCellGap').value),
-            passes: parseInt(document.getElementById('gridPasses').value) || 1,
-            crossHatch: document.getElementById('gridCrossHatch').checked,
-            material: state.settings?.material || DEFAULT_MATERIAL_ID,
-        },
-        flex: { roles, ranges, constants },
-        guided: {},
-    };
-}
-
-function refreshPresetDropdown() {
-    const sel = document.getElementById('gridPresetSelect');
-    if (!sel) return;
-    const prev = sel.value;
-    const cls = activeLaserClass();
-    sel.innerHTML = '<option value="">— Select a preset —</option>';
-
-    const tplGroup = document.createElement('optgroup');
-    tplGroup.label = 'Templates';
-    BUILTIN_TEMPLATES.filter(t => t.laserClass === cls).forEach((t) => {
-        const o = document.createElement('option');
-        o.value = `tpl:${BUILTIN_TEMPLATES.indexOf(t)}`;
-        o.textContent = `★ ${t.name}`;
-        tplGroup.appendChild(o);
-    });
-    if (tplGroup.children.length) sel.appendChild(tplGroup);
-
-    const presets = loadUserPresets();
-    if (presets.length) {
-        const userGroup = document.createElement('optgroup');
-        userGroup.label = 'Saved';
-        presets.forEach((p, i) => {
-            const o = document.createElement('option');
-            o.value = `user:${i}`;
-            const tag = p.laserClass && p.laserClass !== cls ? ` (${p.laserClass})` : '';
-            o.textContent = `${p.name}${tag}`;
-            userGroup.appendChild(o);
-        });
-        sel.appendChild(userGroup);
-    }
-    // Preserve prior selection where still valid
-    if (prev && sel.querySelector(`option[value="${CSS.escape(prev)}"]`)) sel.value = prev;
-}
-
-function loadSelectedPreset() {
-    const sel = document.getElementById('gridPresetSelect');
-    if (!sel || !sel.value) { showToast('Pick a preset to load', 'warning'); return; }
-    const [type, idxStr] = sel.value.split(':');
-    const idx = parseInt(idxStr, 10);
-    if (type === 'tpl') {
-        const tpl = BUILTIN_TEMPLATES[idx];
-        if (tpl) { applyGridConfig(materializeTemplate(tpl)); showToast(`Loaded template: ${tpl.name}`, 'success'); }
-    } else if (type === 'user') {
-        const p = loadUserPresets()[idx];
-        if (p) { applyGridConfig(p); showToast(`Loaded preset: ${p.name}`, 'success'); }
-    }
-}
-
-function saveCurrentPreset() {
-    const name = (window.prompt('Preset name:', '') || '').trim();
-    if (!name) return;
-    const cfg = snapshotGridConfig(name);
-    const presets = loadUserPresets();
-    const existing = presets.findIndex(p => p.name === name && p.laserClass === cfg.laserClass);
-    if (existing >= 0) presets[existing] = cfg; else presets.push(cfg);
-    saveUserPresets(presets);
-    refreshPresetDropdown();
-    showToast(`Saved preset: ${name}`, 'success');
-}
-
-function deleteSelectedPreset() {
-    const sel = document.getElementById('gridPresetSelect');
-    if (!sel || !sel.value || !sel.value.startsWith('user:')) {
-        showToast('Select a saved preset to delete', 'warning'); return;
-    }
-    const idx = parseInt(sel.value.split(':')[1], 10);
-    const presets = loadUserPresets();
-    const removed = presets.splice(idx, 1);
-    saveUserPresets(presets);
-    refreshPresetDropdown();
-    if (removed[0]) showToast(`Deleted preset: ${removed[0].name}`, 'success');
-}
-
-function exportCurrentPreset() {
-    const sel = document.getElementById('gridPresetSelect');
-    let cfg;
-    if (sel && sel.value.startsWith('user:')) {
-        cfg = loadUserPresets()[parseInt(sel.value.split(':')[1], 10)];
-    } else if (sel && sel.value.startsWith('tpl:')) {
-        cfg = materializeTemplate(BUILTIN_TEMPLATES[parseInt(sel.value.split(':')[1], 10)]);
-    } else {
-        cfg = snapshotGridConfig('Exported grid');
-    }
-    const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `grid-preset-${(cfg.name || 'config').replace(/[^a-z0-9]+/gi, '_')}.json`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function importPresetsFromFile(file) {
-    const reader = new FileReader();
-    reader.onload = () => {
-        try {
-            const parsed = JSON.parse(reader.result);
-            const items = Array.isArray(parsed) ? parsed : [parsed];
-            const valid = items.filter(p => p && p.kind === 'picture-engraver-grid-preset');
-            if (!valid.length) { showToast('No valid grid presets in file', 'error'); return; }
-            const presets = loadUserPresets();
-            valid.forEach(p => {
-                if (!p.name) p.name = 'Imported';
-                const i = presets.findIndex(x => x.name === p.name && x.laserClass === p.laserClass);
-                if (i >= 0) presets[i] = p; else presets.push(p);
-            });
-            saveUserPresets(presets);
-            refreshPresetDropdown();
-            showToast(`Imported ${valid.length} preset(s)`, 'success');
-        } catch {
-            showToast('Could not parse preset file', 'error');
-        }
-    };
-    reader.readAsText(file);
-}
-
 function getCustomGridSettings() {
     const deviceId = resolveDeviceId(state.settings.activeDevice || 'f2_ultra_uv');
     const laserTypeId = state.settings.activeLaserType || null;
@@ -5621,8 +5528,7 @@ function getCustomGridSettings() {
     const fillArea = !!(fillAreaEl && fillAreaEl.checked);
 
     // Custom-axes (flexible) layout — pick any two variables as X/Y.
-    const layoutEl = document.getElementById('gridLayoutMode');
-    if (layoutEl && layoutEl.value === 'flex') {
+    if (_activeLayoutMode === 'flex') {
         const flex = buildFlexConfig(isMopaLike);
         const gridMatEl = document.getElementById('gridMaterial');
         return {
