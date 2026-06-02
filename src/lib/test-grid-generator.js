@@ -681,8 +681,9 @@ export class TestGridGenerator {
         const rowsReserved = Math.ceil(qrSpaceH / rowPitch);
 
         // Start indices for exclusion
-        const excStartCol = numCols - colsReserved;
-        const excStartRow = numRows - rowsReserved;
+        const fillArea = !!s.fillArea;
+        const excStartCol = fillArea ? numCols + 1 : numCols - colsReserved;
+        const excStartRow = fillArea ? numRows + 1 : numRows - rowsReserved;
 
         // QR Position:
         // User wants it "display the QR code in the same size".
@@ -698,10 +699,17 @@ export class TestGridGenerator {
         // mode: X = LPC, Y = frequency.
         const isDefocusGrid = s.gridMode === 'defocus';
         const fixedFreq = Math.round(typeof s.freq === 'number' ? s.freq : s.freqMin);
-        const lpiValues = this.linspace(s.lpiMax, s.lpiMin, numCols);
+        // LPC (X axis) direction: default descending (left = high energy). An
+        // optional s.lpiAscending flag (set by the custom-grid invert button)
+        // flips it without affecting server-generated grids.
+        const lpiValues = s.lpiAscending
+            ? this.linspace(s.lpiMin, s.lpiMax, numCols)
+            : this.linspace(s.lpiMax, s.lpiMin, numCols);
         const freqValues = isDefocusGrid
             ? new Array(numRows).fill(fixedFreq)
-            : this.linspace(s.freqMin, s.freqMax, numRows);
+            : (s.freqDescending
+                ? this.linspace(s.freqMax, s.freqMin, numRows)
+                : this.linspace(s.freqMin, s.freqMax, numRows));
         const defocusValues = isDefocusGrid
             ? this.linspaceF(
                 typeof s.defocusMin === 'number' ? s.defocusMin : 0,
@@ -772,8 +780,10 @@ export class TestGridGenerator {
             }
         }
 
-        // Add Real QR Code
-        const qrData = this.encodeSettings(numCols, numRows);
+        // Add Real QR Code (skipped in fill-area mode)
+        let qrData = null;
+        if (!fillArea) {
+        qrData = this.encodeSettings(numCols, numRows);
         const qrPath = this.generateQRPath(qrData, 0, 0, QR_SIZE_MM);
 
         const qrDisplayId = this.generateUUID();
@@ -788,6 +798,7 @@ export class TestGridGenerator {
         displays.push(qrDisplay);
         displaySettings.push([qrDisplayId, this.createDisplaySettings(s.qrFrequency, s.qrLpi, s.qrPower, s.qrSpeed, 1, { _crossHatch: !!s.qrCrossHatch })]);
         layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
+        }
 
         // Build XCS — resolve device + laser config
         const deviceId = resolveDeviceId(this.settings.activeDevice || 'f2_ultra_uv');
@@ -856,6 +867,7 @@ export class TestGridGenerator {
                 globalOffsetY,
                 excStartCol,
                 excStartRow,
+                fillArea,
                 lpiValues,
                 freqValues,
                 defocusValues,
@@ -952,8 +964,9 @@ export class TestGridGenerator {
 
         const colsReserved = Math.ceil(qrSpaceW / colPitch);
         const rowsReserved = Math.ceil(qrSpaceH / rowPitch);
-        const excStartCol = numCols - colsReserved;
-        const excStartRow = numRows - rowsReserved;
+        const fillArea = !!s.fillArea;
+        const excStartCol = fillArea ? numCols + 1 : numCols - colsReserved;
+        const excStartRow = fillArea ? numRows + 1 : numRows - rowsReserved;
 
         const qrX = globalOffsetX + effectiveGridW - QR_SIZE_MM;
         const qrY = globalOffsetY + effectiveGridH - QR_SIZE_MM;
@@ -1023,8 +1036,10 @@ export class TestGridGenerator {
             }
         }
 
-        // Add QR Code
-        const qrData = this.encodeSettings(numCols, numRows);
+        // Add QR Code (skipped in fill-area mode)
+        let qrData = null;
+        if (!fillArea) {
+        qrData = this.encodeSettings(numCols, numRows);
         const qrPath = this.generateQRPath(qrData, 0, 0, QR_SIZE_MM);
         const qrDisplayId = this.generateUUID();
         const qrDisplay = this.createPathDisplay(
@@ -1044,6 +1059,7 @@ export class TestGridGenerator {
 
         displaySettings.push([qrDisplayId, this.createDisplaySettings(qrFreq, qrL, qrPwr, qrSpd, 1, { processingLightSource: 'red', mopaFrequency: qrFreq, pulseWidth: s.pulseWidth || 80, _crossHatch: !!s.qrCrossHatch })]);
         layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
+        }
 
         const xcs = {
             canvasId,
@@ -1096,6 +1112,7 @@ export class TestGridGenerator {
                 globalOffsetY,
                 excStartCol,
                 excStartRow,
+                fillArea,
 
                 // MOPA Specific Metadata (reusing lpi/freq names for Analyzer compatibility)
                 lpiValues: xValues,
@@ -1216,8 +1233,9 @@ export class TestGridGenerator {
         const rowPitch = s.cellSize + s.cellGap;
         const colsReserved = Math.ceil((QR_SIZE_MM + QR_GAP_MM) / colPitch);
         const rowsReserved = Math.ceil((QR_SIZE_MM + QR_GAP_MM) / rowPitch);
-        const excStartCol = numCols - colsReserved;
-        const excStartRow = numRows - rowsReserved;
+        const fillArea = !!s.fillArea;
+        const excStartCol = fillArea ? numCols + 1 : numCols - colsReserved;
+        const excStartRow = fillArea ? numRows + 1 : numRows - rowsReserved;
 
         const qrX = globalOffsetX + effectiveGridW - QR_SIZE_MM;
         const qrY = globalOffsetY + effectiveGridH - QR_SIZE_MM;
@@ -1271,8 +1289,10 @@ export class TestGridGenerator {
             }
         }
 
-        // QR Code
-        const qrData = this.encodeSettings(numCols, numRows);
+        // QR Code (skipped in fill-area mode)
+        let qrData = null;
+        if (!fillArea) {
+        qrData = this.encodeSettings(numCols, numRows);
         const qrPath = this.generateQRPath(qrData, 0, 0, QR_SIZE_MM);
         const qrDisplayId = this.generateUUID();
         const qrDisplay = this.createPathDisplay(qrDisplayId, 'Settings QR Code', '#000000', 0, qrX, qrY, QR_SIZE_MM, QR_SIZE_MM, zOrder, qrPath, true);
@@ -1286,6 +1306,7 @@ export class TestGridGenerator {
         }
         displaySettings.push([qrDisplayId, this.createDisplaySettings(s.qrFrequency || 90, s.qrLpi || 2500, s.qrPower || 17.5, s.qrSpeed || 150, 1, qrExtra)]);
         layerData['#000000'] = { name: 'QR Code', order: zOrder, visible: true };
+        }
 
         // Self-labeled grid (Idea 2): engrave axis tick values along the left
         // (Y values) and bottom (X values) edges. Opt-in via settings.showAxisLabels.
@@ -1382,6 +1403,7 @@ export class TestGridGenerator {
                 globalOffsetY,
                 excStartCol,
                 excStartRow,
+                fillArea,
                 lpiValues: xValues,
                 freqValues: yValues,
                 xAxisLabel: `${meta[xParam].label} (${meta[xParam].unit})`,

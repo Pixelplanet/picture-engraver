@@ -305,6 +305,96 @@ describe('TestGridGenerator', () => {
         });
     });
 
+    describe('fill-area (no-QR) option', () => {
+        const uvGrid = (extra) => new TestGridGenerator({
+            activeDevice: 'f2_ultra_uv', activeLaserType: 'uv',
+            cellSize: 5, cellGap: 1,
+            lpiMin: 300, lpiMax: 800, freqMin: 40, freqMax: 90,
+            power: 70, speed: 425, passes: 1,
+            ...extra,
+        }).generateBusinessCardGrid();
+
+        const hasQr = (xcs) => JSON.parse(xcs).canvas[0].displays.some(d => d.name === 'Settings QR Code');
+
+        it('includes the QR code by default and excludes cells for it', () => {
+            const { xcs, gridInfo } = uvGrid({});
+            expect(hasQr(xcs)).toBe(true);
+            expect(gridInfo.fillArea).toBeFalsy();
+            expect(gridInfo.excStartCol).toBeLessThan(gridInfo.numCols);
+        });
+
+        it('removes the QR code and fills the whole area when fillArea is set', () => {
+            const full = uvGrid({ fillArea: true });
+            const normal = uvGrid({});
+            expect(hasQr(full.xcs)).toBe(false);
+            expect(full.gridInfo.fillArea).toBe(true);
+            // No cells reserved for the QR → strictly more engraved cells.
+            expect(full.gridInfo.totalCells).toBeGreaterThan(normal.gridInfo.totalCells);
+        });
+
+        it('removes the QR in the flexible grid when fillArea is set', () => {
+            const mk = (fillArea) => new TestGridGenerator({
+                activeDevice: 'f2_ultra_uv', activeLaserType: 'uv',
+                gridMode: 'flexible', cellSize: 5, cellGap: 1, fillArea,
+                flex: {
+                    xParam: 'power', yParam: 'speed',
+                    ranges: { power: { min: 10, max: 80 }, speed: { min: 200, max: 1500 } },
+                    constants: { frequency: 80, power: 70, speed: 425, lpc: 1000, defocus: 0, pulseWidth: 80 },
+                },
+            }).generateBusinessCardGrid();
+            expect(hasQr(mk(false).xcs)).toBe(true);
+            expect(hasQr(mk(true).xcs)).toBe(false);
+        });
+    });
+
+    describe('axis direction (invert)', () => {
+        const lpi = (extra) => new TestGridGenerator({
+            activeDevice: 'f2_ultra_uv', activeLaserType: 'uv',
+            cellSize: 5, cellGap: 1,
+            lpiMin: 300, lpiMax: 800, freqMin: 40, freqMax: 90,
+            power: 70, speed: 425, passes: 1,
+            ...extra,
+        }).generateBusinessCardGrid().gridInfo.lpiValues;
+
+        it('defaults to descending LPC (left = high energy)', () => {
+            const v = lpi({});
+            expect(v[0]).toBeGreaterThan(v[v.length - 1]);
+        });
+
+        it('honors lpiAscending to flip the axis', () => {
+            const v = lpi({ lpiAscending: true });
+            expect(v[0]).toBeLessThan(v[v.length - 1]);
+        });
+
+        it('honors freqDescending to flip the Y axis', () => {
+            const asc = new TestGridGenerator({
+                activeDevice: 'f2_ultra_uv', activeLaserType: 'uv', cellSize: 5, cellGap: 1,
+                lpiMin: 300, lpiMax: 800, freqMin: 40, freqMax: 90, power: 70, speed: 425,
+            }).generateBusinessCardGrid().gridInfo.freqValues;
+            const desc = new TestGridGenerator({
+                activeDevice: 'f2_ultra_uv', activeLaserType: 'uv', cellSize: 5, cellGap: 1,
+                lpiMin: 300, lpiMax: 800, freqMin: 40, freqMax: 90, power: 70, speed: 425,
+                freqDescending: true,
+            }).generateBusinessCardGrid().gridInfo.freqValues;
+            expect(asc[0]).toBeLessThan(asc[asc.length - 1]);
+            expect(desc[0]).toBeGreaterThan(desc[desc.length - 1]);
+        });
+
+        it('flexible axis descends when range min > max (invert button)', () => {
+            const gen = new TestGridGenerator({
+                activeDevice: 'f2_ultra_uv', activeLaserType: 'uv',
+                gridMode: 'flexible', cellSize: 5, cellGap: 1,
+                flex: {
+                    xParam: 'power', yParam: 'speed',
+                    ranges: { power: { min: 80, max: 10 }, speed: { min: 200, max: 1500 } },
+                    constants: { frequency: 80, power: 70, speed: 425, lpc: 1000, defocus: 0, pulseWidth: 80 },
+                },
+            });
+            const v = gen.generateBusinessCardGrid().gridInfo.lpiValues;
+            expect(v[0]).toBeGreaterThan(v[v.length - 1]);
+        });
+    });
+
     describe('createDisplaySettings', () => {
         it('should create UV-like settings without mopaFrequency', () => {
             const settings = generator.createDisplaySettings(50, 1000, 70, 425, 1);

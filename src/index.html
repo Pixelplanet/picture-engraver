@@ -459,16 +459,163 @@
                   </div>
                   <div id="flexAxisMatrix" class="flex-axis-matrix"></div>
                   <p class="hint" id="flexAxisHint" style="font-size:0.78em; color:#888; margin:8px 0 0;"></p>
-                  <div class="flex-actions-row">
-                    <button class="btn btn-secondary btn-sm" id="btnFlexSuggest" type="button" title="Fill ranges from calibrated material + laser defaults">✨ Suggest ranges</button>
+                </div>
+                <!-- Material Selection — dev mode only -->
+                <div class="setting-group dev-only" id="gridMaterialGroup" style="display:none;">
+                  <h3>Material <span style="font-size:0.75em; color:#f90; font-weight:normal;">[DEV]</span></h3>
+                  <select class="input" id="gridMaterial">
+                    <!-- Populated dynamically from material-registry -->
+                  </select>
+                </div>
+                <div class="grid-settings-columns">
+                  <!-- Frequency Settings (Axis 1 or Fixed) -->
+                  <div class="setting-group" id="groupFreq">
+                    <h3 id="gridHeaderFreq">Frequency (kHz) <span class="info-icon"
+                        title="Standard UV lasers are limited to 40kHz minimum by XCS software.">ⓘ</span></h3>
+                    <!-- Range Inputs -->
+                    <div id="cntFreqRange" class="range-inputs-row has-invert">
+                      <div class="setting-row">
+                        <label>Start</label>
+                        <input type="number" class="input" id="gridFreqMin" value="40" min="1" max="4000">
+                      </div>
+                      <button type="button" class="btn-invert-axis" data-invert="gridFreqMin,gridFreqMax" title="Invert this axis (swap Start ↔ End)">⇄</button>
+                      <div class="setting-row">
+                        <label>End</label>
+                        <input type="number" class="input" id="gridFreqMax" value="90" min="1" max="4000">
+                      </div>
+                    </div>
+                    <!-- Fixed Input (Hidden by default) -->
+                    <div class="setting-row" id="cntFreqFixed" style="display:none">
+                      <label>Value</label>
+                      <input type="number" class="input" id="gridFreqFixed" value="40" min="1" max="4000">
+                    </div>
                   </div>
-                  <label class="checkbox-row" style="margin-top:10px; display:flex; align-items:center; gap:8px; font-size:0.85em;">
-                    <input type="checkbox" id="flexShowLabels" />
+
+                  <!-- LPC Settings -->
+                  <div class="setting-group" id="groupLpi">
+                    <h3 id="gridHeaderLPI">Lines/cm (LPC)</h3>
+                    <!-- Range Inputs (UV) -->
+                    <div id="cntLpiRange" class="range-inputs-row has-invert">
+                      <div class="setting-row">
+                        <label>Start</label>
+                        <input type="number" class="input" id="gridLpiMin" value="800" min="10" max="5000">
+                      </div>
+                      <button type="button" class="btn-invert-axis" data-invert="gridLpiMin,gridLpiMax" title="Invert this axis (swap Start ↔ End)">⇄</button>
+                      <div class="setting-row">
+                        <label>End</label>
+                        <input type="number" class="input" id="gridLpiMax" value="300" min="10" max="5000">
+                      </div>
+                    </div>
+                    <!-- Fixed Input (MOPA) -->
+                    <div class="setting-row" id="cntLpiFixed" style="display:none">
+                      <label>Value</label>
+                      <input type="number" class="input" id="gridLpiFixed" value="1000" min="10" max="5000">
+                    </div>
+                  </div>
+
+                  <!-- Engraving / Power / Speed Settings -->
+                  <div class="setting-group" id="groupEngraving">
+                    <h3 id="gridHeaderEngraving">Parameters</h3>
+
+                    <!-- Power -->
+                    <div id="subGroupPower">
+                      <!-- Single -->
+                      <div class="setting-row" id="cntPowerFixed">
+                        <label id="gridLabelPower">Power (%)</label>
+                        <input type="number" class="input" id="gridPower" value="70" min="1" max="100">
+                      </div>
+                      <!-- Range (Hidden default) -->
+                      <div id="cntPowerRange" class="range-inputs-row has-invert" style="display:none">
+                        <label class="range-label">Power Range (%)</label>
+                        <div class="setting-row">
+                          <label>Start</label>
+                          <input type="number" class="input" id="gridPowerMin" value="10" min="1" max="100">
+                        </div>
+                        <button type="button" class="btn-invert-axis" data-invert="gridPowerMin,gridPowerMax" title="Invert this axis (swap Start ↔ End)">⇄</button>
+                        <div class="setting-row">
+                          <label>End</label>
+                          <input type="number" class="input" id="gridPowerMax" value="20" min="1" max="100">
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Speed -->
+                    <div id="subGroupSpeed">
+                      <!-- Single -->
+                      <div class="setting-row" id="cntSpeedFixed">
+                        <label id="gridLabelSpeed">Speed (mm/s)</label>
+                        <input type="number" class="input" id="gridSpeed" value="425" min="1" max="4000">
+                      </div>
+                      <!-- Range (Hidden default) -->
+                      <div id="cntSpeedRange" class="range-inputs-row has-invert" style="display:none">
+                        <label class="range-label">Speed Range (mm/s)</label>
+                        <div class="setting-row">
+                          <label>Start</label>
+                          <input type="number" class="input" id="gridSpeedMin" value="200" min="1" max="4000">
+                        </div>
+                        <button type="button" class="btn-invert-axis" data-invert="gridSpeedMin,gridSpeedMax" title="Invert this axis (swap Start ↔ End)">⇄</button>
+                        <div class="setting-row">
+                          <label>End</label>
+                          <input type="number" class="input" id="gridSpeedMax" value="1500" min="1" max="4000">
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="setting-row">
+                      <label>Passes</label>
+                      <input type="number" class="input" id="gridPasses" value="1" min="1" max="10">
+                    </div>
+                    <div class="setting-row" id="cntDefocusFixed">
+                      <label>Defocus (mm; 1–12, below 1 = off)</label>
+                      <input type="number" class="input" id="gridDefocus" value="0" min="0" max="12" step="0.1">
+                    </div>
+                    <!-- Defocus Range (defocus-axis grid, hidden by default) -->
+                    <div id="cntDefocusRange" class="range-inputs-row has-invert" style="display:none">
+                      <label class="range-label">Defocus Range (mm; 1–12)</label>
+                      <div class="setting-row">
+                        <label>Start</label>
+                        <input type="number" class="input" id="gridDefocusMin" value="1" min="0" max="12" step="0.1">
+                      </div>
+                      <button type="button" class="btn-invert-axis" data-invert="gridDefocusMin,gridDefocusMax" title="Invert this axis (swap Start ↔ End)">⇄</button>
+                      <div class="setting-row">
+                        <label>End</label>
+                        <input type="number" class="input" id="gridDefocusMax" value="6" min="0" max="12" step="0.1">
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Grid Layout (cell size / gap) — below the parameter settings -->
+                  <div class="setting-group">
+                    <h3>Grid Layout</h3>
+                    <div class="setting-row">
+                      <label>Cell Size (mm)</label>
+                      <input type="number" class="input" id="gridCellSize" value="5" min="1" max="10">
+                    </div>
+                    <div class="setting-row">
+                      <label>Cell Gap (mm)</label>
+                      <input type="number" class="input" id="gridCellGap" value="1" min="0" max="5" step="0.5">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Options — all checkboxes consolidated at the bottom -->
+                <div class="setting-group" id="gridOptionsSection">
+                  <h3>Options</h3>
+                  <label class="checkbox-row grid-option-row">
+                    <input type="checkbox" id="gridCrossHatch" checked>
+                    <span>Cross Hatch <span class="info-icon" title="Engrave each cell in two perpendicular passes for a denser, more even fill.">ⓘ</span></span>
+                  </label>
+                  <label class="checkbox-row grid-option-row">
+                    <input type="checkbox" id="gridFillArea">
+                    <span>Fill entire area (no QR code) <span class="info-icon" title="Removes the settings QR code and fills the whole card with grid cells. Use when you don't need the QR to record settings.">ⓘ</span></span>
+                  </label>
+                  <label class="checkbox-row grid-option-row" id="optShowLabelsRow" style="display:none;">
+                    <input type="checkbox" id="flexShowLabels">
                     <span>Engrave axis tick labels along the edges <span class="info-icon" title="Burns the numeric value of each row/column next to the grid so the card is self-explanatory without the QR code.">ⓘ</span></span>
                   </label>
-                  <div id="flexBookletControl" style="margin-top:12px; border-top:1px solid #2a2a2a; padding-top:10px;">
-                    <label class="checkbox-row" style="display:flex; align-items:center; gap:8px; font-size:0.85em;">
-                      <input type="checkbox" id="flexBookletEnable" />
+                  <div id="flexBookletControl" style="display:none; margin-top:8px; border-top:1px solid #2a2a2a; padding-top:10px;">
+                    <label class="checkbox-row grid-option-row">
+                      <input type="checkbox" id="flexBookletEnable">
                       <span>📚 Sweep a 3rd variable across pages (booklet) <span class="info-icon" title="Generates one full grid per value of a third variable and bundles them into a single .zip — explore three dimensions at once.">ⓘ</span></span>
                     </label>
                     <div id="flexBookletFields" style="display:none; margin-top:8px;">
@@ -487,142 +634,6 @@
                           <option value="xs">.xs</option>
                         </select>
                         <button class="btn btn-secondary btn-sm" id="btnGenerateBooklet" type="button">Generate booklet (.zip)</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <!-- Material Selection — dev mode only -->
-                <div class="setting-group dev-only" id="gridMaterialGroup" style="display:none;">
-                  <h3>Material <span style="font-size:0.75em; color:#f90; font-weight:normal;">[DEV]</span></h3>
-                  <select class="input" id="gridMaterial">
-                    <!-- Populated dynamically from material-registry -->
-                  </select>
-                </div>
-                <div class="grid-settings-columns">
-                  <!-- Frequency Settings (Axis 1 or Fixed) -->
-                  <div class="setting-group" id="groupFreq">
-                    <h3 id="gridHeaderFreq">Frequency (kHz) <span class="info-icon"
-                        title="Standard UV lasers are limited to 40kHz minimum by XCS software.">ⓘ</span></h3>
-                    <!-- Range Inputs -->
-                    <div id="cntFreqRange" class="range-inputs-row">
-                      <div class="setting-row">
-                        <label>Min</label>
-                        <input type="number" class="input" id="gridFreqMin" value="40" min="1" max="4000">
-                      </div>
-                      <div class="setting-row">
-                        <label>Max</label>
-                        <input type="number" class="input" id="gridFreqMax" value="90" min="1" max="4000">
-                      </div>
-                    </div>
-                    <!-- Fixed Input (Hidden by default) -->
-                    <div class="setting-row" id="cntFreqFixed" style="display:none">
-                      <label>Value</label>
-                      <input type="number" class="input" id="gridFreqFixed" value="40" min="1" max="4000">
-                    </div>
-                  </div>
-
-                  <!-- LPC Settings -->
-                  <div class="setting-group" id="groupLpi">
-                    <h3 id="gridHeaderLPI">Lines/cm (LPC)</h3>
-                    <!-- Range Inputs (UV) -->
-                    <div id="cntLpiRange" class="range-inputs-row">
-                      <div class="setting-row">
-                        <label>Min</label>
-                        <input type="number" class="input" id="gridLpiMin" value="300" min="10" max="5000">
-                      </div>
-                      <div class="setting-row">
-                        <label>Max</label>
-                        <input type="number" class="input" id="gridLpiMax" value="800" min="10" max="5000">
-                      </div>
-                    </div>
-                    <!-- Fixed Input (MOPA) -->
-                    <div class="setting-row" id="cntLpiFixed" style="display:none">
-                      <label>Value</label>
-                      <input type="number" class="input" id="gridLpiFixed" value="1000" min="10" max="5000">
-                    </div>
-                  </div>
-
-                  <!-- Grid Layout -->
-                  <div class="setting-group">
-                    <h3>Grid Layout</h3>
-                    <div class="setting-row">
-                      <label>Cell Size (mm)</label>
-                      <input type="number" class="input" id="gridCellSize" value="5" min="1" max="10">
-                    </div>
-                    <div class="setting-row">
-                      <label>Cell Gap (mm)</label>
-                      <input type="number" class="input" id="gridCellGap" value="1" min="0" max="5" step="0.5">
-                    </div>
-                  </div>
-
-                  <!-- Engraving / Power / Speed Settings -->
-                  <div class="setting-group" id="groupEngraving">
-                    <h3 id="gridHeaderEngraving">Parameters</h3>
-
-                    <!-- Power -->
-                    <div id="subGroupPower">
-                      <!-- Single -->
-                      <div class="setting-row" id="cntPowerFixed">
-                        <label id="gridLabelPower">Power (%)</label>
-                        <input type="number" class="input" id="gridPower" value="70" min="1" max="100">
-                      </div>
-                      <!-- Range (Hidden default) -->
-                      <div id="cntPowerRange" class="range-inputs-row" style="display:none">
-                        <label class="range-label">Power Range (%)</label>
-                        <div class="setting-row">
-                          <label>Min</label>
-                          <input type="number" class="input" id="gridPowerMin" value="10" min="1" max="100">
-                        </div>
-                        <div class="setting-row">
-                          <label>Max</label>
-                          <input type="number" class="input" id="gridPowerMax" value="20" min="1" max="100">
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Speed -->
-                    <div id="subGroupSpeed">
-                      <!-- Single -->
-                      <div class="setting-row" id="cntSpeedFixed">
-                        <label id="gridLabelSpeed">Speed (mm/s)</label>
-                        <input type="number" class="input" id="gridSpeed" value="425" min="1" max="4000">
-                      </div>
-                      <!-- Range (Hidden default) -->
-                      <div id="cntSpeedRange" class="range-inputs-row" style="display:none">
-                        <label class="range-label">Speed Range (mm/s)</label>
-                        <div class="setting-row">
-                          <label>Min</label>
-                          <input type="number" class="input" id="gridSpeedMin" value="200" min="1" max="4000">
-                        </div>
-                        <div class="setting-row">
-                          <label>Max</label>
-                          <input type="number" class="input" id="gridSpeedMax" value="1500" min="1" max="4000">
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="setting-row">
-                      <label>Passes</label>
-                      <input type="number" class="input" id="gridPasses" value="1" min="1" max="10">
-                    </div>
-                    <div class="setting-row">
-                      <label>Cross Hatch</label>
-                      <input type="checkbox" class="checkbox" id="gridCrossHatch" checked>
-                    </div>
-                    <div class="setting-row" id="cntDefocusFixed">
-                      <label>Defocus (mm; 1–12, below 1 = off)</label>
-                      <input type="number" class="input" id="gridDefocus" value="0" min="0" max="12" step="0.1">
-                    </div>
-                    <!-- Defocus Range (defocus-axis grid, hidden by default) -->
-                    <div id="cntDefocusRange" class="range-inputs-row" style="display:none">
-                      <label class="range-label">Defocus Range (mm; 1–12)</label>
-                      <div class="setting-row">
-                        <label>Min</label>
-                        <input type="number" class="input" id="gridDefocusMin" value="1" min="0" max="12" step="0.1">
-                      </div>
-                      <div class="setting-row">
-                        <label>Max</label>
-                        <input type="number" class="input" id="gridDefocusMax" value="6" min="0" max="12" step="0.1">
                       </div>
                     </div>
                   </div>

@@ -152,6 +152,27 @@ export function createAdminRouter(adminSettings) {
         }
     });
 
+    // ── Public: QR engraving defaults ───────────────────────────────────────
+    // Exposes the admin-configured QR-code engraving parameters so the
+    // client-side test-grid generator (which builds .xs and custom grids in the
+    // browser) can engrave the QR code and axis tick labels with the same
+    // settings the admin configured, instead of falling back to hardcoded ones.
+    router.get('/api/testgrid-defaults/:laserType', testgridLimiter, (req, res) => {
+        const laserType = req.params.laserType;
+        if (!VALID_LASER_TYPES.includes(laserType)) {
+            return res.status(400).json({ error: `Invalid laser type. Valid: ${VALID_LASER_TYPES.join(', ')}` });
+        }
+        const d = adminSettings.getTestGridDefaults(laserType) || {};
+        res.json({
+            qrPower: d.qrPower,
+            qrSpeed: d.qrSpeed,
+            qrFrequency: d.qrFrequency,
+            qrLpi: d.qrLpi,
+            qrSize: d.qrSize,
+            qrCrossHatch: d.qrCrossHatch,
+        });
+    });
+
     // ── Admin API (auth required) ──────────────────────────────────────────
 
     router.get('/admin/api/settings', adminLimiter, requireAdminAuth, (req, res) => {

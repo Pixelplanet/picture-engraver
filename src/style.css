@@ -2237,6 +2237,47 @@ select option {
   color: var(--text-tertiary);
 }
 
+.grid-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85em;
+  margin-bottom: 6px;
+}
+
+.grid-option-row input[type="checkbox"] {
+  margin: 0;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.range-inputs-row.has-invert {
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+}
+
+.btn-invert-axis {
+  align-self: center;
+  background: var(--bg-tertiary, #2a2a2a);
+  color: var(--text-secondary, #ccc);
+  border: 1px solid var(--border-color, #444);
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn-invert-axis:hover {
+  background: var(--accent, #4a9eff);
+  color: #fff;
+}
+
 .range-label {
   grid-column: 1 / -1;
   font-size: var(--font-size-xs);

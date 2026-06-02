@@ -86,8 +86,8 @@ test.describe('Flexible test grid (Axis Picker Matrix)', () => {
         await page.click('button[data-modal-tab="custom"]');
         await page.selectOption('#gridLayoutMode', 'flex');
 
-        // Smart range suggestions
-        await page.click('#btnFlexSuggest');
+        // Smart range suggestions button removed — must not be present.
+        await expect(page.locator('#btnFlexSuggest')).toHaveCount(0);
 
         // Preset dropdown should contain at least one built-in template
         const presetOptions = await page.locator('#gridPresetSelect option').count();

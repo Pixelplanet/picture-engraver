@@ -2952,6 +2952,10 @@ function setupModals() {
     elements.btnTestGrid.addEventListener('click', () => {
         openModal(elements.testGridModal);
 
+        // Pull QR engraving settings from the admin portal so the QR code and
+        // axis tick labels are engraved with the configured parameters.
+        loadQrDefaults().then(() => { if (typeof updateGridPreview === 'function') updateGridPreview(); });
+
         // Show Test Grid Info if needed
         if (window.onboarding && !window.onboarding.hasCompletedTestGridTour()) {
             setTimeout(() => window.onboarding.showTestGridInfoModal(), 500);
@@ -3082,6 +3086,11 @@ function updateTestGridUI() {
     if (layoutMode === 'flex') {
         if (flexControl) flexControl.style.display = '';
         guidedGroups.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+        // Flex-only options (axis labels + booklet) live in the bottom Options panel
+        const optLabels = document.getElementById('optShowLabelsRow');
+        if (optLabels) optLabels.style.display = '';
+        const bookletCtrl = document.getElementById('flexBookletControl');
+        if (bookletCtrl) bookletCtrl.style.display = '';
         renderFlexMatrix(isMopaLike);
 
         // Force .xs when an axis requires per-layer focus (defocus)
@@ -3101,6 +3110,11 @@ function updateTestGridUI() {
 
     // Guided mode: ensure flex matrix hidden and guided groups restored
     if (flexControl) flexControl.style.display = 'none';
+    // Hide flex-only options in guided mode
+    const optLabelsG = document.getElementById('optShowLabelsRow');
+    if (optLabelsG) optLabelsG.style.display = 'none';
+    const bookletCtrlG = document.getElementById('flexBookletControl');
+    if (bookletCtrlG) bookletCtrlG.style.display = 'none';
     ['groupFreq', 'groupLpi', 'subGroupPower', 'subGroupSpeed'].forEach(id => {
         const el = document.getElementById(id); if (el) el.style.display = '';
     });
@@ -3639,22 +3653,30 @@ function setupTestGrid() {
         });
     }
 
-    // Smart range suggestions (Idea 8)
-    const btnFlexSuggest = document.getElementById('btnFlexSuggest');
-    if (btnFlexSuggest) {
-        btnFlexSuggest.addEventListener('click', () => {
-            const laser = getActiveLaserConfig(state.settings);
-            const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
-            applyFlexSuggestions(isMopaLike);
-        });
-    }
-
     // Axis tick labels toggle (Idea 2) — reflect immediately in the preview
     const flexShowLabels = document.getElementById('flexShowLabels');
     if (flexShowLabels) flexShowLabels.addEventListener('change', updateGridPreview);
     // Cross-hatch also affects the engraved result — refresh the preview
     const gridCrossHatchEl = document.getElementById('gridCrossHatch');
     if (gridCrossHatchEl) gridCrossHatchEl.addEventListener('change', updateGridPreview);
+    // Fill-area / no-QR toggle — removes the QR and fills the whole area
+    const gridFillAreaEl = document.getElementById('gridFillArea');
+    if (gridFillAreaEl) gridFillAreaEl.addEventListener('change', updateGridPreview);
+
+    // Per-axis invert (⇄) buttons — swap the Start/End values to flip an axis.
+    document.querySelectorAll('.btn-invert-axis[data-invert]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const [aId, bId] = btn.getAttribute('data-invert').split(',');
+            const a = document.getElementById(aId);
+            const b = document.getElementById(bId);
+            if (a && b) {
+                const tmp = a.value;
+                a.value = b.value;
+                b.value = tmp;
+                updateGridPreview();
+            }
+        });
+    });
 
     // 3rd-axis booklet (Idea 7)
     const flexBookletEnable = document.getElementById('flexBookletEnable');
@@ -4953,6 +4975,44 @@ function getActiveSettingsKey() {
     return laser ? laser.settingsKey : 'uv';
 }
 
+// QR engraving defaults pulled from the admin portal so the client-side grid
+// generator engraves the QR code AND the axis tick labels with the same
+// parameters the admin configured (rather than the generator's hardcoded
+// fallbacks). Cached per settingsKey; refreshed when the test-grid modal opens.
+let activeQrDefaults = null;
+const qrDefaultsCache = {};
+
+function applyQrDefaults(settings) {
+    if (!activeQrDefaults) return settings;
+    const q = activeQrDefaults;
+    if (typeof q.qrPower === 'number') settings.qrPower = q.qrPower;
+    if (typeof q.qrSpeed === 'number') settings.qrSpeed = q.qrSpeed;
+    if (typeof q.qrFrequency === 'number') settings.qrFrequency = q.qrFrequency;
+    if (typeof q.qrLpi === 'number') settings.qrLpi = q.qrLpi;
+    if (typeof q.qrSize === 'number') settings.qrSize = q.qrSize;
+    if (typeof q.qrCrossHatch === 'boolean') settings.qrCrossHatch = q.qrCrossHatch;
+    return settings;
+}
+
+async function loadQrDefaults() {
+    const settingsKey = getActiveSettingsKey();
+    if (qrDefaultsCache[settingsKey]) {
+        activeQrDefaults = qrDefaultsCache[settingsKey];
+        return activeQrDefaults;
+    }
+    try {
+        const res = await fetch(`/api/testgrid-defaults/${settingsKey}`);
+        if (res.ok) {
+            const data = await res.json();
+            qrDefaultsCache[settingsKey] = data;
+            activeQrDefaults = data;
+        }
+    } catch {
+        // Offline / server unavailable — generator keeps its built-in fallbacks.
+    }
+    return activeQrDefaults;
+}
+
 function getFlexSuggestions(isMopa) {
     const base = getFlexDefaults(isMopa);
     const materialId = state.settings?.material || DEFAULT_MATERIAL_ID;
@@ -4973,21 +5033,6 @@ function getFlexSuggestions(isMopa) {
     apply('lpc', 'lpi', 'lpiRange');
     if (typeof md.pulseWidth === 'number') out.pulseWidth.def = md.pulseWidth;
     return out;
-}
-
-// Reseed the flex matrix ranges + constants from smart suggestions, preserving
-// the user's current X/Y axis role choices.
-function applyFlexSuggestions(isMopa) {
-    ensureFlexState(isMopa);
-    const sug = getFlexSuggestions(isMopa);
-    FLEX_PARAMS.forEach(p => {
-        flexState.constants[p.id] = sug[p.id].def;
-        flexState.ranges[p.id] = { min: sug[p.id].range[0], max: sug[p.id].range[1] };
-    });
-    renderFlexMatrix(isMopa);
-    updateTestGridUI();
-    updateGridPreview();
-    showToast('Ranges suggested from material + laser defaults', 'success');
 }
 
 let flexState = null;
@@ -5092,7 +5137,17 @@ function renderFlexMatrix(isMopa) {
             const minI = document.createElement('input');
             minI.type = 'number'; minI.className = 'input'; minI.id = `flexMin_${p.id}`;
             minI.step = step; minI.value = flexState.ranges[p.id].min;
-            const sep = document.createElement('span'); sep.className = 'flex-range-sep'; sep.textContent = '→';
+            const sep = document.createElement('button');
+            sep.type = 'button';
+            sep.className = 'btn-invert-axis flex-range-sep';
+            sep.textContent = '⇄';
+            sep.title = 'Invert this axis (swap Start ↔ End)';
+            sep.addEventListener('click', () => {
+                const r = flexState.ranges[p.id];
+                const t = r.min; r.min = r.max; r.max = t;
+                renderFlexMatrix(isMopa);
+                updateGridPreview();
+            });
             const maxI = document.createElement('input');
             maxI.type = 'number'; maxI.className = 'input'; maxI.id = `flexMax_${p.id}`;
             maxI.step = step; maxI.value = flexState.ranges[p.id].max;
@@ -5175,10 +5230,11 @@ function seedBookletRange() {
 }
 
 async function generateCustomGridBooklet(format) {
+    await loadQrDefaults();
     const hint = document.getElementById('flexBookletHint');
     const setHint = (msg) => { if (hint) hint.textContent = msg; };
 
-    const base = getCustomGridSettings();
+    const base = applyQrDefaults(getCustomGridSettings());
     if (base.gridMode !== 'flexible') {
         showToast('Booklets require the Custom Axes layout', 'error');
         return;
@@ -5561,6 +5617,9 @@ function getCustomGridSettings() {
     const defocusEl = document.getElementById('gridDefocus');
     const defocus = defocusEl ? normalizeDefocus(parseFloat(defocusEl.value)) : normalizeDefocus(state.settings.defocus);
 
+    const fillAreaEl = document.getElementById('gridFillArea');
+    const fillArea = !!(fillAreaEl && fillAreaEl.checked);
+
     // Custom-axes (flexible) layout — pick any two variables as X/Y.
     const layoutEl = document.getElementById('gridLayoutMode');
     if (layoutEl && layoutEl.value === 'flex') {
@@ -5571,6 +5630,7 @@ function getCustomGridSettings() {
             activeLaserType: laserTypeId,
             gridMode: 'flexible',
             flex,
+            fillArea,
             showAxisLabels: !!(document.getElementById('flexShowLabels') && document.getElementById('flexShowLabels').checked),
             cellSize: Math.max(1, Math.min(10, parseInt(document.getElementById('gridCellSize').value) || 5)),
             cellGap: (() => {
@@ -5640,15 +5700,24 @@ function getCustomGridSettings() {
         const gridMatEl = document.getElementById('gridMaterial');
         settings.material = gridMatEl ? gridMatEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID);
         settings.defocus = defocus;
+        settings.fillArea = fillArea;
         return settings;
     } else {
         const gridMatEl = document.getElementById('gridMaterial');
         const uvModeEl = document.getElementById('gridUvMode');
         const uvMode = uvModeEl ? uvModeEl.value : 'standard';
 
+        // The two LPC fields are directional (Start → End): the first value maps
+        // to the LEFT edge of the grid. Derive a normalized min/max + an ascending
+        // flag from the field order so the invert button actually flips the axis.
+        const lpiStart = parseInt(document.getElementById('gridLpiMin').value);
+        const lpiEnd = parseInt(document.getElementById('gridLpiMax').value);
+        const lpiAscending = lpiStart < lpiEnd;
+
         const base = {
-            lpiMin: parseInt(document.getElementById('gridLpiMin').value),
-            lpiMax: parseInt(document.getElementById('gridLpiMax').value),
+            lpiMin: Math.min(lpiStart, lpiEnd),
+            lpiMax: Math.max(lpiStart, lpiEnd),
+            lpiAscending,
 
             cellSize: Math.max(1, Math.min(10, parseInt(document.getElementById('gridCellSize').value) || 5)),
             cellGap: (() => {
@@ -5664,6 +5733,7 @@ function getCustomGridSettings() {
             material: gridMatEl ? gridMatEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID),
             activeDevice: deviceId,
             activeLaserType: laserTypeId,
+            fillArea,
         };
 
         if (uvMode === 'defocus') {
@@ -5683,17 +5753,20 @@ function getCustomGridSettings() {
         }
 
         // Standard UV Mapping
+        const freqStart = parseInt(document.getElementById('gridFreqMin').value);
+        const freqEnd = parseInt(document.getElementById('gridFreqMax').value);
         return {
             ...base,
-            freqMin: parseInt(document.getElementById('gridFreqMin').value),
-            freqMax: parseInt(document.getElementById('gridFreqMax').value),
+            freqMin: Math.min(freqStart, freqEnd),
+            freqMax: Math.max(freqStart, freqEnd),
+            freqDescending: freqStart > freqEnd,
             defocus,
         };
     }
 }
 
 function updateGridPreview() {
-    const settings = getCustomGridSettings();
+    const settings = applyQrDefaults(getCustomGridSettings());
     const gridInfo = drawGridToCanvas('gridPreviewCanvas', settings);
 
     if (gridInfo) {
@@ -5823,6 +5896,7 @@ function generateStandardGridXCS(formatOverride) {
 }
 
 async function clientSideStandardGrid(deviceId, laserTypeId, laser, filename, fmt) {
+    await loadQrDefaults();
     const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
     const fixedSettings = { cellSize: 5, cellGap: 1 };
 
@@ -5849,6 +5923,7 @@ async function clientSideStandardGrid(deviceId, laserTypeId, laser, filename, fm
     fixedSettings.defocus = getDefaultDefocus(deviceId, laserTypeId);
     fixedSettings.activeDevice = deviceId;
     fixedSettings.activeLaserType = laserTypeId;
+    applyQrDefaults(fixedSettings);
 
     const generator = new TestGridGenerator(fixedSettings);
     if (fmt === 'xs') {
@@ -5861,7 +5936,8 @@ async function clientSideStandardGrid(deviceId, laserTypeId, laser, filename, fm
 }
 
 async function generateCustomGridXCS(formatOverride) {
-    const customSettings = getCustomGridSettings();
+    await loadQrDefaults();
+    const customSettings = applyQrDefaults(getCustomGridSettings());
     // Defocus-axis grids require per-layer focus, which only .xs supports.
     const fmt = (customSettings.gridMode === 'defocus' || customSettings.exportFormat === 'xs' || formatOverride === 'xs') ? 'xs' : 'xcs';
     const ext = fmt;
@@ -5966,7 +6042,8 @@ function drawGridToCanvas(canvasId, settings) {
     const qrY = (startY + effectiveGridH - qrSizeMM) * scale;
     const qrSize = qrSizeMM * scale;
 
-    // Real QR Rendering
+    // Real QR Rendering (skipped in fill-area mode)
+    if (!gridInfo.fillArea) {
     if (gridInfo.qrData) {
         const qrPathStr = generator.generateQRPath(gridInfo.qrData, qrX, qrY, qrSize);
         const p = new Path2D(qrPathStr);
@@ -5976,6 +6053,7 @@ function drawGridToCanvas(canvasId, settings) {
         // Fallback for older grids or errors
         ctx.fillStyle = '#000';
         ctx.fillRect(qrX, qrY, qrSize, qrSize);
+    }
     }
 
     // Axis tick labels (Idea 2) — draw a readable echo of the engraved labels so
