@@ -397,35 +397,6 @@
             <div class="custom-grid-layout">
 
               <div class="custom-grid-settings-panel">
-                <!-- Presets: server-configured, auto-apply on select -->
-                <div class="setting-group" id="gridPresetControl">
-                  <h3>Preset <span class="info-icon" title="Select a preset to instantly apply its settings. Changes you make are remembered for this session.">ⓘ</span></h3>
-                  <select class="input" id="gridPresetSelect">
-                    <option value="">Loading presets…</option>
-                  </select>
-                  <p class="hint" id="gridPresetHint" style="font-size:0.78em; color:#888; margin:4px 0 0; display:none;"></p>
-                </div>
-                <!-- MOPA Control: Fixed Parameter Selection -->
-                <div class="setting-group" id="mopaFixedControl" style="display:none;">
-                  <h3>Fixed Parameter</h3>
-                  <select class="input" id="gridFixedParam">
-                    <option value="frequency">Fixed Frequency (Vary Speed & Power)</option>
-                    <option value="power">Fixed Power (Vary Speed & Freq)</option>
-                    <option value="speed">Fixed Speed (Vary Power & Freq)</option>
-                  </select>
-                </div>
-                <!-- UV Control: Grid Mode Selection -->
-                <div class="setting-group" id="uvGridModeControl" style="display:none;">
-                  <h3>Grid Mode</h3>
-                  <select class="input" id="gridUvMode">
-                    <option value="standard">Standard (Frequency × LPC)</option>
-                    <option value="defocus">Defocus (Defocus × LPC) — .xs only</option>
-                  </select>
-                  <p class="hint" id="gridUvModeHint" style="display:none; font-size:0.78em; color:#888; margin:6px 0 0;">
-                    Each row uses a different focus offset, baked into the .xs file.
-                    Export as <strong>.xs</strong> only — <strong>.xcs</strong> cannot store per-layer focus.
-                  </p>
-                </div>
                 <!-- Custom Axes Matrix (rendered dynamically per laser type) -->
                 <div class="setting-group" id="flexAxisControl" style="display:none;">
                   <h3>Axis Picker <span class="info-icon" title="Choose exactly one X and one Y variable. Everything else is held constant.">ⓘ</span></h3>
@@ -634,12 +605,12 @@
                 <!-- Preview -->
                 <div class="grid-preview" id="gridPreviewContainer">
                   <canvas id="gridPreviewCanvas"></canvas>
+                  <div id="gridPreviewTooltip" class="grid-preview-tooltip" style="display:none;"></div>
                 </div>
 
                 <!-- Custom Actions -->
                 <div class="modal-footer-custom"
                   style="display: flex; justify-content: flex-end; gap: 10px; margin-top: auto; align-items: center; flex-wrap: wrap;">
-                  <button class="btn btn-secondary" id="btnPreviewGrid">Update Preview</button>
                   <button class="btn btn-primary" id="btnGenerateGrid">
                     <span>💾</span> Download .xcs
                   </button>

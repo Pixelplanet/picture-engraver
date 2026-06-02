@@ -183,7 +183,6 @@ const elements = {
     gridCellSize: document.getElementById('gridCellSize'),
     gridCellGap: document.getElementById('gridCellGap'),
     gridPreviewCanvas: document.getElementById('gridPreviewCanvas'),
-    btnPreviewGrid: document.getElementById('btnPreviewGrid'),
     btnGenerateGrid: document.getElementById('btnGenerateGrid'),
 
     // Toast
@@ -2956,9 +2955,6 @@ function setupModals() {
         // axis tick labels are engraved with the configured parameters.
         loadQrDefaults().then(() => { if (typeof updateGridPreview === 'function') updateGridPreview(); });
 
-        // Load server-configured presets for the active laser type
-        fetchAndPopulatePresets(getActiveSettingsKeyForPresets());
-
         // Show Test Grid Info if needed
         if (window.onboarding && !window.onboarding.hasCompletedTestGridTour()) {
             setTimeout(() => window.onboarding.showTestGridInfoModal(), 500);
@@ -3061,12 +3057,6 @@ function updateTestGridUI() {
     const laser = getActiveLaserConfig(s);
     const isMopaLike = laser ? (laser.hasPulseWidth && laser.hasMopaFrequency) : false;
 
-    // Keep the preset dropdown in sync with the active laser class
-    const laserType = getActiveSettingsKeyForPresets();
-    if (!_serverPresetsCache[laserType]) {
-        fetchAndPopulatePresets(laserType);
-    }
-
     // Update Standard Grid tab description based on device
     const elVar1 = document.getElementById('stdGridVar1');
     const elVar2 = document.getElementById('stdGridVar2');
@@ -3081,8 +3071,8 @@ function updateTestGridUI() {
         if (elPasses) elPasses.innerHTML = '<strong>Passes:</strong> 1';
     }
 
-    // Grid layout mode: guided presets vs. custom axes (flexible)
-    const layoutMode = _activeLayoutMode || 'guided';
+    // Grid layout mode is always the custom-axes (flexible) picker.
+    const layoutMode = 'flex';
     const flexControl = document.getElementById('flexAxisControl');
     // Guided-only param groups (hidden in custom-axes mode)
     const guidedGroups = ['groupFreq', 'groupLpi', 'subGroupPower', 'subGroupSpeed',
@@ -3631,28 +3621,6 @@ function setupTestGrid() {
 
 
 
-    // MOPA Fixed Param
-    const fixedParam = document.getElementById('gridFixedParam');
-    if (fixedParam) {
-        fixedParam.addEventListener('change', () => {
-            updateTestGridUI();
-            updateGridPreview();
-        });
-    }
-
-    // UV Grid Mode (standard vs defocus axis)
-    const uvModeParam = document.getElementById('gridUvMode');
-    if (uvModeParam) {
-        uvModeParam.addEventListener('change', () => {
-            updateTestGridUI();
-            updateGridPreview();
-        });
-    }
-
-    // Grid layout mode (guided presets vs custom axes)
-    // Note: layout mode is now controlled by the active preset's layoutMode field.
-    // No DOM element for gridLayoutMode exists anymore.
-
     // Axis tick labels toggle (Idea 2) — reflect immediately in the preview
     const flexShowLabels = document.getElementById('flexShowLabels');
     if (flexShowLabels) flexShowLabels.addEventListener('change', updateGridPreview);
@@ -3697,25 +3665,6 @@ function setupTestGrid() {
         });
     }
 
-    // Grid preset select — auto-apply on change
-    const gridPresetSel = document.getElementById('gridPresetSelect');
-    if (gridPresetSel) {
-        gridPresetSel.addEventListener('change', () => {
-            const laserType = getActiveSettingsKeyForPresets();
-            const presets = _serverPresetsCache[laserType] || [];
-            const preset = presets.find(p => p.id === gridPresetSel.value);
-            if (preset) applyPreset(preset);
-        });
-    }
-
-    // Auto-save session override on any setting input in the custom grid panel
-    const customGridPanel = document.getElementById('tabCustom');
-    if (customGridPanel) {
-        customGridPanel.addEventListener('change', (e) => {
-            if (e.target.id !== 'gridPresetSelect') saveSessionOverride();
-        });
-    }
-
     // Material dropdown (dev mode only) — persist selection to settings
     const gridMaterialEl = document.getElementById('gridMaterial');
     if (gridMaterialEl) {
@@ -3731,10 +3680,12 @@ function setupTestGrid() {
     }
 
     // Buttons
-    document.getElementById('btnPreviewGrid').addEventListener('click', updateGridPreview);
     document.getElementById('btnGenerateGrid').addEventListener('click', () => generateCustomGridXCS('xcs'));
     const btnGenGridXS = document.getElementById('btnGenerateGridXS');
     if (btnGenGridXS) btnGenGridXS.addEventListener('click', () => generateCustomGridXCS('xs'));
+
+    // Hover over a preview cell to see its resolved settings.
+    initGridPreviewHover();
 
     // Standard Grid Buttons
     const btnStd = document.getElementById('btnGenerateStandard');
@@ -3768,7 +3719,6 @@ function setupTestGrid() {
 
             if (targetId === 'custom') {
                 updateGridPreview();
-                fetchAndPopulatePresets(getActiveSettingsKeyForPresets());
             } else if (targetId === 'standard') {
                 updateStandardPreview();
             }
@@ -5305,214 +5255,9 @@ async function generateCustomGridBooklet(format) {
     }
 }
 
-// ── Grid presets (server-configured, session-persistent overrides) ───────────
-
-// Common grid fields captured for every preset (both layout modes).
-const GUIDED_FIELD_IDS = [
-    'gridUvMode', 'gridFixedParam',
-    'gridFreqMin', 'gridFreqMax', 'gridFreqFixed',
-    'gridLpiMin', 'gridLpiMax', 'gridLpiFixed',
-    'gridPower', 'gridPowerMin', 'gridPowerMax',
-    'gridSpeed', 'gridSpeedMin', 'gridSpeedMax',
-    'gridDefocus', 'gridDefocusMin', 'gridDefocusMax',
-];
-
-// Active preset tracking — updated whenever a preset is applied or settings change.
-let _activePresetId = null;
-let _activeLayoutMode = 'guided';  // 'guided' | 'flex'
-let _serverPresetsCache = {};       // { laserType: preset[] }
-
-function getActiveSettingsKeyForPresets() {
-    const s = state.settings;
-    if (!s) return 'uv';
-    const laser = getActiveLaserConfig(s);
-    if (!laser) return 'uv';
-    if (laser.hasPulseWidth && laser.hasMopaFrequency) {
-        return s.activeLaserType || 'mopa';
-    }
-    return s.activeLaserType || 'uv';
-}
-
 function activeLaserClass() {
     const laser = getActiveLaserConfig(state.settings);
     return (laser && laser.hasPulseWidth && laser.hasMopaFrequency) ? 'mopa' : 'uv';
-}
-
-async function fetchAndPopulatePresets(laserType) {
-    const sel = document.getElementById('gridPresetSelect');
-    if (!sel) return;
-
-    try {
-        if (!_serverPresetsCache[laserType]) {
-            const res = await fetch(`/api/testgrid-presets/${encodeURIComponent(laserType)}`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            _serverPresetsCache[laserType] = await res.json();
-        }
-
-        const presets = _serverPresetsCache[laserType] || [];
-        sel.innerHTML = '';
-        if (!presets.length) {
-            sel.innerHTML = '<option value="">— No presets configured —</option>';
-            return;
-        }
-
-        presets.forEach(p => {
-            const o = document.createElement('option');
-            o.value = p.id;
-            o.textContent = p.isDefault ? `★ ${p.name}` : p.name;
-            sel.appendChild(o);
-        });
-
-        // Select the default preset (or restore the previously active one if it exists)
-        const prevId = _activePresetId;
-        const prevOption = prevId && sel.querySelector(`option[value="${CSS.escape(prevId)}"]`);
-        if (prevOption) {
-            sel.value = prevId;
-        } else {
-            const defaultPreset = presets.find(p => p.isDefault) || presets[0];
-            sel.value = defaultPreset.id;
-            applyPreset(defaultPreset);
-        }
-    } catch (err) {
-        Logger.warn('Failed to load presets', err);
-        sel.innerHTML = '<option value="">— Error loading presets —</option>';
-    }
-}
-
-function applyPreset(preset) {
-    if (!preset) return;
-
-    // Check for session override first
-    const laserType = getActiveSettingsKeyForPresets();
-    const overrideKey = `pe_ov:${laserType}:${preset.id}`;
-    let cfg = preset;
-    try {
-        const raw = sessionStorage.getItem(overrideKey);
-        if (raw) {
-            const override = JSON.parse(raw);
-            cfg = { ...preset, ...override, id: preset.id, name: preset.name, isBuiltin: preset.isBuiltin };
-        }
-    } catch { /* use base preset */ }
-
-    _activePresetId = preset.id;
-    _activeLayoutMode = cfg.layoutMode || 'guided';
-
-    applyGridConfig(cfg);
-}
-
-function saveSessionOverride() {
-    if (!_activePresetId) return;
-    const laserType = getActiveSettingsKeyForPresets();
-    const overrideKey = `pe_ov:${laserType}:${_activePresetId}`;
-    try {
-        const snapshot = snapshotGridConfig('override');
-        // Remove identity fields; keep only settings
-        delete snapshot.name;
-        delete snapshot.id;
-        delete snapshot.isBuiltin;
-        delete snapshot.isDefault;
-        sessionStorage.setItem(overrideKey, JSON.stringify(snapshot));
-    } catch { /* quota exceeded — ignore */ }
-}
-
-// Capture the current custom-grid configuration into a portable object.
-function snapshotGridConfig(name) {
-    const isMopa = activeLaserClass() === 'mopa';
-    const layoutMode = _activeLayoutMode || 'guided';
-    const matEl = document.getElementById('gridMaterial');
-    const common = {
-        cellSize: parseInt(document.getElementById('gridCellSize').value) || 5,
-        cellGap: parseFloat(document.getElementById('gridCellGap').value),
-        passes: parseInt(document.getElementById('gridPasses').value) || 1,
-        crossHatch: document.getElementById('gridCrossHatch').checked,
-        showAxisLabels: !!(document.getElementById('flexShowLabels') && document.getElementById('flexShowLabels').checked),
-        material: matEl ? matEl.value : (state.settings?.material || DEFAULT_MATERIAL_ID),
-    };
-
-    let flex = null;
-    if (layoutMode === 'flex') {
-        ensureFlexState(isMopa);
-        readFlexInputs(isMopa);
-        flex = JSON.parse(JSON.stringify({
-            roles: flexState.roles,
-            ranges: flexState.ranges,
-            constants: flexState.constants,
-        }));
-    }
-
-    const guided = {};
-    GUIDED_FIELD_IDS.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) guided[id] = el.value;
-    });
-
-    return {
-        kind: 'picture-engraver-grid-preset',
-        version: 1,
-        name: name || 'Untitled',
-        laserClass: activeLaserClass(),
-        layoutMode,
-        common,
-        flex,
-        guided,
-    };
-}
-
-// Apply a previously captured configuration to the UI.
-function applyGridConfig(cfg) {
-    if (!cfg) return;
-    const isMopa = activeLaserClass() === 'mopa';
-
-    // Common fields
-    const setVal = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== null) el.value = v; };
-    if (cfg.common) {
-        setVal('gridCellSize', cfg.common.cellSize);
-        setVal('gridCellGap', cfg.common.cellGap);
-        setVal('gridPasses', cfg.common.passes);
-        const ch = document.getElementById('gridCrossHatch');
-        if (ch && typeof cfg.common.crossHatch === 'boolean') ch.checked = cfg.common.crossHatch;
-        const lbl = document.getElementById('flexShowLabels');
-        if (lbl && typeof cfg.common.showAxisLabels === 'boolean') lbl.checked = cfg.common.showAxisLabels;
-        const matEl = document.getElementById('gridMaterial');
-        if (matEl && cfg.common.material) {
-            matEl.value = cfg.common.material;
-            if (state.settings) { state.settings.material = cfg.common.material; SettingsStorage.save(state.settings); }
-        }
-    }
-
-    // Guided fields
-    if (cfg.guided) {
-        Object.keys(cfg.guided).forEach(id => setVal(id, cfg.guided[id]));
-    }
-
-    // Layout mode + flex state
-    if (cfg.layoutMode) _activeLayoutMode = cfg.layoutMode;
-
-    if (cfg.layoutMode === 'flex' && cfg.flex) {
-        ensureFlexState(isMopa);
-        // Only adopt roles/ranges/constants for params valid on this laser class
-        const valid = new Set(FLEX_PARAMS.filter(p => !(p.mopaOnly && !isMopa)).map(p => p.id));
-        const roles = {};
-        FLEX_PARAMS.forEach(p => { roles[p.id] = 'const'; });
-        Object.keys(cfg.flex.roles || {}).forEach(k => {
-            if (valid.has(k)) roles[k] = cfg.flex.roles[k];
-        });
-        // Ensure exactly one X and one Y survive the filter
-        const haveX = Object.values(roles).includes('x');
-        const haveY = Object.values(roles).includes('y');
-        if (!haveX) roles.speed = 'x';
-        if (!haveY) roles.power = roles.power === 'x' ? 'y' : 'y';
-        flexState.roles = roles;
-        Object.keys(cfg.flex.ranges || {}).forEach(k => {
-            if (valid.has(k)) flexState.ranges[k] = { ...cfg.flex.ranges[k] };
-        });
-        Object.keys(cfg.flex.constants || {}).forEach(k => {
-            if (valid.has(k)) flexState.constants[k] = cfg.flex.constants[k];
-        });
-    }
-
-    updateTestGridUI();
-    updateGridPreview();
 }
 
 function getCustomGridSettings() {
@@ -5528,7 +5273,8 @@ function getCustomGridSettings() {
     const fillArea = !!(fillAreaEl && fillAreaEl.checked);
 
     // Custom-axes (flexible) layout — pick any two variables as X/Y.
-    if (_activeLayoutMode === 'flex') {
+    // This is the only layout mode in the custom grid generator.
+    {
         const flex = buildFlexConfig(isMopaLike);
         const gridMatEl = document.getElementById('gridMaterial');
         return {
@@ -5680,6 +5426,8 @@ function updateGridPreview() {
         if (infoSize) infoSize.textContent = `${gridInfo.numCols} × ${gridInfo.numRows}`;
         const infoCells = document.getElementById('gridInfoCells');
         if (infoCells) infoCells.textContent = gridInfo.totalCells;
+        // Expose the latest preview data for e2e tests (QR payload, axis values).
+        if (typeof window !== 'undefined') window.__lastGridInfo = gridInfo;
     }
 }
 /*
@@ -5873,6 +5621,9 @@ function drawGridToCanvas(canvasId, settings) {
 
     const scale = 4; // pixels per mm
 
+    // Per-cell hover hit map (canvas pixel rects + resolved parameters).
+    const hitMap = [];
+
     // When axis tick labels are enabled, widen the canvas with a gutter on the
     // left (Y values) and bottom (X values) so the echoed labels aren't clipped
     // — the engraved labels sit just outside the card outline.
@@ -5933,6 +5684,21 @@ function drawGridToCanvas(canvasId, settings) {
 
             ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
             ctx.fillRect(x, y, size, size);
+
+            // Record a hit rect (in absolute canvas pixels, accounting for the
+            // left gutter translate) so hovering can echo this cell's settings.
+            if (gridInfo.gridMode === 'flexible' && gridInfo.constants) {
+                const params = { ...gridInfo.constants };
+                if (Array.isArray(gridInfo.xValues)) params[gridInfo.xParam] = gridInfo.xValues[col];
+                if (Array.isArray(gridInfo.yValues)) params[gridInfo.yParam] = gridInfo.yValues[row];
+                hitMap.push({
+                    x: x + padL * scale,
+                    y,
+                    size,
+                    col, row,
+                    params,
+                });
+            }
         }
     }
 
@@ -5990,7 +5756,86 @@ function drawGridToCanvas(canvasId, settings) {
 
     if (padL) ctx.setTransform(1, 0, 0, 1, 0, 0);
 
+    // Publish hover data for the per-cell tooltip.
+    _gridPreviewHit = {
+        canvasId,
+        cells: hitMap,
+        xParam: gridInfo.xParam,
+        yParam: gridInfo.yParam,
+        isMopaLike: !!gridInfo.isMopaLike,
+        passes: gridInfo.passes || settings.passes || 1,
+    };
+
     return gridInfo;
+}
+
+// Hover state for the custom-grid preview (populated by drawGridToCanvas).
+let _gridPreviewHit = null;
+const FLEX_PARAM_LABELS = {
+    frequency: { label: 'Frequency', unit: 'kHz', float: false },
+    power: { label: 'Power', unit: '%', float: false },
+    speed: { label: 'Speed', unit: 'mm/s', float: false },
+    lpc: { label: 'LPC', unit: 'lines/cm', float: false },
+    defocus: { label: 'Defocus', unit: 'mm', float: true },
+    pulseWidth: { label: 'Pulse Width', unit: 'ns', float: false },
+};
+
+function fmtFlexVal(param, v) {
+    if (v === undefined || v === null || Number.isNaN(v)) return '—';
+    const meta = FLEX_PARAM_LABELS[param];
+    return meta && meta.float ? (Math.round(v * 10) / 10).toFixed(1) : String(Math.round(v));
+}
+
+// Wire up the hover tooltip for the custom-grid preview canvas (called once).
+function initGridPreviewHover() {
+    const canvas = document.getElementById('gridPreviewCanvas');
+    const tooltip = document.getElementById('gridPreviewTooltip');
+    if (!canvas || !tooltip) return;
+
+    const hide = () => { tooltip.style.display = 'none'; };
+
+    canvas.addEventListener('mouseleave', hide);
+    canvas.addEventListener('mousemove', (e) => {
+        if (!_gridPreviewHit || !_gridPreviewHit.cells.length) { hide(); return; }
+        const rect = canvas.getBoundingClientRect();
+        // Map CSS pixel coords to the canvas's internal pixel coordinate system.
+        const sx = canvas.width / rect.width;
+        const sy = canvas.height / rect.height;
+        const px = (e.clientX - rect.left) * sx;
+        const py = (e.clientY - rect.top) * sy;
+
+        const hit = _gridPreviewHit.cells.find(c =>
+            px >= c.x && px <= c.x + c.size && py >= c.y && py <= c.y + c.size);
+
+        if (!hit) { hide(); return; }
+
+        const p = hit.params;
+        const order = ['frequency', 'power', 'speed', 'lpc', 'defocus'];
+        if (_gridPreviewHit.isMopaLike) order.push('pulseWidth');
+        const rows = order
+            .filter(k => p[k] !== undefined)
+            .map(k => {
+                const meta = FLEX_PARAM_LABELS[k];
+                return `<div><span>${meta.label}</span><strong>${fmtFlexVal(k, p[k])} ${meta.unit}</strong></div>`;
+            });
+        rows.push(`<div><span>Passes</span><strong>${_gridPreviewHit.passes}</strong></div>`);
+
+        tooltip.innerHTML =
+            `<div class="grid-preview-tooltip-head">Cell ${hit.col + 1}, ${hit.row + 1}</div>${rows.join('')}`;
+        tooltip.style.display = 'block';
+
+        // Position within the preview container, flipping if near the right edge.
+        const container = canvas.parentElement;
+        const cRect = container.getBoundingClientRect();
+        let left = e.clientX - cRect.left + 14;
+        let top = e.clientY - cRect.top + 14;
+        const tw = tooltip.offsetWidth || 160;
+        const th = tooltip.offsetHeight || 120;
+        if (left + tw > cRect.width) left = e.clientX - cRect.left - tw - 14;
+        if (top + th > cRect.height) top = Math.max(4, cRect.height - th - 4);
+        tooltip.style.left = `${Math.max(4, left)}px`;
+        tooltip.style.top = `${Math.max(4, top)}px`;
+    });
 }
 
 function updateStandardPreview() {

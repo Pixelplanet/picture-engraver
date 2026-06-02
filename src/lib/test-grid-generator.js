@@ -1409,7 +1409,13 @@ export class TestGridGenerator {
                 xAxisLabel: `${meta[xParam].label} (${meta[xParam].unit})`,
                 yAxisLabel: `${meta[yParam].label} (${meta[yParam].unit})`,
                 gridMode: 'flexible',
-                xParam, yParam
+                xParam, yParam,
+                constants: { ...constants },
+                passes: s.passes || 1,
+                isMopaLike,
+                xValues: [...xValues],
+                yValues: [...yValues],
+                cellSize: s.cellSize,
             }
         };
     }

@@ -23,9 +23,7 @@ test.describe('Flexible test grid (Axis Picker Matrix)', () => {
         await page.click('button[data-modal-tab="custom"]');
         await expect(page.locator('#tabCustom')).toBeVisible();
 
-        // Switch to custom-axes layout
-        await page.selectOption('#gridLayoutMode', 'flex');
-
+        // The custom grid is always the Axis Picker Matrix (flex) UI now.
         // Matrix should render one row per (non-MOPA) variable
         const rows = page.locator('#flexAxisMatrix .flex-axis-row');
         await expect(rows.first()).toBeVisible();
@@ -48,8 +46,11 @@ test.describe('Flexible test grid (Axis Picker Matrix)', () => {
         await defocusRow.locator('.flex-role-toggle button', { hasText: '•' }).click();
         await expect(page.locator('#btnGenerateGrid')).toBeEnabled();
 
-        // Preview should draw to the canvas
-        await page.click('#btnPreviewGrid');
+        // Preview should draw to the canvas (auto-updates on role/value changes)
+        await page.waitForFunction(() => {
+            const c = document.getElementById('gridPreviewCanvas');
+            return c && c.width > 0;
+        });
         const hasPixels = await page.evaluate(() => {
             const canvas = document.getElementById('gridPreviewCanvas');
             if (!canvas || !canvas.width) return false;
@@ -83,15 +84,15 @@ test.describe('Flexible test grid (Axis Picker Matrix)', () => {
 
         await page.goto('/');
         await page.click('#btnTestGrid');
+        await expect(page.locator('#testGridModal')).toBeVisible();
         await page.click('button[data-modal-tab="custom"]');
-        await page.selectOption('#gridLayoutMode', 'flex');
 
         // Smart range suggestions button removed — must not be present.
         await expect(page.locator('#btnFlexSuggest')).toHaveCount(0);
 
-        // Preset dropdown should contain at least one built-in template
-        const presetOptions = await page.locator('#gridPresetSelect option').count();
-        expect(presetOptions).toBeGreaterThan(1);
+        // Preset dropdown removed — the custom grid defaults to the Axis Picker.
+        await expect(page.locator('#gridPresetSelect')).toHaveCount(0);
+        await expect(page.locator('#flexAxisMatrix .flex-axis-row').first()).toBeVisible();
 
         // Axis tick labels toggle exists and is checkable
         await page.check('#flexShowLabels');
@@ -148,16 +149,19 @@ test.describe('Flexible test grid (Axis Picker Matrix)', () => {
 
         await page.goto('/');
         await page.click('#btnTestGrid');
+        await expect(page.locator('#testGridModal')).toBeVisible();
         await page.click('button[data-modal-tab="custom"]');
-        await page.selectOption('#gridLayoutMode', 'flex');
 
         // Without labels the canvas hugs the 85mm card (×4 px/mm = 340px).
-        await page.click('#btnPreviewGrid');
+        await page.waitForFunction(() => {
+            const c = document.getElementById('gridPreviewCanvas');
+            return c && c.width > 0;
+        });
         const baseW = await page.evaluate(() => document.getElementById('gridPreviewCanvas').width);
 
         // Enabling labels adds a left/bottom gutter so edge labels aren't clipped.
         await page.check('#flexShowLabels');
-        await page.click('#btnPreviewGrid');
+        await page.waitForTimeout(200);
         const labelW = await page.evaluate(() => document.getElementById('gridPreviewCanvas').width);
         expect(labelW).toBeGreaterThan(baseW);
     });

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('guided custom grid: options consolidated, invert + fill-area work', async ({ page }) => {
+test('custom grid: flex picker, options consolidated, invert + fill-area work', async ({ page }) => {
     const errors = [];
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 
@@ -14,23 +14,31 @@ test('guided custom grid: options consolidated, invert + fill-area work', async 
 
     await page.goto('/');
     await page.click('#btnTestGrid');
+    await expect(page.locator('#testGridModal')).toBeVisible();
     await page.click('button[data-modal-tab="custom"]');
 
-    // LPC defaults read 800 → 300 (left = high energy)
-    await expect(page.locator('#gridLpiMin')).toHaveValue('800');
-    await expect(page.locator('#gridLpiMax')).toHaveValue('300');
+    // The custom grid is always the Axis Picker (flex) matrix now.
+    await expect(page.locator('#flexAxisControl')).toBeVisible();
+    await expect(page.locator('#flexAxisMatrix .flex-axis-row').first()).toBeVisible();
+
+    // Removed legacy controls must not be present.
+    await expect(page.locator('#gridPresetSelect')).toHaveCount(0);
+    await expect(page.locator('#btnPreviewGrid')).toHaveCount(0);
 
     // Options section consolidated at the bottom with the new checkboxes
     await expect(page.locator('#gridOptionsSection #gridCrossHatch')).toBeVisible();
     await expect(page.locator('#gridOptionsSection #gridFillArea')).toBeVisible();
 
-    // Flex-only options hidden in guided mode
-    await expect(page.locator('#optShowLabelsRow')).toBeHidden();
+    // Flex-only options (axis tick labels) are available in flex mode.
+    await expect(page.locator('#optShowLabelsRow')).toBeVisible();
 
-    // Invert button swaps LPC start/end
-    await page.click('.btn-invert-axis[data-invert="gridLpiMin,gridLpiMax"]');
-    await expect(page.locator('#gridLpiMin')).toHaveValue('300');
-    await expect(page.locator('#gridLpiMax')).toHaveValue('800');
+    // Invert button on the Power (Y) axis swaps Start/End values.
+    const powerRow = page.locator('#flexAxisMatrix .flex-axis-row', { hasText: 'Power' });
+    const minBefore = await powerRow.locator('#flexMin_power').inputValue();
+    const maxBefore = await powerRow.locator('#flexMax_power').inputValue();
+    await powerRow.locator('.flex-range-sep').click();
+    await expect(powerRow.locator('#flexMin_power')).toHaveValue(maxBefore);
+    await expect(powerRow.locator('#flexMax_power')).toHaveValue(minBefore);
 
     // Fill-area toggle works without errors
     await page.check('#gridFillArea');
