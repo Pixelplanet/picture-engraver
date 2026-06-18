@@ -117,6 +117,16 @@ export const LASER_TYPES = {
     },
 };
 
+/**
+ * Check whether a laser type has system default color mappings.
+ * @param {string} laserTypeId - The laser type ID (e.g. 'uv', 'ir', 'blue_ultra')
+ * @returns {boolean} True if pre-calibrated system default maps exist for this laser
+ */
+export function hasSystemDefaultMaps(laserTypeId) {
+    const def = LASER_TYPES[laserTypeId];
+    return def ? def.hasDefaultMap === true : false;
+}
+
 // ── Device Families ────────────────────────────────────────────────────────────
 // Families group related devices for the landing-page picker UI.
 

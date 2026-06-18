@@ -28,7 +28,7 @@ import { multiGridPalette, initializeMultiGridPalette } from './lib/multi-grid-p
 import { GridImagePicker } from './lib/grid-image-picker.js';
 import { initFrequencyLimiter } from './lib/ui-enhancements.js';
 import { getMaterialsForLaser, getMaterialById, getMaterialDefaults, DEFAULT_MATERIAL_ID } from './lib/material-registry.js';
-import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey, isDeviceVisible, getDefaultDefocus, normalizeDefocus } from './lib/device-registry.js';
+import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey, isDeviceVisible, getDefaultDefocus, normalizeDefocus, hasSystemDefaultMaps, LASER_TYPES } from './lib/device-registry.js';
 
 
 
@@ -46,7 +46,8 @@ const state = {
     originalImageName: null, // Original uploaded file name (without extension)
     gridPicker: null, // GridImagePicker instance
     currentMiniPickerMapId: null, // Current grid in picker
-    visibilitySettings: { hiddenDevices: [], hiddenLaserTypes: [] }
+    visibilitySettings: { hiddenDevices: [], hiddenLaserTypes: [] },
+    shownNoDefaultModals: new Set()
 };
 
 // ===================================
@@ -948,6 +949,92 @@ function getCellFromCoords(x, y) {
     return entries.find(e => e.gridPos.col === col && e.gridPos.row === row);
 }
 
+/**
+ * Check if the active laser type has no system default maps AND no user/sever maps exist.
+ * If so, show the guidance modal (once per laser type per session).
+ */
+function checkAndShowNoDefaultMapsModal() {
+    const laserType = state.settings?.activeLaserType;
+    if (!laserType) return;
+
+    // Only for lasers that lack system defaults
+    if (hasSystemDefaultMaps(laserType)) return;
+
+    // Only if user has NO maps at all
+    if (SettingsStorage.getColorMaps().length > 0) return;
+
+    // Only once per laser type per session
+    if (state.shownNoDefaultModals.has(laserType)) return;
+    state.shownNoDefaultModals.add(laserType);
+
+    // Small delay to let UI settle after device/laser switch
+    setTimeout(() => showNoDefaultMapsModal(laserType), 400);
+}
+
+/**
+ * Show modal guiding users to calibrate when no default color maps exist.
+ * @param {string} laserTypeId - The laser type ID
+ */
+function showNoDefaultMapsModal(laserTypeId) {
+    const existing = document.getElementById('noDefaultMapsModal');
+    if (existing) existing.remove();
+
+    const laserName = LASER_TYPES[laserTypeId]?.name || laserTypeId;
+
+    const modalHtml = `
+        <div class="modal active" id="noDefaultMapsModal" style="z-index: 10001;">
+            <div class="modal-content" style="max-width: 520px;">
+                <div class="modal-header">
+                    <h2>No Pre-Calibrated Colors</h2>
+                </div>
+                <div class="modal-body" style="text-align: center;">
+                    <div style="font-size: 2.5em; margin-bottom: 12px;">🔧</div>
+                    <p style="margin-bottom: 8px; font-size: 0.95em;">
+                        The <strong>${laserName}</strong> laser does not have pre-calibrated color mappings yet.
+                    </p>
+                    <p style="font-size: 0.85em; color: var(--text-secondary); margin-bottom: 16px;">
+                        You can still use it — you just need to calibrate your own settings first:
+                    </p>
+                    <ol style="text-align: left; margin: 0 auto 16px; padding-left: 24px; max-width: 380px; font-size: 0.9em; line-height: 2;">
+                        <li><strong>Generate</strong> a Test Grid for your material</li>
+                        <li><strong>Engrave</strong> it on your laser machine</li>
+                        <li><strong>Scan &amp; Analyze</strong> the result</li>
+                        <li>Calibrated colors <strong>appear automatically</strong></li>
+                    </ol>
+                </div>
+                <div class="modal-footer" style="display: flex; justify-content: center; gap: 12px; padding: 16px;">
+                    <button class="btn btn-secondary" id="btnDismissNoDefaults">Dismiss</button>
+                    <button class="btn btn-primary" id="btnGoToTestGrid">
+                        <span>📏</span> Go to Test Grid
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    // Event: Dismiss
+    document.getElementById('btnDismissNoDefaults').addEventListener('click', () => {
+        document.getElementById('noDefaultMapsModal').remove();
+    });
+
+    // Event: Go to Test Grid — close modal and open test grid modal
+    document.getElementById('btnGoToTestGrid').addEventListener('click', () => {
+        document.getElementById('noDefaultMapsModal').remove();
+        openModal(elements.testGridModal);
+    });
+
+    // Also close on backdrop click
+    const backdrop = document.querySelector('#noDefaultMapsModal .modal-backdrop');
+    if (!backdrop) {
+        // If no dedicated backdrop, click on modal background closes it
+        const modal = document.getElementById('noDefaultMapsModal');
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.remove();
+        });
+    }
+}
+
 async function init() {
     // 1. Initialize Settings Storage & Defaults
     SettingsStorage.ensureSystemDefaultMap();
@@ -987,6 +1074,9 @@ async function init() {
 
         // Update Header/UI to show current device
         updateDeviceUI(deviceId);
+
+        // Phase 4: Check if selected laser has no default maps — show guidance modal
+        checkAndShowNoDefaultMapsModal();
     }, state.visibilitySettings);
 
     // 3. Show Landing Page (if needed)
@@ -1011,6 +1101,14 @@ async function init() {
     // Initialize Onboarding Logic
     window.onboarding = new OnboardingManager();
     window.onboarding.init();
+
+    // Expose helpers for inline onclick handlers in dynamic HTML banners
+    window._pe = {
+        goToTestGrid: () => {
+            closeModal(elements.settingsModal);
+            openModal(elements.testGridModal);
+        }
+    };
 
     // Hook Help Button
     document.getElementById('btnHelp').addEventListener('click', () => {
@@ -1113,6 +1211,9 @@ function updateDeviceUI(deviceId) {
                     applySettingsToUI();
                     updateTestGridUI();
                     if (isDevMode()) populateMaterialDropdowns();
+
+                    // Phase 3: Check if newly selected laser has no default maps
+                    checkAndShowNoDefaultMapsModal();
                 });
             }
         }
@@ -2070,7 +2171,12 @@ function autoAssignColors() {
     const stats = multiGridPalette.getStats();
 
     if (stats.uniqueColors === 0) {
-        showToast('No color grids found! Please calibrate colors in the Test Grid > Analyze Grid tab first.', 'error');
+        const laserType = state.settings?.activeLaserType;
+        if (laserType && !hasSystemDefaultMaps(laserType)) {
+            showToast('This laser type has no pre-calibrated colors. Go to Test Grid → Generate → Engrave → Scan → Analyze to create your mappings.', 'warning', 8000);
+        } else {
+            showToast('No color grids found! Please calibrate colors in the Test Grid > Analyze Grid tab first.', 'error');
+        }
         return;
     }
 
@@ -3344,16 +3450,39 @@ function renderColorGridsList() {
         const deviceName = state.settings?.activeDevice || 'this device';
         const laserType = state.settings?.activeLaserType;
         const label = laserType ? `${laserType} laser on ${deviceName}` : deviceName;
-        elements.colorGridsList.innerHTML = `
-            <div class="no-colormaps-warning">
-                <div style="font-size: 1.4em; margin-bottom: 8px;">⚠️</div>
-                <strong>No color mappings available for ${label}</strong>
-                <p style="margin-top: 6px; font-size: 0.85em; color: var(--text-secondary);">
-                    This laser type does not have default color mappings yet.<br>
-                    Generate and analyze a <strong>Test Grid</strong> to create one, or ask your admin to upload a default mapping.
-                </p>
-            </div>
-        `;
+        const laserHasNoDefaults = laserType && !hasSystemDefaultMaps(laserType);
+
+        if (laserHasNoDefaults) {
+            // Enhanced info banner for lasers without pre-calibrated defaults
+            elements.colorGridsList.innerHTML = `
+                <div class="no-defaults-info-banner">
+                    <div style="font-size: 1.6em; margin-bottom: 10px;">🔧</div>
+                    <strong style="font-size: 1.05em;">No pre-calibrated colors for ${label}</strong>
+                    <p style="margin: 10px 0 6px; font-size: 0.9em; line-height: 1.5;">
+                        This laser type needs manual calibration before Auto-Assign will work.
+                    </p>
+                    <ol style="text-align: left; margin: 10px 0; padding-left: 20px; font-size: 0.85em; line-height: 1.7;">
+                        <li><strong>Generate</strong> a Test Grid for your material</li>
+                        <li><strong>Engrave</strong> it on your laser machine</li>
+                        <li><strong>Scan &amp; Analyze</strong> the result in the Analyzer</li>
+                        <li>Colors will <strong>appear here</strong> automatically</li>
+                    </ol>
+                    <button class="btn btn-primary btn-sm" onclick="window._pe.goToTestGrid()" style="margin-top: 6px;">
+                        <span>📏</span> Go to Test Grid
+                    </button>
+                </div>
+            `;
+        } else {
+            elements.colorGridsList.innerHTML = `
+                <div class="no-colormaps-warning">
+                    <div style="font-size: 1.4em; margin-bottom: 8px;">⚠️</div>
+                    <strong>No color mappings available for ${label}</strong>
+                    <p style="margin-top: 6px; font-size: 0.85em; color: var(--text-secondary);">
+                        Generate and analyze a <strong>Test Grid</strong> to create one, or ask your admin to upload a default mapping.
+                    </p>
+                </div>
+            `;
+        }
         return;
     }
 

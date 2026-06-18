@@ -1299,6 +1299,22 @@ select option {
   border-radius: var(--radius-md);
 }
 
+/* No default maps info banner (blue, for lasers without pre-calibrated defaults) */
+.no-defaults-info-banner {
+  text-align: center;
+  padding: 20px 16px;
+  color: var(--accent-primary);
+  background: rgba(88, 166, 255, 0.06);
+  border: 1px solid rgba(88, 166, 255, 0.2);
+  border-radius: var(--radius-md);
+}
+
+.no-defaults-info-banner .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .color-cell.selected,
 .color-cell.active-match {
   border-color: var(--accent-primary);
