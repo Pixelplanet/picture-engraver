@@ -13,10 +13,11 @@ import { TestGridGenerator } from './lib/test-grid-generator.js';
 import JSZip from 'jszip';
 import { SettingsStorage } from './lib/settings-storage.js';
 import { ImageProcessor } from './lib/image-processor.js';
-import { Pixelator } from './lib/pixelator.js';
 import { ColorQuantizer } from './lib/color-quantizer.js';
 import { EnhancedQuantizer } from './lib/enhanced-quantizer.js';
 import { Vectorizer } from './lib/vectorizer.js';
+import { buildLabelMap, labelMapToImageData, despeckle, mergeSimilarColors } from './lib/image-cleanup.js';
+import { floodFill, paintBrush, nearestPaletteIndex } from './lib/paint-tool.js';
 import { XCSGenerator } from './lib/xcs-generator.js';
 import { XSGenerator } from './lib/xs-generator.js';
 import { showToast } from './lib/toast.js';
@@ -47,7 +48,22 @@ const state = {
     gridPicker: null, // GridImagePicker instance
     currentMiniPickerMapId: null, // Current grid in picker
     visibilitySettings: { hiddenDevices: [], hiddenLaserTypes: [] },
-    shownNoDefaultModals: new Set()
+    shownNoDefaultModals: new Set(),
+    // --- Cleanup / paint pipeline ---
+    sourceImageData: null,   // Resized original (pre-quantization) ImageData, for eyedropper
+    basePalette: [],         // Palette snapshot right after quantization
+    baseLabelMap: null,      // Label map right after quantization (Int32Array)
+    labelMap: null,          // Current working label map (after cleanup + paint edits)
+    cleanupWidth: 0,
+    cleanupHeight: 0,
+    paint: {
+        tool: 'bucket',      // 'bucket' | 'brush' | 'eyedropper'
+        brushSize: 3,
+        activeLabel: 0,
+        isDrawing: false,
+        history: [],         // Int32Array snapshots (undo)
+        redo: []             // Int32Array snapshots (redo)
+    }
 };
 
 // ===================================
@@ -92,9 +108,10 @@ const elements = {
     customHeight: document.getElementById('customHeight'),
     colorSlider: document.getElementById('colorSlider'),
     colorCountDisplay: document.getElementById('colorCountDisplay'),
-    pixelSlider: document.getElementById('pixelSlider'),
-    pixelSizeDisplay: document.getElementById('pixelSizeDisplay'),
-    pixelSizeHint: document.getElementById('pixelSizeHint'),
+    despeckleSlider: document.getElementById('despeckleSlider'),
+    despeckleDisplay: document.getElementById('despeckleDisplay'),
+    gradientMergeSlider: document.getElementById('gradientMergeSlider'),
+    gradientMergeDisplay: document.getElementById('gradientMergeDisplay'),
     btnProcess: document.getElementById('btnProcess'),
     btnSaveMap: document.getElementById('btnSaveMap'),
 
@@ -1089,6 +1106,7 @@ async function init() {
     setupModals();
     setupLayers();
     setupPreview();
+    setupPaintTools();
     setupExport();
     setupTestGrid();
     setupAnalyzer();
@@ -1471,18 +1489,6 @@ function showControls() {
 // ===================================
 // Controls Setup
 // ===================================
-function updatePixelSizeDisplay(size) {
-    if (size <= 1) {
-        elements.pixelSizeDisplay.textContent = 'Off';
-        elements.pixelSizeHint.style.display = 'none';
-    } else {
-        const mm = (size / 10).toFixed(1);
-        elements.pixelSizeDisplay.textContent = `${size}px`;
-        elements.pixelSizeHint.textContent = `${mm} mm per pixel`;
-        elements.pixelSizeHint.style.display = 'block';
-    }
-}
-
 function setupControls() {
     const { sizeSelect, customSizeGroup, colorSlider, colorCountDisplay, btnProcess } = elements;
 
@@ -1500,12 +1506,18 @@ function setupControls() {
         colorCountDisplay.textContent = e.target.value;
     });
 
-    // Pixelation slider
-    elements.pixelSlider.addEventListener('input', (e) => {
-        const size = parseInt(e.target.value);
-        updatePixelSizeDisplay(size);
-        state.settings.pixelSize = size;
-        SettingsStorage.save(state.settings);
+    // Despeckle (stray pixel removal) slider
+    elements.despeckleSlider.addEventListener('input', (e) => {
+        const v = parseInt(e.target.value, 10) || 0;
+        elements.despeckleDisplay.textContent = v === 0 ? 'Off' : `${v}px`;
+        if (state.baseLabelMap) scheduleCleanup();
+    });
+
+    // Smooth gradients (merge similar colors) slider
+    elements.gradientMergeSlider.addEventListener('input', (e) => {
+        const v = parseInt(e.target.value, 10) || 0;
+        elements.gradientMergeDisplay.textContent = v === 0 ? 'Off' : `${v}`;
+        if (state.baseLabelMap) scheduleCleanup();
     });
 
     // Process button
@@ -1556,11 +1568,7 @@ async function processImage() {
             const processor = new ImageProcessor();
             const resized = processor.resize(state.originalImage, size.width, size.height);
 
-            // Optional pixelation pre-processing (0 or 1 = off)
-            const pixelSize = parseInt(elements.pixelSlider.value, 10);
-            const toQuantize = pixelSize > 1
-                ? new Pixelator().pixelate(resized, pixelSize)
-                : resized;
+            const toQuantize = resized;
 
             // Update output size to match actual resized dimensions (remove padding)
             state.outputSize = {
@@ -1625,28 +1633,25 @@ async function processImage() {
                     }
 
 
-                    state.processedImage = quantizedImage;
-                    state.palette = palette;
+                    // Store the resized source image (pre-quantization) for the
+                    // eyedropper tool, and snapshot the base palette + label map
+                    // that all cleanup passes rebuild from.
+                    state.sourceImageData = toQuantize;
+                    state.basePalette = palette.map(c => ({ ...c }));
+                    state.cleanupWidth = quantizedImage.width;
+                    state.cleanupHeight = quantizedImage.height;
+                    state.baseLabelMap = buildLabelMap(quantizedImage, palette);
+                    state.layers = []; // fresh process: don't preserve prior assignments
+                    state.paint.history = [];
+                    state.paint.redo = [];
 
-                    state.layers = palette.map((color, index) => ({
-                        id: `layer-${index}`,
-                        name: `Layer ${index + 1}`,
-                        color: null, // Explicitly null until assigned
-                        originalColor: { ...color }, // Store static original color
-                        visible: true,
-                        frequency: null,
-                        lpi: null,
-                        outline: false,
-                        paths: []
-                    }));
-
-                    // Display results
-                    displayQuantizedImage(quantizedImage);
-                    displayLayers();
+                    // Apply cleanup (despeckle / gradient merge) and render.
+                    applyCleanupAndRebuild({ revectorize: false });
 
                     // Show panels
                     elements.layersPanel.style.display = 'flex';
                     elements.previewPanel.style.display = 'flex';
+                    showPaintToolbar();
 
                     updateStatus('Vectorizing layers (may take a moment)...', 60);
 
@@ -1719,7 +1724,7 @@ function displayQuantizedImage(imageData) {
     ctx.putImageData(imageData, 0, 0);
 }
 
-async function vectorizeLayers() {
+async function vectorizeLayers({ quiet = false } = {}) {
     try {
         const vectorizer = new Vectorizer();
         const pxPerMm = 10;
@@ -1741,11 +1746,299 @@ async function vectorizeLayers() {
         // Generate and display SVG preview
         displayVectorPreview();
 
-        showToast('Vectorization complete!', 'success');
+        if (!quiet) showToast('Vectorization complete!', 'success');
     } catch (error) {
         console.error('Vectorization error:', error);
-        showToast('Vectorization failed: ' + error.message, 'error');
+        if (!quiet) showToast('Vectorization failed: ' + error.message, 'error');
     }
+}
+
+// ===================================
+// Cleanup Pipeline (despeckle / gradient merge / paint)
+// ===================================
+
+/** Simple debounce helper. */
+function debounce(fn, delay) {
+    let t = null;
+    return (...args) => {
+        clearTimeout(t);
+        t = setTimeout(() => fn(...args), delay);
+    };
+}
+
+// Debounced quiet re-vectorization for live cleanup / paint updates.
+const scheduleVectorize = debounce(() => {
+    vectorizeLayers({ quiet: true });
+}, 300);
+
+// Debounced full cleanup recompute for live slider dragging.
+const scheduleCleanup = debounce(() => {
+    applyCleanupAndRebuild({ revectorize: true });
+}, 250);
+
+function colorDistSq(a, b) {
+    const dr = a.r - b.r;
+    const dg = a.g - b.g;
+    const db = a.b - b.b;
+    return dr * dr + dg * dg + db * db;
+}
+
+/**
+ * Rebuild state.layers for a (possibly changed) palette, preserving calibration
+ * assignments by matching each new color to the nearest previous layer.
+ */
+function rebuildLayersForPalette(palette) {
+    const oldLayers = state.layers || [];
+    state.layers = palette.map((color, index) => {
+        let match = null;
+        let bestD = Infinity;
+        for (const ol of oldLayers) {
+            if (!ol.originalColor) continue;
+            const d = colorDistSq(color, ol.originalColor);
+            if (d < bestD) { bestD = d; match = ol; }
+        }
+        const near = match && bestD <= 100; // tight: only carry over near-identical colors
+        return {
+            id: `layer-${index}`,
+            name: near ? match.name : `Layer ${index + 1}`,
+            color: near ? match.color : null,
+            originalColor: { ...color },
+            visible: near ? match.visible : true,
+            frequency: near ? match.frequency : null,
+            lpi: near ? match.lpi : null,
+            speed: near ? match.speed : undefined,
+            power: near ? match.power : undefined,
+            outline: near ? match.outline : false,
+            paths: []
+        };
+    });
+}
+
+/**
+ * Rebuild the working image from the base label map by applying the current
+ * cleanup settings (gradient merge -> despeckle). Discards manual paint edits,
+ * since paint is intended as a final touch-up after cleanup is dialed in.
+ */
+function applyCleanupAndRebuild({ revectorize = true } = {}) {
+    if (!state.baseLabelMap) return;
+
+    const w = state.cleanupWidth;
+    const h = state.cleanupHeight;
+    const despeckleLevel = parseInt(elements.despeckleSlider.value, 10) || 0;
+    const gradientLevel = parseInt(elements.gradientMergeSlider.value, 10) || 0;
+
+    let palette = state.basePalette.map(c => ({ ...c }));
+    let labelMap = state.baseLabelMap;
+
+    // 1. Merge perceptually-similar colors (slider 0-40 -> distance 0-240)
+    if (gradientLevel > 0) {
+        const res = mergeSimilarColors(palette, labelMap, gradientLevel * 6);
+        palette = res.palette;
+        labelMap = res.labelMap;
+    } else {
+        // Copy so downstream despeckle / paint never mutate the base map.
+        labelMap = new Int32Array(labelMap);
+    }
+
+    // 2. Remove stray pixels / tiny islands.
+    if (despeckleLevel > 0) {
+        labelMap = despeckle(labelMap, w, h, despeckleLevel);
+    }
+
+    state.palette = palette;
+    state.labelMap = labelMap;
+    state.processedImage = labelMapToImageData(labelMap, palette, w, h);
+
+    // Paint edits are cleared when cleanup recomputes.
+    state.paint.history = [];
+    state.paint.redo = [];
+    state.paint.activeLabel = Math.min(state.paint.activeLabel, palette.length - 1);
+
+    rebuildLayersForPalette(palette);
+    displayQuantizedImage(state.processedImage);
+    displayLayers();
+    renderPaintSwatches();
+    updateUndoRedoButtons();
+
+    if (revectorize) scheduleVectorize();
+}
+
+// ===================================
+// Manual Paint / Fill Tool
+// ===================================
+const MAX_PAINT_HISTORY = 20;
+
+function setupPaintTools() {
+    const toolbar = document.getElementById('paintToolbar');
+    if (!toolbar) return;
+
+    // Tool selection
+    toolbar.querySelectorAll('[data-paint-tool]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.paint.tool = btn.dataset.paintTool;
+            toolbar.querySelectorAll('[data-paint-tool]').forEach(b =>
+                b.classList.toggle('active', b === btn));
+            updatePaintCursor();
+        });
+    });
+    const defBtn = toolbar.querySelector(`[data-paint-tool="${state.paint.tool}"]`);
+    if (defBtn) defBtn.classList.add('active');
+
+    // Brush size
+    const brushSlider = document.getElementById('brushSizeSlider');
+    if (brushSlider) {
+        brushSlider.value = state.paint.brushSize;
+        const disp = document.getElementById('brushSizeDisplay');
+        if (disp) disp.textContent = state.paint.brushSize;
+        brushSlider.addEventListener('input', (e) => {
+            state.paint.brushSize = parseInt(e.target.value, 10) || 1;
+            if (disp) disp.textContent = state.paint.brushSize;
+        });
+    }
+
+    // Undo / redo / reset
+    document.getElementById('btnUndo')?.addEventListener('click', undoPaint);
+    document.getElementById('btnRedo')?.addEventListener('click', redoPaint);
+    document.getElementById('btnResetPaint')?.addEventListener('click', resetPaint);
+
+    // Canvas interactions
+    const canvas = elements.quantizedCanvas;
+    canvas.addEventListener('pointerdown', onPaintPointerDown);
+    canvas.addEventListener('pointermove', onPaintPointerMove);
+    window.addEventListener('pointerup', onPaintPointerUp);
+    // Prevent the click-to-zoom lightbox from firing while painting on a processed image.
+    canvas.addEventListener('click', (e) => {
+        if (state.labelMap) e.stopPropagation();
+    });
+}
+
+function showPaintToolbar() {
+    const toolbar = document.getElementById('paintToolbar');
+    if (toolbar) toolbar.style.display = 'flex';
+    renderPaintSwatches();
+    updateUndoRedoButtons();
+    updatePaintCursor();
+}
+
+function updatePaintCursor() {
+    const canvas = elements.quantizedCanvas;
+    if (!canvas) return;
+    canvas.style.cursor =
+        state.paint.tool === 'eyedropper' ? 'crosshair' :
+        state.paint.tool === 'bucket' ? 'copy' : 'cell';
+}
+
+function renderPaintSwatches() {
+    const container = document.getElementById('paintSwatches');
+    if (!container) return;
+    container.innerHTML = '';
+    state.palette.forEach((color, index) => {
+        const sw = document.createElement('button');
+        sw.className = 'paint-swatch' + (index === state.paint.activeLabel ? ' active' : '');
+        sw.style.background = `rgb(${color.r}, ${color.g}, ${color.b})`;
+        sw.title = `Layer ${index + 1}`;
+        sw.addEventListener('click', () => {
+            state.paint.activeLabel = index;
+            renderPaintSwatches();
+        });
+        container.appendChild(sw);
+    });
+}
+
+function updateUndoRedoButtons() {
+    const u = document.getElementById('btnUndo');
+    const r = document.getElementById('btnRedo');
+    if (u) u.disabled = state.paint.history.length === 0;
+    if (r) r.disabled = state.paint.redo.length === 0;
+}
+
+function pushUndoSnapshot() {
+    if (!state.labelMap) return;
+    state.paint.history.push(new Int32Array(state.labelMap));
+    if (state.paint.history.length > MAX_PAINT_HISTORY) state.paint.history.shift();
+    state.paint.redo = [];
+    updateUndoRedoButtons();
+}
+
+function commitPaint() {
+    state.processedImage = labelMapToImageData(
+        state.labelMap, state.palette, state.cleanupWidth, state.cleanupHeight);
+    displayQuantizedImage(state.processedImage);
+    scheduleVectorize();
+}
+
+function undoPaint() {
+    if (state.paint.history.length === 0) return;
+    state.paint.redo.push(new Int32Array(state.labelMap));
+    state.labelMap = state.paint.history.pop();
+    commitPaint();
+    updateUndoRedoButtons();
+}
+
+function redoPaint() {
+    if (state.paint.redo.length === 0) return;
+    state.paint.history.push(new Int32Array(state.labelMap));
+    state.labelMap = state.paint.redo.pop();
+    commitPaint();
+    updateUndoRedoButtons();
+}
+
+function resetPaint() {
+    if (!state.labelMap) return;
+    applyCleanupAndRebuild({ revectorize: true });
+}
+
+/** Map a pointer event to an integer pixel coordinate in the label map. */
+function pointerToPixel(e) {
+    const canvas = elements.quantizedCanvas;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const x = Math.floor((e.clientX - rect.left) / rect.width * canvas.width);
+    const y = Math.floor((e.clientY - rect.top) / rect.height * canvas.height);
+    if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return null;
+    return { x, y, idx: y * canvas.width + x };
+}
+
+function onPaintPointerDown(e) {
+    if (!state.labelMap) return;
+    const p = pointerToPixel(e);
+    if (!p) return;
+
+    if (state.paint.tool === 'eyedropper') {
+        const src = state.sourceImageData;
+        if (src) {
+            const i = p.idx * 4;
+            const idx = nearestPaletteIndex(src.data[i], src.data[i + 1], src.data[i + 2], state.palette);
+            state.paint.activeLabel = idx;
+            renderPaintSwatches();
+        }
+        return;
+    }
+
+    e.preventDefault();
+    pushUndoSnapshot();
+
+    if (state.paint.tool === 'bucket') {
+        const changed = floodFill(state.labelMap, state.cleanupWidth, state.cleanupHeight, p.idx, state.paint.activeLabel);
+        if (changed) commitPaint(); else state.paint.history.pop();
+        updateUndoRedoButtons();
+    } else if (state.paint.tool === 'brush') {
+        state.paint.isDrawing = true;
+        const changed = paintBrush(state.labelMap, state.cleanupWidth, state.cleanupHeight, p.x, p.y, state.paint.brushSize, state.paint.activeLabel);
+        if (changed) commitPaint();
+    }
+}
+
+function onPaintPointerMove(e) {
+    if (!state.paint.isDrawing || state.paint.tool !== 'brush') return;
+    const p = pointerToPixel(e);
+    if (!p) return;
+    const changed = paintBrush(state.labelMap, state.cleanupWidth, state.cleanupHeight, p.x, p.y, state.paint.brushSize, state.paint.activeLabel);
+    if (changed) commitPaint();
+}
+
+function onPaintPointerUp() {
+    state.paint.isDrawing = false;
 }
 
 function displayVectorPreview() {
@@ -3146,11 +3439,6 @@ function applySettingsToUI() {
     document.getElementById('settingWhiteLpi').value = s.whiteLpi;
     document.getElementById('settingWhiteSpeed').value = s.whiteSpeed;
     document.getElementById('settingWhitePower').value = s.whitePower;
-
-    // Pixelation slider (default 0 = off)
-    const pixelSize = typeof s.pixelSize === 'number' ? s.pixelSize : 0;
-    elements.pixelSlider.value = pixelSize;
-    updatePixelSizeDisplay(pixelSize);
 
     // Update Test Grid UI based on device
     if (typeof updateTestGridUI === 'function') updateTestGridUI();

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Picture Engraver">
+  <defs>
+    <linearGradient id="pe-tile" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1c1c3a"/>
+      <stop offset="100%" stop-color="#0d0d1a"/>
+    </linearGradient>
+    <linearGradient id="pe-accent" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#9333ea"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="64" height="64" rx="14" fill="url(#pe-tile)"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="#a855f7" stroke-opacity="0.18" stroke-width="1"/>
+  <!-- photo frame -->
+  <rect x="14" y="16" width="36" height="32" rx="5" fill="none" stroke="url(#pe-accent)" stroke-width="3"/>
+  <circle cx="24" cy="26" r="3.5" fill="url(#pe-accent)"/>
+  <path d="M16 44l9-11 5 6 7-9 11 14z" fill="url(#pe-accent)" opacity="0.85"/>
+  <!-- laser scan line -->
+  <line x1="10" y1="32" x2="54" y2="32" stroke="#e9d5ff" stroke-width="1.6" stroke-linecap="round" opacity="0.7"/>
+  <circle cx="46" cy="32" r="2.4" fill="#fff"/>
+</svg>

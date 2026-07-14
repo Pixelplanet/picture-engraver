@@ -147,7 +147,6 @@ const COMMON_DEFAULTS = {
     activeDevice: null, // Will be set by user
     activeLaserType: null, // Active laser type for multi-laser devices (see device-registry.js)
     material: 'stainless_304', // Selected material ID (see material-registry.js)
-    pixelSize: 0, // Pixelation block size in source pixels (0/1 = off)
     _version: 2.2 // Increment this when defaults change to force update
 };
 
@@ -226,8 +225,7 @@ export const SettingsStorage = {
                     console.info(`Migrating settings from version ${parsed._version || 'none'} to ${COMMON_DEFAULTS._version}`);
                     const standardKeys = [
                         'blackFreq', 'blackLpi', 'blackSpeed', 'blackPower',
-                        'whiteFreq', 'whiteLpi', 'whiteSpeed', 'whitePower',
-                        'pixelSize'
+                        'whiteFreq', 'whiteLpi', 'whiteSpeed', 'whitePower'
                     ];
                     standardKeys.forEach(key => {
                         parsed[key] = baseDefaults[key];

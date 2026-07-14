@@ -6,7 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Convert images to XCS laser engraving files for stainless steel color engraving">
   <title>Picture Engraver by lasertools.org</title>
-  <link rel="icon" type="image/png" href="./logo.png">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="alternate icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/favicon.svg">
+  <meta name="theme-color" content="#0d0d1a">
   <link rel="stylesheet" href="./style.css?v=layout_fix">
   <link rel="stylesheet" href="./onboarding.css">
 </head>
@@ -99,12 +102,20 @@
             <input type="range" class="slider" id="colorSlider" min="2" max="32" value="8">
           </div>
 
-          <div class="control-group" style="gap: 10px;">
+          <div class="control-group cleanup-group" style="gap: 10px;">
             <label class="control-label">
-              Pixelation: <span class="value-display" id="pixelSizeDisplay">Off</span>
+              Despeckle: <span class="value-display" id="despeckleDisplay">Off</span>
             </label>
-            <input type="range" class="slider" id="pixelSlider" min="0" max="20" step="1" value="0">
-            <div id="pixelSizeHint" style="font-size: 0.75em; color: #888; display: none;"></div>
+            <input type="range" class="slider" id="despeckleSlider" min="0" max="30" step="1" value="0">
+            <div class="control-hint" style="font-size: 0.75em; color: #888;">Removes stray pixels &amp; tiny islands.</div>
+          </div>
+
+          <div class="control-group cleanup-group" style="gap: 10px;">
+            <label class="control-label">
+              Smooth Gradients: <span class="value-display" id="gradientMergeDisplay">Off</span>
+            </label>
+            <input type="range" class="slider" id="gradientMergeSlider" min="0" max="40" step="1" value="0">
+            <div class="control-hint" style="font-size: 0.75em; color: #888;">Merges similar colors into solid areas.</div>
           </div>
 
           <button class="btn btn-primary" id="btnProcess" style="margin-top: 15px;">
@@ -157,8 +168,28 @@
         </div>
 
         <div class="preview-content">
-          <div class="image-preview" id="previewQuantized">
-            <canvas id="quantizedCanvas"></canvas>
+          <div id="previewQuantized">
+            <div class="paint-toolbar" id="paintToolbar" style="display: none;">
+              <div class="paint-tools">
+                <button class="paint-tool-btn" data-paint-tool="bucket" title="Fill area (bucket)">🪣</button>
+                <button class="paint-tool-btn" data-paint-tool="brush" title="Brush">🖌️</button>
+                <button class="paint-tool-btn" data-paint-tool="eyedropper" title="Pick color from original image">💧</button>
+              </div>
+              <label class="paint-brush-size" title="Brush size">
+                <span>Size</span>
+                <input type="range" id="brushSizeSlider" min="1" max="30" value="3">
+                <span class="value-display" id="brushSizeDisplay">3</span>
+              </label>
+              <div class="paint-swatches" id="paintSwatches"></div>
+              <div class="paint-history">
+                <button class="paint-tool-btn" id="btnUndo" title="Undo" disabled>↶</button>
+                <button class="paint-tool-btn" id="btnRedo" title="Redo" disabled>↷</button>
+                <button class="paint-tool-btn" id="btnResetPaint" title="Reset edits">⟲</button>
+              </div>
+            </div>
+            <div class="image-preview">
+              <canvas id="quantizedCanvas"></canvas>
+            </div>
           </div>
           <div class="image-preview" id="previewVectors" style="display: none;">
           </div>
