@@ -138,6 +138,7 @@ const elements = {
     previewQuantized: document.getElementById('previewQuantized'),
     previewVectors: document.getElementById('previewVectors'),
     vectorSvgContainer: document.getElementById('previewVectors'),
+    btnExpandEditor: document.getElementById('btnExpandEditor'),
 
     // Export
     btnDownloadXCS: document.getElementById('btnDownloadXCS'),
@@ -1910,11 +1911,14 @@ function setupPaintTools() {
     canvas.addEventListener('click', (e) => {
         if (state.labelMap) e.stopPropagation();
     });
+    // Prevent toolbar button clicks from bubbling up to the lightbox handler
+    if (toolbar) toolbar.addEventListener('click', (e) => e.stopPropagation());
 }
 
 function showPaintToolbar() {
     const toolbar = document.getElementById('paintToolbar');
     if (toolbar) toolbar.style.display = 'flex';
+    if (elements.btnExpandEditor) elements.btnExpandEditor.style.display = 'flex';
     renderPaintSwatches();
     updateUndoRedoButtons();
     updatePaintCursor();
@@ -2066,6 +2070,32 @@ function displayVectorPreview() {
 
     svgParts.push('</svg>');
     container.innerHTML = svgParts.join('');
+    updateOutlineOverlay();
+}
+
+/**
+ * Render outline layers as an SVG overlay on the quantized canvas preview.
+ * Keeps the Quantized tab in sync with outline changes without switching to Vectors.
+ */
+function updateOutlineOverlay() {
+    const svg = document.getElementById('outlineOverlay');
+    if (!svg || !state.outputSize) return;
+    const { width, height } = state.outputSize;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    const outlineLayers = state.layers.filter(l => l.type === 'outline' && l.visible && l.paths?.length);
+    if (outlineLayers.length === 0) {
+        svg.innerHTML = '';
+        return;
+    }
+    const parts = [];
+    outlineLayers.forEach(layer => {
+        const c = layer.color || { r: 0, g: 0, b: 0 };
+        const colorStr = `rgb(${c.r},${c.g},${c.b})`;
+        layer.paths.forEach(p => {
+            parts.push(`<path d="${p}" fill="${colorStr}" fill-opacity="0.75" stroke="none"/>`);
+        });
+    });
+    svg.innerHTML = parts.join('');
 }
 
 // ===================================
@@ -2143,8 +2173,8 @@ function displayLayers() {
             const hasOutline = state.layers.some(l => l.type === 'outline' && l.parentId === layer.id);
 
             // Normal Layer: Add Outline + Edit
-            const outlineBtn = (isVirtual || hasOutline) ? '' : `
-                <button class="btn btn-sm btn-primary btn-add-outline" title="Add Outline Layer" data-layer-id="${layer.id}" style="margin-right: 5px; font-size: 0.8em; display:flex; align-items:center; gap:4px;"><span>+</span> Add Outline</button>
+    const outlineBtn = (isVirtual || hasOutline) ? '' : `
+                <button class="btn btn-icon btn-sm btn-add-outline" title="Add Outline" data-layer-id="${layer.id}">⊕</button>
             `;
 
             actionsHtml = `
@@ -3154,8 +3184,21 @@ function setupPreview() {
     elements.previewTabs.forEach(tab => {
         tab.addEventListener('click', (e) => {
             const tabName = e.target.dataset.tab;
-            switchPreviewTab(tabName);
+            if (tabName) switchPreviewTab(tabName);
         });
+    });
+
+    document.getElementById('btnExpandEditor')
+        ?.addEventListener('click', openEditorModal);
+    document.getElementById('btnCloseEditor')
+        ?.addEventListener('click', closeEditorModal);
+    document.getElementById('editorModal')
+        ?.querySelector('.modal-backdrop')
+        ?.addEventListener('click', closeEditorModal);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.getElementById('editorModal')?.classList.contains('active')) {
+            closeEditorModal();
+        }
     });
 }
 
@@ -3166,6 +3209,25 @@ function switchPreviewTab(tabName) {
 
     elements.previewQuantized.style.display = tabName === 'quantized' ? 'block' : 'none';
     elements.previewVectors.style.display = tabName === 'vectors' ? 'block' : 'none';
+}
+
+function openEditorModal() {
+    const container = document.getElementById('paintEditorContainer');
+    const slot = document.getElementById('editorModalBody');
+    const modal = document.getElementById('editorModal');
+    if (!container || !slot || !modal) return;
+    slot.appendChild(container);
+    modal.classList.add('active');
+    updateOutlineOverlay();
+}
+
+function closeEditorModal() {
+    const container = document.getElementById('paintEditorContainer');
+    const previewQuantized = document.getElementById('previewQuantized');
+    const modal = document.getElementById('editorModal');
+    if (!container || !previewQuantized || !modal) return;
+    previewQuantized.appendChild(container);
+    modal.classList.remove('active');
 }
 
 // ===================================
@@ -7384,7 +7446,9 @@ function setupLightbox() {
     // Bind
     const previewQ = document.getElementById('previewQuantized');
     if (previewQ) {
-        previewQ.addEventListener('click', () => {
+        previewQ.addEventListener('click', (e) => {
+            // Only open lightbox when clicking the canvas preview area, not the paint toolbar
+            if (!e.target.closest('#quantizedPreviewArea')) return;
             const canvas = document.getElementById('quantizedCanvas');
             if (canvas) openLightbox(canvas);
         });

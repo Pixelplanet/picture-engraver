@@ -102,20 +102,16 @@
             <input type="range" class="slider" id="colorSlider" min="2" max="32" value="8">
           </div>
 
-          <div class="control-group cleanup-group" style="gap: 10px;">
-            <label class="control-label">
-              Despeckle: <span class="value-display" id="despeckleDisplay">Off</span>
-            </label>
-            <input type="range" class="slider" id="despeckleSlider" min="0" max="30" step="1" value="0">
-            <div class="control-hint" style="font-size: 0.75em; color: #888;">Removes stray pixels &amp; tiny islands.</div>
+          <div class="control-group-inline" title="Removes stray pixels and tiny color islands">
+            <label class="control-label-inline" for="despeckleSlider">Despeckle</label>
+            <input type="range" class="slider slider-compact" id="despeckleSlider" min="0" max="30" step="1" value="0">
+            <span class="slider-val-inline" id="despeckleDisplay">Off</span>
           </div>
 
-          <div class="control-group cleanup-group" style="gap: 10px;">
-            <label class="control-label">
-              Smooth Gradients: <span class="value-display" id="gradientMergeDisplay">Off</span>
-            </label>
-            <input type="range" class="slider" id="gradientMergeSlider" min="0" max="40" step="1" value="0">
-            <div class="control-hint" style="font-size: 0.75em; color: #888;">Merges similar colors into solid areas.</div>
+          <div class="control-group-inline" title="Merges perceptually similar colors into solid areas">
+            <label class="control-label-inline" for="gradientMergeSlider">Smooth Colors</label>
+            <input type="range" class="slider slider-compact" id="gradientMergeSlider" min="0" max="40" step="1" value="0">
+            <span class="slider-val-inline" id="gradientMergeDisplay">Off</span>
           </div>
 
           <button class="btn btn-primary" id="btnProcess" style="margin-top: 15px;">
@@ -165,30 +161,36 @@
         <div class="preview-tabs">
           <button class="tab active" data-tab="quantized">Quantized</button>
           <button class="tab" data-tab="vectors">Vectors</button>
+          <button class="btn btn-icon btn-sm" id="btnExpandEditor" title="Open full-size editor" style="margin-left:auto;display:none;">⛶</button>
         </div>
 
         <div class="preview-content">
           <div id="previewQuantized">
-            <div class="paint-toolbar" id="paintToolbar" style="display: none;">
-              <div class="paint-tools">
-                <button class="paint-tool-btn" data-paint-tool="bucket" title="Fill area (bucket)">🪣</button>
-                <button class="paint-tool-btn" data-paint-tool="brush" title="Brush">🖌️</button>
-                <button class="paint-tool-btn" data-paint-tool="eyedropper" title="Pick color from original image">💧</button>
+            <div id="paintEditorContainer">
+              <div class="paint-toolbar" id="paintToolbar" style="display: none;">
+                <div class="paint-tools">
+                  <button class="paint-tool-btn" data-paint-tool="bucket" title="Fill area (bucket)">🪣</button>
+                  <button class="paint-tool-btn" data-paint-tool="brush" title="Brush">🖌️</button>
+                  <button class="paint-tool-btn" data-paint-tool="eyedropper" title="Pick color from original image">💧</button>
+                </div>
+                <label class="paint-brush-size" title="Brush size">
+                  <span>Size</span>
+                  <input type="range" id="brushSizeSlider" min="1" max="30" value="3">
+                  <span class="value-display" id="brushSizeDisplay">3</span>
+                </label>
+                <div class="paint-swatches" id="paintSwatches"></div>
+                <div class="paint-history">
+                  <button class="paint-tool-btn" id="btnUndo" title="Undo" disabled>↶</button>
+                  <button class="paint-tool-btn" id="btnRedo" title="Redo" disabled>↷</button>
+                  <button class="paint-tool-btn" id="btnResetPaint" title="Reset edits">⟲</button>
+                </div>
               </div>
-              <label class="paint-brush-size" title="Brush size">
-                <span>Size</span>
-                <input type="range" id="brushSizeSlider" min="1" max="30" value="3">
-                <span class="value-display" id="brushSizeDisplay">3</span>
-              </label>
-              <div class="paint-swatches" id="paintSwatches"></div>
-              <div class="paint-history">
-                <button class="paint-tool-btn" id="btnUndo" title="Undo" disabled>↶</button>
-                <button class="paint-tool-btn" id="btnRedo" title="Redo" disabled>↷</button>
-                <button class="paint-tool-btn" id="btnResetPaint" title="Reset edits">⟲</button>
+              <div class="image-preview" id="quantizedPreviewArea">
+                <div id="canvasEditorWrapper">
+                  <canvas id="quantizedCanvas"></canvas>
+                  <svg id="outlineOverlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></svg>
+                </div>
               </div>
-            </div>
-            <div class="image-preview">
-              <canvas id="quantizedCanvas"></canvas>
             </div>
           </div>
           <div class="image-preview" id="previewVectors" style="display: none;">
@@ -196,27 +198,37 @@
         </div>
 
         <div class="export-actions">
-          <div class="format-info-block"
-            style="background: rgba(80, 140, 255, 0.08); border: 1px solid rgba(80, 140, 255, 0.25); padding: 10px 12px; border-radius: 8px; font-size: 0.88em; line-height: 1.45;">
-            <div class="focus-warning-block" style="color: #ff4d4f; margin-bottom: 6px;">
-              <strong>⚠️ .xcs:</strong> manually raise the focus <u>UP by 4&nbsp;mm</u> in xTool&nbsp;Studio before engraving.
-            </div>
-            <div style="color: #b9e3a8;">
-              <strong>✨ .xs (new):</strong> defocus value is embedded in the file — no manual focus adjustment needed.
-            </div>
+          <div class="export-info-row">
+            <span class="export-tip xcs-tip" title="In xTool Studio, manually raise focus UP by 4 mm before engraving">⚠️ <strong>.xcs</strong>: +4&nbsp;mm focus</span>
+            <span class="export-sep">·</span>
+            <span class="export-tip xs-tip" title="Defocus is embedded in the file — no manual focus adjustment needed">✨ <strong>.xs</strong>: auto-defocus</span>
           </div>
-          <div class="export-buttons-row" style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="btn btn-success btn-lg" id="btnDownloadXCS" style="flex:1; min-width:160px;">
+          <div class="export-btns">
+            <button class="btn btn-success" id="btnDownloadXCS" title="Download .xcs engraving file">
               <span>💾</span> Download .xcs
             </button>
-            <button class="btn btn-primary btn-lg" id="btnDownloadXS" style="flex:1; min-width:160px; position:relative;">
+            <button class="btn btn-primary" id="btnDownloadXS" title="Download .xs file (no manual focus needed)" style="position:relative;">
               <span>💾</span> Download .xs
-              <span class="new-badge" style="position:absolute; top:-6px; right:-6px; background:#ff6b35; color:#fff; font-size:0.62em; font-weight:bold; padding:2px 6px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.3); letter-spacing:0.5px;">NEW</span>
+              <span class="new-badge" style="position:absolute;top:-6px;right:-6px;background:#ff6b35;color:#fff;font-size:0.62em;font-weight:bold;padding:2px 6px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.3);letter-spacing:0.5px;">NEW</span>
             </button>
           </div>
         </div>
       </section>
     </main>
+
+    <!-- Full-size Editor Modal -->
+    <div class="modal" id="editorModal">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content editor-modal-content">
+        <div class="modal-header">
+          <h2>Image Editor</h2>
+          <button class="btn btn-icon" id="btnCloseEditor" title="Close editor">✕</button>
+        </div>
+        <div class="editor-modal-body" id="editorModalBody">
+          <!-- #paintEditorContainer is moved here when the editor opens -->
+        </div>
+      </div>
+    </div>
 
     <!-- Settings Modal -->
     <div class="modal" id="settingsModal">
