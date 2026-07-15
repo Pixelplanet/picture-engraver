@@ -1997,8 +1997,15 @@ function pointerToPixel(e) {
     const canvas = elements.quantizedCanvas;
     const rect = canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
-    const x = Math.floor((e.clientX - rect.left) / rect.width * canvas.width);
-    const y = Math.floor((e.clientY - rect.top) / rect.height * canvas.height);
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    // Prefer e.offsetX/Y when the event target is the canvas itself.
+    // offsetX/Y are measured from the target element's own padding edge and
+    // remain accurate regardless of the parent layout context (panel vs modal).
+    const rawX = e.target === canvas ? e.offsetX : e.clientX - rect.left;
+    const rawY = e.target === canvas ? e.offsetY : e.clientY - rect.top;
+    const x = Math.floor(rawX * scaleX);
+    const y = Math.floor(rawY * scaleY);
     if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return null;
     return { x, y, idx: y * canvas.width + x };
 }
