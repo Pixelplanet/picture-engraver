@@ -142,7 +142,6 @@ const elements = {
     // Export
     btnDownloadXCS: document.getElementById('btnDownloadXCS'),
     btnDownloadXS: document.getElementById('btnDownloadXS'),
-    toggleColorEngrave: document.getElementById('toggleColorEngrave'),
 
     // Modals
     settingsModal: document.getElementById('settingsModal'),
@@ -1254,12 +1253,10 @@ function updateDeviceUI(deviceId) {
     });
 
     // Defocus was removed for lasers that show the manual focus warning (UV),
-    // so hide the defocus input for them. Keep the color-engrave export UI in
-    // sync (toggleVirtualModeUI may have re-enabled the .xcs button).
+    // so hide the defocus input for them.
     if (elements.rowDefocus) {
         elements.rowDefocus.style.display = (showFocusWarning && !isVirtual) ? 'none' : '';
     }
-    updateColorEngraveUI();
 
     // Update Test Grid UI based on device
     updateTestGridUI();
@@ -3263,33 +3260,10 @@ function closeEditorModal() {
 // ===================================
 function setupExport() {
     if (elements.btnDownloadXS) {
-        elements.btnDownloadXS.addEventListener('click', () => downloadXCS('xs'));
-    }
-    if (elements.toggleColorEngrave) {
-        // Bitmap color-engrave is the default output (undefined => on).
-        if (state.settings.colorEngrave === undefined) state.settings.colorEngrave = true;
-        elements.toggleColorEngrave.checked = state.settings.colorEngrave !== false;
-        elements.toggleColorEngrave.addEventListener('change', (e) => {
-            state.settings.colorEngrave = e.target.checked;
-            SettingsStorage.save(state.settings);
-            updateColorEngraveUI();
-        });
-    }
-    updateColorEngraveUI();
-}
-
-/**
- * Reflect the "Color Engrave (bitmap)" mode in the export UI. In this mode each
- * colour-separated layer is engraved as its own PNG section (xTool COLOR_ENGRAVE);
- * unchecking falls back to vector paths. Both produce the .xs format.
- */
-function updateColorEngraveUI() {
-    const on = state.settings.colorEngrave !== false;
-    if (elements.toggleColorEngrave) elements.toggleColorEngrave.checked = on;
-    if (elements.btnDownloadXS && elements.btnDownloadXS.dataset.exportMode !== 'svg') {
-        elements.btnDownloadXS.title = on
-            ? 'Download color-engrave .xs (a bitmap section per colour) — raise focus manually'
-            : 'Download vector .xs engraving file for xTool Studio';
+        elements.btnDownloadXS.addEventListener('click', () => downloadXCS());
+        if (elements.btnDownloadXS.dataset.exportMode !== 'svg') {
+            elements.btnDownloadXS.title = 'Download .xs engraving file — raise focus manually';
+        }
     }
 }
 
@@ -3325,6 +3299,11 @@ async function buildColorEngraveLayerImages(size) {
         const d = (layer.paths || []).filter(p => p && p.length > 0).join(' ');
         if (!d) continue;
 
+        // Fill each layer's section with its assigned (calibrated) colour so
+        // xTool Studio's COLOR_ENGRAVE preview/output shows the intended colour
+        // rather than a flat black mask.
+        const color = layer.color || layer.originalColor || { r: 0, g: 0, b: 0 };
+
         const canvas = document.createElement('canvas');
         canvas.width = w;
         canvas.height = h;
@@ -3332,7 +3311,7 @@ async function buildColorEngraveLayerImages(size) {
         ctx.clearRect(0, 0, w, h);
         ctx.save();
         ctx.scale(pxPerMm, pxPerMm); // draw the mm-space paths at output resolution
-        ctx.fillStyle = '#000';
+        ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
         try {
             ctx.fill(new Path2D(d));
         } catch (e) {
@@ -3344,7 +3323,7 @@ async function buildColorEngraveLayerImages(size) {
             pngBytes: await canvasToPngBytes(canvas),
             pxWidth: w,
             pxHeight: h,
-            color: layer.color || layer.originalColor || { r: 0, g: 0, b: 0 },
+            color,
             name: layer.name,
             speed: layer.speed,
             power: layer.power,
@@ -3378,11 +3357,6 @@ async function downloadXCS() {
         return;
     }
 
-    // Bitmap color-engrave is the default output; a separate PNG "section" is
-    // engraved for each colour layer. Unchecking the toggle falls back to the
-    // vector (FILL_VECTOR_ENGRAVING) exporter.
-    const useColorEngrave = state.settings.colorEngrave !== false;
-
     const btn = elements.btnDownloadXS;
     const originalText = btn.innerHTML;
     btn.disabled = true;
@@ -3397,8 +3371,7 @@ async function downloadXCS() {
         const materialId = state.settings?.material || DEFAULT_MATERIAL_ID;
         const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
         const imgLabel = state.originalImageName ? `_${state.originalImageName}` : '';
-        const prefix = useColorEngrave ? 'colorengrave' : 'engraving';
-        const filename = `${prefix}${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.xs`;
+        const filename = `colorengrave${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.xs`;
 
         // Resolve defocus (mm). Falls back to laser default.
         const defocus = typeof state.settings?.defocus === 'number'
@@ -3408,17 +3381,13 @@ async function downloadXCS() {
         const genSettings = { ...state.settings, defocus };
         const xsGen = new XSGenerator(genSettings);
 
-        let blob;
-        if (useColorEngrave) {
-            const layerImages = await buildColorEngraveLayerImages(getOutputSize());
-            if (layerImages.length === 0) {
-                showToast('No visible layers with content to engrave', 'error');
-                return;
-            }
-            blob = await xsGen.generateColorEngrave(layerImages, getOutputSize());
-        } else {
-            blob = await xsGen.generate(state.processedImage, state.layers, getOutputSize());
+        // Each colour-separated layer is engraved as its own PNG section.
+        const layerImages = await buildColorEngraveLayerImages(getOutputSize());
+        if (layerImages.length === 0) {
+            showToast('No visible layers with content to engrave', 'error');
+            return;
         }
+        let blob = await xsGen.generateColorEngrave(layerImages, getOutputSize());
         if (!(blob instanceof Blob)) {
             blob = new Blob([blob], { type: 'application/zip' });
         }
