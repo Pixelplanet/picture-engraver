@@ -1729,6 +1729,26 @@ function displayQuantizedImage(imageData) {
     ctx.putImageData(imageData, 0, 0);
 }
 
+/**
+ * Re-render the quantized preview using each layer's ASSIGNED (calibrated) colour
+ * so the user can see the expected engraving result after auto-assign. Falls back
+ * to the layer's original quantized colour when unassigned. Display-only — it does
+ * NOT mutate state.processedImage (which the exporters/vectorizer rely on).
+ */
+function renderAssignedColorPreview() {
+    if (!state.labelMap || !state.palette) return false;
+    let anyAssigned = false;
+    const displayPalette = state.palette.map((c, i) => {
+        const layer = state.layers[i];
+        if (layer && layer.color) { anyAssigned = true; return layer.color; }
+        return c;
+    });
+    if (!anyAssigned) return false;
+    const img = labelMapToImageData(state.labelMap, displayPalette, state.cleanupWidth, state.cleanupHeight);
+    displayQuantizedImage(img);
+    return true;
+}
+
 async function vectorizeLayers({ quiet = false } = {}) {
     try {
         const vectorizer = new Vectorizer();
@@ -2593,6 +2613,9 @@ function autoAssignColors() {
 
             // Refresh the layers display and preview
             displayLayers();
+            // Show the calibrated colours in the preview so the user sees the
+            // expected engraving result.
+            renderAssignedColorPreview();
             if (state.vectorizedLayers.length > 0) {
                 displayVectorPreview();
             }
@@ -3243,7 +3266,9 @@ function setupExport() {
         elements.btnDownloadXS.addEventListener('click', () => downloadXCS('xs'));
     }
     if (elements.toggleColorEngrave) {
-        elements.toggleColorEngrave.checked = !!state.settings.colorEngrave;
+        // Bitmap color-engrave is the default output (undefined => on).
+        if (state.settings.colorEngrave === undefined) state.settings.colorEngrave = true;
+        elements.toggleColorEngrave.checked = state.settings.colorEngrave !== false;
         elements.toggleColorEngrave.addEventListener('change', (e) => {
             state.settings.colorEngrave = e.target.checked;
             SettingsStorage.save(state.settings);
@@ -3254,74 +3279,146 @@ function setupExport() {
 }
 
 /**
- * Reflect the "Color Engrave (bitmap)" mode in the export UI. In this mode the
- * photo is engraved directly as a bitmap (xTool COLOR_ENGRAVE); otherwise the
- * image is vectorized. Both produce the .xs format (the only supported output).
+ * Reflect the "Color Engrave (bitmap)" mode in the export UI. In this mode each
+ * colour-separated layer is engraved as its own PNG section (xTool COLOR_ENGRAVE);
+ * unchecking falls back to vector paths. Both produce the .xs format.
  */
 function updateColorEngraveUI() {
-    const on = !!state.settings.colorEngrave;
+    const on = state.settings.colorEngrave !== false;
     if (elements.toggleColorEngrave) elements.toggleColorEngrave.checked = on;
     if (elements.btnDownloadXS && elements.btnDownloadXS.dataset.exportMode !== 'svg') {
         elements.btnDownloadXS.title = on
-            ? 'Download color-engrave .xs (bitmap) — raise focus manually'
-            : 'Download .xs engraving file for xTool Studio';
+            ? 'Download color-engrave .xs (a bitmap section per colour) — raise focus manually'
+            : 'Download vector .xs engraving file for xTool Studio';
     }
 }
 
 /**
- * Encode the current working image to PNG bytes for bitmap engraving.
- * Prefers the resized original (pre-quantization); falls back to the processed
- * image, then to rendering the original upload at the output resolution.
- * @returns {Promise<{pngBytes:Uint8Array, pxWidth:number, pxHeight:number}|null>}
+ * Encode a canvas to PNG bytes.
+ * @returns {Promise<Uint8Array>}
  */
-async function imageToPngBytes() {
-    const canvas = document.createElement('canvas');
-    const imageData = state.sourceImageData || state.processedImage;
-    if (imageData) {
-        canvas.width = imageData.width;
-        canvas.height = imageData.height;
-        canvas.getContext('2d').putImageData(imageData, 0, 0);
-    } else if (state.originalImage) {
-        const size = getOutputSize();
-        const pxPerMm = 10;
-        canvas.width = Math.max(1, Math.round(size.width * pxPerMm));
-        canvas.height = Math.max(1, Math.round(size.height * pxPerMm));
-        canvas.getContext('2d').drawImage(state.originalImage, 0, 0, canvas.width, canvas.height);
-    } else {
-        return null;
-    }
+async function canvasToPngBytes(canvas) {
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     const buf = await blob.arrayBuffer();
-    return { pngBytes: new Uint8Array(buf), pxWidth: canvas.width, pxHeight: canvas.height };
+    return new Uint8Array(buf);
 }
 
 /**
- * Export the loaded photo as a bitmap COLOR_ENGRAVE .xs file (no SVG conversion).
+ * Rasterize each colour-separated layer into its own PNG "section" for bitmap
+ * COLOR_ENGRAVE output — the raster equivalent of the per-layer SVG paths.
+ *
+ * Each layer's vector paths are filled (solid black on transparent) onto a
+ * full-canvas bitmap so every layer overlays in perfect registration. The laser
+ * engraves each section with that layer's own COLOR_ENGRAVE settings, which is
+ * what produces the calibrated colour on steel.
+ *
+ * @param {{width:number,height:number}} size Physical output size (mm)
+ * @returns {Promise<Array>}
  */
-async function exportColorEngrave() {
-    const img = await imageToPngBytes();
-    if (!img) {
-        showToast('Please load and process an image first', 'error');
+async function buildColorEngraveLayerImages(size) {
+    const pxPerMm = 20; // ~508 dpi — matches Studio's typical bitmap resolution
+    const w = Math.max(1, Math.round(size.width * pxPerMm));
+    const h = Math.max(1, Math.round(size.height * pxPerMm));
+    const out = [];
+    for (const layer of state.layers) {
+        if (!layer.visible) continue;
+        const d = (layer.paths || []).filter(p => p && p.length > 0).join(' ');
+        if (!d) continue;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, w, h);
+        ctx.save();
+        ctx.scale(pxPerMm, pxPerMm); // draw the mm-space paths at output resolution
+        ctx.fillStyle = '#000';
+        try {
+            ctx.fill(new Path2D(d));
+        } catch (e) {
+            console.warn('Layer rasterization failed:', e);
+        }
+        ctx.restore();
+
+        out.push({
+            pngBytes: await canvasToPngBytes(canvas),
+            pxWidth: w,
+            pxHeight: h,
+            color: layer.color || layer.originalColor || { r: 0, g: 0, b: 0 },
+            name: layer.name,
+            speed: layer.speed,
+            power: layer.power,
+            passes: layer.passes,
+            frequency: layer.frequency,
+            lpi: layer.lpi,
+        });
+    }
+    return out;
+}
+
+/**
+ * Generate and download the .xs engraving file in one click.
+ * (.xcs output was retired — .xs is the only supported format.)
+ */
+async function downloadXCS() {
+    // Check if we're in SVG export mode
+    if (SettingsStorage.isCurrentDeviceVirtual()) {
+        return downloadSVG();
+    }
+
+    if (state.layers.length === 0) {
+        showToast('Please process an image first', 'error');
         return;
     }
 
-    const btn = elements.btnDownloadXS || elements.btnDownloadXCS;
+    // Check if any visible layer is missing settings
+    const unassignedLayers = state.layers.filter(l => l.visible && (l.frequency === null || l.lpi === null));
+    if (unassignedLayers.length > 0) {
+        showToast(`${unassignedLayers.length} layers have no color/settings assigned! Use "Auto Assign" or click the squares to pick colors manually.`, 'error');
+        return;
+    }
+
+    // Bitmap color-engrave is the default output; a separate PNG "section" is
+    // engraved for each colour layer. Unchecking the toggle falls back to the
+    // vector (FILL_VECTOR_ENGRAVING) exporter.
+    const useColorEngrave = state.settings.colorEngrave !== false;
+
+    const btn = elements.btnDownloadXS;
     const originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span>⏳</span> Generating...';
 
-    try {
+    try {        // Filename
         const deviceId = resolveDeviceId(state.settings?.activeDevice || 'f2_ultra_uv');
         const deviceConfig = getDeviceConfig(deviceId);
         const deviceLabel = deviceConfig ? deviceConfig.name.replace(/[\s()]+/g, '_') : 'F2';
         const laserConfig = getLaserConfig(deviceId, state.settings?.activeLaserType);
         const laserLabel = laserConfig ? laserConfig.name.replace(/\s+/g, '') : 'UV';
-        const materialLabel = getMaterialById(state.settings?.material || DEFAULT_MATERIAL_ID).shortName.replace(/\s+/g, '');
+        const materialId = state.settings?.material || DEFAULT_MATERIAL_ID;
+        const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
         const imgLabel = state.originalImageName ? `_${state.originalImageName}` : '';
-        const filename = `colorengrave${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.xs`;
+        const prefix = useColorEngrave ? 'colorengrave' : 'engraving';
+        const filename = `${prefix}${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.xs`;
 
-        const xsGen = new XSGenerator({ ...state.settings });
-        let blob = await xsGen.generateColorEngrave(img, getOutputSize());
+        // Resolve defocus (mm). Falls back to laser default.
+        const defocus = typeof state.settings?.defocus === 'number'
+            ? state.settings.defocus
+            : getDefaultDefocus(deviceId, state.settings?.activeLaserType);
+
+        const genSettings = { ...state.settings, defocus };
+        const xsGen = new XSGenerator(genSettings);
+
+        let blob;
+        if (useColorEngrave) {
+            const layerImages = await buildColorEngraveLayerImages(getOutputSize());
+            if (layerImages.length === 0) {
+                showToast('No visible layers with content to engrave', 'error');
+                return;
+            }
+            blob = await xsGen.generateColorEngrave(layerImages, getOutputSize());
+        } else {
+            blob = await xsGen.generate(state.processedImage, state.layers, getOutputSize());
+        }
         if (!(blob instanceof Blob)) {
             blob = new Blob([blob], { type: 'application/zip' });
         }
@@ -3338,86 +3435,10 @@ async function exportColorEngrave() {
         const needsFocus = laserConfig && laserConfig.addFocusWarning;
         showToast(
             needsFocus
-                ? `Color-engrave .xs downloaded! Remember to raise the focus by ${laserConfig.focusWarningDistanceMm || 4} mm.`
-                : 'Color-engrave .xs downloaded!',
+                ? `.xs downloaded! Remember to raise the focus by ${laserConfig.focusWarningDistanceMm || 4} mm.`
+                : '.xs file downloaded!',
             'success',
         );
-        if (window.onboarding) window.onboarding.handleAction('download');
-    } catch (error) {
-        console.error('Color engrave export error:', error);
-        showToast('Error generating file: ' + error.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
-    }
-}
-
-/**
- * Generate and download the .xs engraving file in one click.
- * (.xcs output was retired — .xs is the only supported format.)
- */
-async function downloadXCS() {
-    // Check if we're in SVG export mode
-    if (SettingsStorage.isCurrentDeviceVirtual()) {
-        return downloadSVG();
-    }
-
-    // Bitmap color-engrave mode engraves the photo directly
-    if (state.settings.colorEngrave) {
-        return exportColorEngrave();
-    }
-
-    if (state.layers.length === 0) {
-        showToast('Please process an image first', 'error');
-        return;
-    }
-
-    // Check if any visible layer is missing settings
-    const unassignedLayers = state.layers.filter(l => l.visible && (l.frequency === null || l.lpi === null));
-    if (unassignedLayers.length > 0) {
-        showToast(`${unassignedLayers.length} layers have no color/settings assigned! Use "Auto Assign" or click the squares to pick colors manually.`, 'error');
-        return;
-    }
-
-    const btn = elements.btnDownloadXS;
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span>⏳</span> Generating...';
-
-    try {        // Filename
-        const deviceId = resolveDeviceId(state.settings?.activeDevice || 'f2_ultra_uv');
-        const deviceConfig = getDeviceConfig(deviceId);
-        const deviceLabel = deviceConfig ? deviceConfig.name.replace(/[\s()]+/g, '_') : 'F2';
-        const laserConfig = getLaserConfig(deviceId, state.settings?.activeLaserType);
-        const laserLabel = laserConfig ? laserConfig.name.replace(/\s+/g, '') : 'UV';
-        const materialId = state.settings?.material || DEFAULT_MATERIAL_ID;
-        const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
-        const imgLabel = state.originalImageName ? `_${state.originalImageName}` : '';
-        const filename = `engraving${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.xs`;
-
-        // Resolve defocus (mm). Falls back to laser default.
-        const defocus = typeof state.settings?.defocus === 'number'
-            ? state.settings.defocus
-            : getDefaultDefocus(deviceId, state.settings?.activeLaserType);
-
-        const genSettings = { ...state.settings, defocus };
-
-        const xsGen = new XSGenerator(genSettings);
-        let blob = await xsGen.generate(state.processedImage, state.layers, getOutputSize());
-        if (!(blob instanceof Blob)) {
-            blob = new Blob([blob], { type: 'application/zip' });
-        }
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        showToast('XS file downloaded!', 'success');
 
         // Complete Onboarding if active
         if (window.onboarding) window.onboarding.handleAction('download');

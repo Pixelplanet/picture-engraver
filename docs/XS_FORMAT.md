@@ -809,3 +809,12 @@ Because defocus is gone, Picture Engraver adds a non-engraved TEXT layer
 ("Remember to raise the focus by N mm") and lists its display id in the mode's
 `ignoredDisplayIds` (the v2 equivalent of the v1 `processIgnore` flag), so it
 appears on the canvas but is never engraved. See `XSGenerator.generateColorEngrave()`.
+
+### 11.5 Picture Engraver output (per-colour sections)
+Picture Engraver treats color-engrave like its vector exporter: the image is
+colour-separated into layers, and **each layer becomes its own BITMAP** — a
+full-canvas PNG containing just that layer's section (solid mask, transparent
+elsewhere) placed at the origin so all layers overlay in registration. Every
+layer gets its own COLOR_ENGRAVE profile carrying that layer's speed/power/
+frequency/density, so the laser reproduces each calibrated colour. This is the
+default output; the vector (FILL_VECTOR_ENGRAVING) path remains available.

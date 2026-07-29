@@ -487,61 +487,15 @@ export class XSGenerator {
     }
 
     /**
-     * Generate a bitmap COLOR_ENGRAVE (.xs) workspace and return a Promise
-     * resolving to a Blob (browser) or Node Buffer.
-     *
-     * @param {{ pngBytes:Uint8Array, pxWidth:number, pxHeight:number,
-     *           coverPngBytes?:Uint8Array }} image
-     * @param {{ width:number, height:number }} size - Physical output size (mm).
+     * Build a v2 BITMAP display referencing a PNG resource, sized to the given
+     * physical dimensions. The image is placed at the canvas origin so multiple
+     * per-colour layers overlay in perfect registration.
      */
-    async generateColorEngrave(image, size) {
-        const built = await this._buildColorEngrave(image, size);
-        return this._zip(built);
-    }
-
-    /** Return the raw file map for a color-engrave workspace (for testing). */
-    async generateColorEngraveFiles(image, size) {
-        return this._buildColorEngrave(image, size);
-    }
-
-    async _buildColorEngrave(image, size) {
-        if (!image || !image.pngBytes) {
-            throw new Error('generateColorEngrave requires image.pngBytes');
-        }
-        const pngBytes = image.pngBytes instanceof Uint8Array
-            ? image.pngBytes
-            : new Uint8Array(image.pngBytes);
-        const pxWidth = image.pxWidth || 1;
-        const pxHeight = image.pxHeight || 1;
-
-        const now = Date.now();
-        const projectId = this.generateUUID();
-        const canvasId = this.generateUUID();
-        const bitmapId = this.generateUUID();
-
-        // Resolve device / laser config
-        const deviceId = resolveDeviceId(this.settings.activeDevice || 'f2_ultra_uv');
-        const laserTypeId = this.settings.activeLaserType || null;
-        const laser = getLaserConfig(deviceId, laserTypeId);
-        const extId = laser ? (laser.xsExtId || laser.extId) : 'GS009-CLASS-4';
-        const extName = laser ? (laser.xsExtName || laser.extName) : 'F2 Ultra UV';
-        const lightSource = laser ? laser.lightSource : 'uv';
-        const deviceInstanceId = `${extId}-1`;
-
-        // Layer colour that groups the bitmap on the canvas (arbitrary hex —
-        // Studio uses #00befe for imported bitmaps).
-        const layerColor = '#00befe';
-
-        // ── BITMAP display placement ──────────────────────────────────────
-        const widthMm = size && size.width ? size.width : pxWidth;
-        const heightMm = size && size.height ? size.height : pxHeight;
+    _bitmapDisplayV2({ id, resourcePath, pxWidth, pxHeight, widthMm, heightMm, zOrder, layerColor, groupTag }) {
         const scaleX = widthMm / pxWidth;
         const scaleY = heightMm / pxHeight;
-        const resourceHash = await sha256HexBytes(pngBytes);
-        const resourcePath = `resources/${resourceHash}.png`;
-
-        const bitmapDisplay = {
-            id: bitmapId,
+        return {
+            id,
             name: null,
             type: 'BITMAP',
             x: 0,
@@ -555,9 +509,9 @@ export class XSGenerator {
             offsetY: 0,
             lockRatio: true,
             isClosePath: false,
-            zOrder: 1,
+            zOrder,
             groupTags: [],
-            groupTag: this.generateUUID(),
+            groupTag,
             layerTag: layerColor,
             layerColor,
             visible: true,
@@ -612,21 +566,103 @@ export class XSGenerator {
             opacity: 1,
             filterList_V2: [],
         };
+    }
 
-        const displays = [bitmapDisplay];
+    /**
+     * Generate a bitmap COLOR_ENGRAVE (.xs) workspace and return a Promise
+     * resolving to a Blob (browser) or Node Buffer.
+     *
+     * Mirrors the per-layer logic of the vector exporter: each colour-separated
+     * layer becomes its own BITMAP (a PNG of just that layer's section) bound to
+     * its own COLOR_ENGRAVE profile carrying that layer's engraving settings.
+     *
+     * @param {Array<{ pngBytes:Uint8Array, pxWidth:number, pxHeight:number,
+     *   color?:{r:number,g:number,b:number}, name?:string, speed?:number,
+     *   power?:number, passes?:number, frequency?:number, lpi?:number,
+     *   dpi?:number }>} layers
+     * @param {{ width:number, height:number }} size - Physical output size (mm).
+     * @param {{ coverPngBytes?:Uint8Array }} [opts]
+     */
+    async generateColorEngrave(layers, size, opts = {}) {
+        const built = await this._buildColorEngrave(layers, size, opts);
+        return this._zip(built);
+    }
+
+    /** Return the raw file map for a color-engrave workspace (for testing). */
+    async generateColorEngraveFiles(layers, size, opts = {}) {
+        return this._buildColorEngrave(layers, size, opts);
+    }
+
+    async _buildColorEngrave(layers, size, opts = {}) {
+        const layerList = Array.isArray(layers) ? layers : [layers];
+        const validLayers = layerList.filter(L => L && L.pngBytes && (L.pngBytes.length > 0));
+        if (validLayers.length === 0) {
+            throw new Error('generateColorEngrave requires at least one layer with pngBytes');
+        }
+
+        const now = Date.now();
+        const projectId = this.generateUUID();
+        const canvasId = this.generateUUID();
+
+        // Resolve device / laser config
+        const deviceId = resolveDeviceId(this.settings.activeDevice || 'f2_ultra_uv');
+        const laserTypeId = this.settings.activeLaserType || null;
+        const laser = getLaserConfig(deviceId, laserTypeId);
+        const extId = laser ? (laser.xsExtId || laser.extId) : 'GS009-CLASS-4';
+        const extName = laser ? (laser.xsExtName || laser.extName) : 'F2 Ultra UV';
+        const lightSource = laser ? laser.lightSource : 'uv';
+        const deviceInstanceId = `${extId}-1`;
+
+        const widthMm = size && size.width ? size.width : 1;
+        const heightMm = size && size.height ? size.height : 1;
+
+        const displays = [];
         const ignoredDisplayIds = [];
+        const profiles = {};
+        const profileRefs = [];
+        const bindings = [];
+        const layerData = {};
+        const resourceFiles = {}; // path → bytes (deduped)
 
-        // ── COLOR_ENGRAVE profile from engraving settings ─────────────────
-        const speed = parseInt(this.settings.speed) || 80;
-        const power = parseInt(this.settings.power) || 10;
-        const repeat = parseInt(this.settings.passes) || 1;
-        const frequency = parseInt(this.settings.frequency) || 40;
-        const lpc = parseInt(this.settings.lpi) || 100;
-        const dpi = parseInt(this.settings.dpi) || 500;
+        // ── Per-layer BITMAP + COLOR_ENGRAVE profile ──────────────────────
+        for (let i = 0; i < validLayers.length; i++) {
+            const L = validLayers[i];
+            const pngBytes = L.pngBytes instanceof Uint8Array ? L.pngBytes : new Uint8Array(L.pngBytes);
+            const pxWidth = L.pxWidth || 1;
+            const pxHeight = L.pxHeight || 1;
 
-        const profileId = `profile:${nanoid12()}`;
-        const profiles = {
-            [profileId]: {
+            const resourceHash = await sha256HexBytes(pngBytes);
+            const resourcePath = `resources/${resourceHash}.png`;
+            resourceFiles[resourcePath] = pngBytes;
+
+            const color = L.color || { r: 0, g: 0, b: 0 };
+            const hex = this.rgbToHex(color);
+            if (!layerData[hex]) {
+                layerData[hex] = { name: L.name || hex.toUpperCase(), order: i + 1, visible: true };
+            }
+
+            const displayId = this.generateUUID();
+            displays.push(this._bitmapDisplayV2({
+                id: displayId,
+                resourcePath,
+                pxWidth,
+                pxHeight,
+                widthMm,
+                heightMm,
+                zOrder: i + 1,
+                layerColor: hex,
+                groupTag: this.generateUUID(),
+            }));
+
+            const speed = parseInt(L.speed != null ? L.speed : this.settings.speed) || 80;
+            const power = parseInt(L.power != null ? L.power : this.settings.power) || 10;
+            const repeat = parseInt(L.passes != null ? L.passes : this.settings.passes) || 1;
+            const frequency = parseInt(L.frequency != null ? L.frequency : this.settings.frequency) || 40;
+            const lpc = parseInt(L.lpi != null ? L.lpi : this.settings.lpi) || 100;
+            const dpi = parseInt(L.dpi != null ? L.dpi : this.settings.dpi) || 500;
+
+            const profileId = `profile:${nanoid12()}`;
+            profiles[profileId] = {
                 id: profileId,
                 processingType: 'COLOR_ENGRAVE',
                 values: {
@@ -644,20 +680,20 @@ export class XSGenerator {
                     angleType: 2,
                     crossAngle: false,
                 },
-            },
-        };
-
-        const bindings = [{
-            bindingId: `binding:${nanoid12()}`,
-            canvasId,
-            mode: 'LASER_PLANE',
-            baseProfileId: profileId,
-            displayIds: [bitmapId],
-        }];
+            };
+            profileRefs.push(profileId);
+            bindings.push({
+                bindingId: `binding:${nanoid12()}`,
+                canvasId,
+                mode: 'LASER_PLANE',
+                baseProfileId: profileId,
+                displayIds: [displayId],
+            });
+        }
 
         // ── Manual focus-warning reminder (defocus is gone for these lasers) ─
         if (laser && laser.addFocusWarning) {
-            const warn = this._focusWarningDisplayV2(size, 100, laser.focusWarningDistanceMm);
+            const warn = this._focusWarningDisplayV2(size, validLayers.length + 100, laser.focusWarningDistanceMm);
             displays.push(warn.display);
             ignoredDisplayIds.push(warn.id);
         }
@@ -667,7 +703,8 @@ export class XSGenerator {
         files['.format'] = FORMAT_SENTINEL;
         files['meta/persistence-meta.json'] = { schemaVersion: SCHEMA_VERSION, protocol: PROTOCOL };
 
-        const hasCover = image.coverPngBytes && image.coverPngBytes.length > 0;
+        const coverPngBytes = opts.coverPngBytes;
+        const hasCover = coverPngBytes && coverPngBytes.length > 0;
         files['project.json'] = {
             __v2__: true,
             version: SCHEMA_VERSION,
@@ -695,9 +732,6 @@ export class XSGenerator {
 
         files['profiles.json'] = { profiles };
 
-        const layerData = {
-            [layerColor]: { name: layerColor.toUpperCase(), order: 1, visible: true },
-        };
         files[`canvases/${canvasId}.json`] = {
             id: canvasId,
             title: 'Engraved Image',
@@ -739,7 +773,7 @@ export class XSGenerator {
                                 scanDirection: 'topToBottom',
                                 enableOddEvenKerf: true,
                             },
-                            profileRefs: [profileId],
+                            profileRefs,
                             patches: {},
                             bindings,
                         },
@@ -750,19 +784,20 @@ export class XSGenerator {
         };
 
         // ── Image resources (content-addressed PNG + meta sidecar) ─────────
-        files[resourcePath] = pngBytes;
-        files[`${resourcePath}.meta.json`] = {
-            ref: resourcePath,
-            metadata: {
-                kind: 'image',
-                source: { type: 'workspace', value: `${resourceHash}.png` },
-                mimeType: 'image/png',
-            },
-        };
+        for (const [resourcePath, bytes] of Object.entries(resourceFiles)) {
+            const hash = resourcePath.slice('resources/'.length, -'.png'.length);
+            files[resourcePath] = bytes;
+            files[`${resourcePath}.meta.json`] = {
+                ref: resourcePath,
+                metadata: {
+                    kind: 'image',
+                    source: { type: 'workspace', value: `${hash}.png` },
+                    mimeType: 'image/png',
+                },
+            };
+        }
         if (hasCover) {
-            const coverBytes = image.coverPngBytes instanceof Uint8Array
-                ? image.coverPngBytes
-                : new Uint8Array(image.coverPngBytes);
+            const coverBytes = coverPngBytes instanceof Uint8Array ? coverPngBytes : new Uint8Array(coverPngBytes);
             files['resources/project-cover.png'] = coverBytes;
             files['resources/project-cover.png.meta.json'] = {
                 ref: 'resources/project-cover.png',
