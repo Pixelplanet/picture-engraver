@@ -51,7 +51,7 @@ test.describe('Main Flow', () => {
         await expect(page.locator('.layers-list .layer-item')).toHaveCount(1); // 1x1 pixel = 1 color usually
 
         // 5. Verify Settings Pending state
-        const downloadBtn = page.locator('#btnDownloadXCS');
+        const downloadBtn = page.locator('#btnDownloadXS');
         await expect(downloadBtn).toBeDisabled();
         await expect(page.locator('.layer-settings.pending')).toBeVisible();
 

@@ -183,7 +183,7 @@ export class OnboardingManager {
                         
                         <div style="text-align: left; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-primary); color: var(--text-primary); padding: 20px; border-radius: 8px; margin: 20px 0;">
                             <ol style="margin: 0; padding-left: 20px; line-height: 1.8;">
-                                <li><strong>Generate:</strong> Use the <strong>Standard Test Grid</strong> (covers most needs) or configure a custom range. Click <em>"Download XCS"</em>.</li>
+                                <li><strong>Generate:</strong> Use the <strong>Standard Test Grid</strong> (covers most needs) or configure a custom range. Click <em>"Download .xs"</em>.</li>
                                 <li><strong>Engrave:</strong> Run this file on your laser machine on the target material.</li>
                                 <li><strong>Analyze:</strong> Take a clear photo of the result and upload it in the <strong>"Analyze Grid"</strong> tab.</li>
                             </ol>
@@ -310,9 +310,9 @@ export class OnboardingManager {
                 placement: 'left'
             },
             {
-                target: '#btnDownloadXCS',
+                target: '#btnDownloadXS',
                 title: '9. Export',
-                description: 'Once all layers are assigned, click to download your XCS file!',
+                description: 'Once all layers are assigned, click to download your .xs file!',
                 waitForAction: 'download'
             }
         ];

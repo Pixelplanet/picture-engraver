@@ -36,15 +36,15 @@ test.describe('Flexible test grid (Axis Picker Matrix)', () => {
         expect(xActive).toBe(1);
         expect(yActive).toBe(1);
 
-        // Choosing Defocus as Y should force .xs (disable the .xcs button)
+        // Choosing Defocus as Y is allowed; .xs is the only export format.
         // Find the Defocus row and click its Y button.
         const defocusRow = page.locator('#flexAxisMatrix .flex-axis-row', { hasText: 'Defocus' });
         await defocusRow.locator('.flex-role-toggle button', { hasText: 'Y' }).click();
-        await expect(page.locator('#btnGenerateGrid')).toBeDisabled();
+        await expect(page.locator('#btnGenerateGridXS')).toBeEnabled();
 
-        // Switch Defocus back to constant — .xcs button re-enabled
+        // Switch Defocus back to constant.
         await defocusRow.locator('.flex-role-toggle button', { hasText: '•' }).click();
-        await expect(page.locator('#btnGenerateGrid')).toBeEnabled();
+        await expect(page.locator('#btnGenerateGridXS')).toBeEnabled();
 
         // Preview should draw to the canvas (auto-updates on role/value changes)
         await page.waitForFunction(() => {

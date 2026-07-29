@@ -11,8 +11,13 @@
  *     `vectorRef`.
  *   - Per-display engraving parameters are hoisted into `profiles.json`
  *     and devices reference them by id.
- *   - Profiles carry `defocus` + `defocus_distance`, so the legacy
- *     "raise focus by 4 mm" TEXT display is no longer emitted.
+ *   - When defocus is enabled it is carried on the profile (`defocus` +
+ *     `defocus_distance`). When it is off (e.g. UV, where xTool removed the
+ *     defocus feature), a non-engraved "raise the focus by N mm" TEXT layer is
+ *     emitted instead and listed in the mode's `ignoredDisplayIds`.
+ *   - `generateColorEngrave()` produces the new bitmap COLOR_ENGRAVE workspace:
+ *     the source image is embedded as a real PNG under `resources/` and placed
+ *     as a BITMAP display, so no SVG vectorization is required.
  *
  * The generator reuses the path-tightening / bounds logic from
  * XCSGenerator to keep the two outputs visually identical.
@@ -57,6 +62,22 @@ async function sha256Hex(str) {
     // Node fallback
     const mod = await import('node:crypto');
     return mod.createHash('sha256').update(str, 'utf-8').digest('hex');
+}
+
+// ── SHA-256 of raw bytes (for content-addressing binary resources like PNGs) ──
+async function sha256HexBytes(bytes) {
+    const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    if (typeof globalThis !== 'undefined'
+        && globalThis.crypto
+        && globalThis.crypto.subtle) {
+        const digest = await globalThis.crypto.subtle.digest('SHA-256', u8);
+        const out = new Uint8Array(digest);
+        let hex = '';
+        for (let i = 0; i < out.length; i++) hex += out[i].toString(16).padStart(2, '0');
+        return hex;
+    }
+    const mod = await import('node:crypto');
+    return mod.createHash('sha256').update(u8).digest('hex');
 }
 
 export class XSGenerator {
@@ -114,6 +135,9 @@ export class XSGenerator {
         const vectorBucket = new Map(); // hash → dPath
         const profiles = {};
         const profileRefsByDisplay = new Map(); // displayId → profileId
+        // Displays present on the canvas but excluded from processing (e.g. the
+        // manual focus-warning reminder). Mirrors the v1 `processIgnore` flag.
+        const ignoredDisplayIds = [];
 
         let zOrder = 0;
         for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
@@ -212,6 +236,16 @@ export class XSGenerator {
                 values,
             };
             profileRefsByDisplay.set(displayId, profileId);
+        }
+
+        // Manual focus-warning reminder. Defocus was removed for the UV engrave
+        // type, so lasers flagged `addFocusWarning` get a non-engraved TEXT layer
+        // telling the operator to raise the focus manually (unless defocus is
+        // explicitly enabled, in which case the offset is baked into the profile).
+        if (laser && laser.addFocusWarning && !defocus.enabled) {
+            const warn = this._focusWarningDisplayV2(size, zOrder + 100, laser.focusWarningDistanceMm);
+            displays.push(warn.display);
+            ignoredDisplayIds.push(warn.id);
         }
 
         const chunkLayout = {
@@ -355,7 +389,7 @@ export class XSGenerator {
                     activeMode: 'LASER_PLANE',
                     modes: {
                         LASER_PLANE: {
-                            ignoredDisplayIds: [],
+                            ignoredDisplayIds,
                             data: {
                                 material: getXtoolMaterialId(this.settings.material || DEFAULT_MATERIAL_ID),
                                 lightSourceMode: lightSource,
@@ -431,10 +465,325 @@ export class XSGenerator {
             : { enabled: false, distance: 1 };
     }
 
+    /**
+     * Build a non-engraved "raise the focus" reminder as a v2 TEXT display.
+     * The display is added to the canvas but listed in the mode's
+     * `ignoredDisplayIds` so it is never processed by the laser.
+     * @param {{width:number,height:number}} size
+     * @param {number} zOrder
+     * @param {number} [distanceMm]
+     * @returns {{ id:string, display:object }}
+     */
+    _focusWarningDisplayV2(size, zOrder, distanceMm) {
+        const id = this.generateUUID();
+        const display = this._xcs.createFocusWarning(id, size, zOrder);
+        const mm = typeof distanceMm === 'number' && distanceMm > 0 ? distanceMm : 4;
+        display.text = `Remember to raise \nthe focus by ${mm}mm\n`;
+        // v2 union fields observed on Studio-saved displays
+        if (display.groupTags === undefined) display.groupTags = [];
+        if (display.alpha === undefined) display.alpha = 1;
+        if (display.effects === undefined) display.effects = [];
+        return { id, display };
+    }
+
+    /**
+     * Generate a bitmap COLOR_ENGRAVE (.xs) workspace and return a Promise
+     * resolving to a Blob (browser) or Node Buffer.
+     *
+     * @param {{ pngBytes:Uint8Array, pxWidth:number, pxHeight:number,
+     *           coverPngBytes?:Uint8Array }} image
+     * @param {{ width:number, height:number }} size - Physical output size (mm).
+     */
+    async generateColorEngrave(image, size) {
+        const built = await this._buildColorEngrave(image, size);
+        return this._zip(built);
+    }
+
+    /** Return the raw file map for a color-engrave workspace (for testing). */
+    async generateColorEngraveFiles(image, size) {
+        return this._buildColorEngrave(image, size);
+    }
+
+    async _buildColorEngrave(image, size) {
+        if (!image || !image.pngBytes) {
+            throw new Error('generateColorEngrave requires image.pngBytes');
+        }
+        const pngBytes = image.pngBytes instanceof Uint8Array
+            ? image.pngBytes
+            : new Uint8Array(image.pngBytes);
+        const pxWidth = image.pxWidth || 1;
+        const pxHeight = image.pxHeight || 1;
+
+        const now = Date.now();
+        const projectId = this.generateUUID();
+        const canvasId = this.generateUUID();
+        const bitmapId = this.generateUUID();
+
+        // Resolve device / laser config
+        const deviceId = resolveDeviceId(this.settings.activeDevice || 'f2_ultra_uv');
+        const laserTypeId = this.settings.activeLaserType || null;
+        const laser = getLaserConfig(deviceId, laserTypeId);
+        const extId = laser ? (laser.xsExtId || laser.extId) : 'GS009-CLASS-4';
+        const extName = laser ? (laser.xsExtName || laser.extName) : 'F2 Ultra UV';
+        const lightSource = laser ? laser.lightSource : 'uv';
+        const deviceInstanceId = `${extId}-1`;
+
+        // Layer colour that groups the bitmap on the canvas (arbitrary hex —
+        // Studio uses #00befe for imported bitmaps).
+        const layerColor = '#00befe';
+
+        // ── BITMAP display placement ──────────────────────────────────────
+        const widthMm = size && size.width ? size.width : pxWidth;
+        const heightMm = size && size.height ? size.height : pxHeight;
+        const scaleX = widthMm / pxWidth;
+        const scaleY = heightMm / pxHeight;
+        const resourceHash = await sha256HexBytes(pngBytes);
+        const resourcePath = `resources/${resourceHash}.png`;
+
+        const bitmapDisplay = {
+            id: bitmapId,
+            name: null,
+            type: 'BITMAP',
+            x: 0,
+            y: 0,
+            angle: 0,
+            scale: { x: scaleX, y: scaleY },
+            skew: { x: 0, y: 0 },
+            pivot: { x: 0, y: 0 },
+            localSkew: { x: 0, y: 0 },
+            offsetX: 0,
+            offsetY: 0,
+            lockRatio: true,
+            isClosePath: false,
+            zOrder: 1,
+            groupTags: [],
+            groupTag: this.generateUUID(),
+            layerTag: layerColor,
+            layerColor,
+            visible: true,
+            originColor: '#000000',
+            enableTransform: true,
+            visibleState: true,
+            lockState: false,
+            resourceOrigin: '',
+            customData: { tabBreaks: {}, startPoint: {} },
+            rootComponentId: '',
+            minCanvasVersion: '0.0.0',
+            alpha: 1,
+            fill: { paintType: 'color', visible: false, color: 0, alpha: 1 },
+            stroke: {
+                paintType: 'color', visible: false, color: 0, alpha: 1,
+                width: 1, cap: 'butt', join: 'miter', miterLimit: 4, alignment: 0.5,
+            },
+            effects: [],
+            transform: [scaleX, 0, 0, scaleY, 0, 0],
+            width: widthMm,
+            height: heightMm,
+            isFill: true,
+            warpLocalOffset: null,
+            filterList: [],
+            grayValue: [0, 255],
+            sharpness: 50,
+            brightness: 0,
+            contrast: 0,
+            saturation: 0,
+            temperature: 0,
+            tone: 0,
+            colorInverted: false,
+            colorInvertedFillTransparent: false,
+            colorInvertedTransparentColor: 'black',
+            filterAttrsMap: {
+                emboss: { strength: 5 },
+                halftone: { radius: 4, angle: 45 },
+                binary: { threshold: 128 },
+                sketch: { strength: 2 },
+                dot: { angle: 45, scale: 14 },
+            },
+            mask: null,
+            originWidth: pxWidth,
+            originHeight: pxHeight,
+            modifyData: {},
+            currentUrl: '',
+            dpi: { dpiX: 25.4 / scaleX, dpiY: 25.4 / scaleY },
+            isGray: false,
+            originAutoAdjust: null,
+            autoStrength: 0,
+            resourcePath,
+            opacity: 1,
+            filterList_V2: [],
+        };
+
+        const displays = [bitmapDisplay];
+        const ignoredDisplayIds = [];
+
+        // ── COLOR_ENGRAVE profile from engraving settings ─────────────────
+        const speed = parseInt(this.settings.speed) || 80;
+        const power = parseInt(this.settings.power) || 10;
+        const repeat = parseInt(this.settings.passes) || 1;
+        const frequency = parseInt(this.settings.frequency) || 40;
+        const lpc = parseInt(this.settings.lpi) || 100;
+        const dpi = parseInt(this.settings.dpi) || 500;
+
+        const profileId = `profile:${nanoid12()}`;
+        const profiles = {
+            [profileId]: {
+                id: profileId,
+                processingType: 'COLOR_ENGRAVE',
+                values: {
+                    bitmapEngraveMode: 'normal',
+                    speed,
+                    density: lpc,
+                    dotDuration: 100,
+                    dpi,
+                    power,
+                    repeat,
+                    bitmapScanMode: 'zMode',
+                    frequency,
+                    notResize: true,
+                    scanAngle: 0,
+                    angleType: 2,
+                    crossAngle: false,
+                },
+            },
+        };
+
+        const bindings = [{
+            bindingId: `binding:${nanoid12()}`,
+            canvasId,
+            mode: 'LASER_PLANE',
+            baseProfileId: profileId,
+            displayIds: [bitmapId],
+        }];
+
+        // ── Manual focus-warning reminder (defocus is gone for these lasers) ─
+        if (laser && laser.addFocusWarning) {
+            const warn = this._focusWarningDisplayV2(size, 100, laser.focusWarningDistanceMm);
+            displays.push(warn.display);
+            ignoredDisplayIds.push(warn.id);
+        }
+
+        // ── File assembly ─────────────────────────────────────────────────
+        const files = {};
+        files['.format'] = FORMAT_SENTINEL;
+        files['meta/persistence-meta.json'] = { schemaVersion: SCHEMA_VERSION, protocol: PROTOCOL };
+
+        const hasCover = image.coverPngBytes && image.coverPngBytes.length > 0;
+        files['project.json'] = {
+            __v2__: true,
+            version: SCHEMA_VERSION,
+            schemaMeta: { schemaVersion: '2', format: 'directory', migratedFrom: 'v1', migratedAt: now },
+            projectId,
+            projectTraceID: projectId,
+            projectName: 'Engraved Image',
+            activeCanvasId: canvasId,
+            activeDeviceId: deviceInstanceId,
+            versionInfo: {
+                source: 'picture-engraver',
+                appVersion: APP_VERSION,
+                savedAt: now,
+                ua: typeof navigator !== 'undefined' ? (navigator.userAgent || '') : 'node',
+                minRequiredVersion: '2.6.0',
+                appMinRequiredVersion: '',
+                webMinRequiredVersion: '',
+            },
+            created: now,
+            modify: now,
+            modules: { canvases: [canvasId], devices: [deviceInstanceId] },
+            ...(hasCover ? { cover: 'resources/project-cover.png' } : {}),
+            customProjectData: { projectTraceID: projectId },
+        };
+
+        files['profiles.json'] = { profiles };
+
+        const layerData = {
+            [layerColor]: { name: layerColor.toUpperCase(), order: 1, visible: true },
+        };
+        files[`canvases/${canvasId}.json`] = {
+            id: canvasId,
+            title: 'Engraved Image',
+            hidden: false,
+            layerData,
+            groupData: {},
+            extendInfo: {
+                version: SCHEMA_VERSION,
+                minCanvasVersion: '0.0.0',
+                displayProcessConfigMap: {},
+                rulerPluginData: { rulerGuide: [] },
+                type: '2d',
+            },
+            chunkLayout: { displayCount: displays.length, chunkCount: 1, chunkIndexes: [0] },
+        };
+
+        files[`canvases/${canvasId}/displays-0.json`] = { canvasId, chunkIndex: 0, displays };
+
+        files[`devices/device-${deviceInstanceId}.json`] = {
+            id: deviceInstanceId,
+            deviceCode: extId,
+            extId,
+            extName,
+            power: laser ? laser.powerLevels : [5],
+            processing: {
+                [canvasId]: {
+                    id: canvasId,
+                    activeMode: 'LASER_PLANE',
+                    modes: {
+                        LASER_PLANE: {
+                            ignoredDisplayIds,
+                            data: {
+                                material: getXtoolMaterialId(this.settings.material || DEFAULT_MATERIAL_ID),
+                                lightSourceMode: lightSource,
+                                thickness: 0,
+                                isProcessByLayer: false,
+                                pathPlanning: 'auto',
+                                fillPlanning: 'separate',
+                                scanDirection: 'topToBottom',
+                                enableOddEvenKerf: true,
+                            },
+                            profileRefs: [profileId],
+                            patches: {},
+                            bindings,
+                        },
+                    },
+                },
+            },
+            customProjectData: { tangentialCuttingUuids: [], flyCutUuid2CanvasIds: {} },
+        };
+
+        // ── Image resources (content-addressed PNG + meta sidecar) ─────────
+        files[resourcePath] = pngBytes;
+        files[`${resourcePath}.meta.json`] = {
+            ref: resourcePath,
+            metadata: {
+                kind: 'image',
+                source: { type: 'workspace', value: `${resourceHash}.png` },
+                mimeType: 'image/png',
+            },
+        };
+        if (hasCover) {
+            const coverBytes = image.coverPngBytes instanceof Uint8Array
+                ? image.coverPngBytes
+                : new Uint8Array(image.coverPngBytes);
+            files['resources/project-cover.png'] = coverBytes;
+            files['resources/project-cover.png.meta.json'] = {
+                ref: 'resources/project-cover.png',
+                metadata: {
+                    kind: 'image',
+                    source: { type: 'workspace', value: 'project-cover.png' },
+                    mimeType: 'image/png',
+                },
+            };
+        }
+
+        return files;
+    }
+
     async _zip(files) {
         const zip = new JSZip();
         for (const [path, content] of Object.entries(files)) {
-            if (typeof content === 'string') {
+            if (content instanceof Uint8Array || content instanceof ArrayBuffer) {
+                // Binary resource (e.g. PNG). JSZip stores typed arrays directly.
+                zip.file(path, content);
+            } else if (typeof content === 'string') {
                 zip.file(path, content);
             } else {
                 zip.file(path, JSON.stringify(content));

@@ -745,3 +745,67 @@ displays alongside the cells:
   zoom width; the X/Y ranges are rebuilt as a tight neighbourhood around that
   cell's values (`center ± step × k`, clamped to sane bounds, power capped at
   100) and the grid re-renders for a fine-tuning pass.
+
+---
+
+## 11. Bitmap `COLOR_ENGRAVE` mode (xTool Studio color-engrave update)
+
+A later xTool Studio update (internal `appVersion` ~1.8.x, `schemaMeta.schemaVersion`
+`"2.1.0"`) added a **color-engrave** mode for the UV head that engraves a photo
+**directly as a raster bitmap** — no SVG vectorization. Reverse-engineered from
+`tests/Color engrave UV test.xs`.
+
+Key differences vs the vector (`FILL_VECTOR_ENGRAVING`) layout:
+
+| Aspect            | Vector (§2)                        | Bitmap color-engrave                          |
+| ----------------- | ---------------------------------- | --------------------------------------------- |
+| `vectors/` bucket | present (`svg` bucket)             | **absent** — no vectorization                 |
+| Image storage     | n/a                                | real PNG under `resources/<sha256>.png`       |
+| Display `type`    | `PATH` (+ `vectorRef`)             | **`BITMAP`** (+ `resourcePath`)               |
+| `processingType`  | `FILL_VECTOR_ENGRAVING`            | **`COLOR_ENGRAVE`**                           |
+| Defocus           | `defocus` / `defocus_distance`     | **removed** — use a manual focus reminder     |
+
+### 11.1 Resources
+- `resources/<sha256>.png` — the RGBA (8-bit, PNG color-type 6) source image,
+  content-addressed by the SHA-256 of the PNG **bytes**.
+- `resources/<sha256>.png.meta.json`:
+  ```json
+  { "ref": "resources/<hash>.png",
+    "metadata": { "kind": "image",
+      "source": { "type": "workspace", "value": "<hash>.png" },
+      "mimeType": "image/png" } }
+  ```
+- `resources/project-cover.png` (+ `.meta.json`) — optional preview cover.
+
+### 11.2 `BITMAP` display
+References the image via `resourcePath` (not `vectorRef`). Placement:
+- `originWidth` / `originHeight` — source pixel dimensions.
+- `width` / `height` — physical size in mm.
+- `scale = { x: widthMm/pxW, y: heightMm/pxH }` (mm per pixel).
+- `transform = [scaleX, 0, 0, scaleY, tx, ty]`.
+- `dpi = { dpiX: 25.4/scaleX, dpiY: 25.4/scaleY }`.
+- Plus image-filter fields (`grayValue`, `sharpness`, `brightness`, `contrast`,
+  `saturation`, `colorInverted`, `filterAttrsMap`, `mask`, `isGray`, …).
+
+### 11.3 `COLOR_ENGRAVE` profile
+```json
+{ "processingType": "COLOR_ENGRAVE",
+  "values": {
+    "bitmapEngraveMode": "normal", "speed": 80, "density": 100,
+    "dotDuration": 100, "dpi": 500, "power": 1, "repeat": 1,
+    "bitmapScanMode": "zMode", "frequency": 40, "notResize": true,
+    "scanAngle": 0, "angleType": 2, "crossAngle": false } }
+```
+- **No `defocus` / `defocus_distance`.** Defocus was removed for this engrave
+  type; the operator must raise the focus manually.
+- `density` carries the lines-per-cm and now natively supports **up to 5000 lpc**.
+- Studio also writes sibling default profiles (`BITMAP_ENGRAVING`,
+  `INNER_THREE_D`) as a shadow set with `shadowOf` bindings so the UI can toggle
+  processing types. A minimal file with only the active `COLOR_ENGRAVE` profile
+  loads fine.
+
+### 11.4 Manual focus reminder
+Because defocus is gone, Picture Engraver adds a non-engraved TEXT layer
+("Remember to raise the focus by N mm") and lists its display id in the mode's
+`ignoredDisplayIds` (the v2 equivalent of the v1 `processIgnore` flag), so it
+appears on the canvas but is never engraved. See `XSGenerator.generateColorEngrave()`.

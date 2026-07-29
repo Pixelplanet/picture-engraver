@@ -81,8 +81,9 @@ describe('XSGenerator', () => {
         expect(bucketKey).toBeDefined();
 
         const displays = files[bucketKey].displays;
-        expect(displays.length).toBe(2);
-        for (const d of displays) {
+        const pathDisplays = displays.filter(d => d.type === 'PATH');
+        expect(pathDisplays.length).toBe(2);
+        for (const d of pathDisplays) {
             expect(d.dPath).toBeUndefined();
             expect(d.vectorRef).toBeDefined();
             expect(d.vectorRef.bucketType).toBe('svg');
@@ -91,7 +92,7 @@ describe('XSGenerator', () => {
         }
 
         const bucket = files['vectors/svg/data-0.json'].entries;
-        for (const d of displays) {
+        for (const d of pathDisplays) {
             const stored = bucket[d.vectorRef.vectorHash];
             expect(typeof stored).toBe('string');
             // Round-trip: stored value must hash back to the referenced hash
@@ -127,26 +128,33 @@ describe('XSGenerator', () => {
         }
     });
 
-    it('uses laser-type default defocus when nothing is configured (UV → 4mm)', async () => {
+    it('defaults UV to no defocus (defocus was removed for the UV engrave type)', async () => {
         const files = await buildFiles();
         const p = Object.values(files['profiles.json'].profiles)[0];
-        expect(p.values.defocus).toBe(true);
-        expect(p.values.defocus_distance).toBe(4);
+        expect(p.values.defocus).toBe(false);
+        expect(p.values.defocus_distance).toBe(1);
     });
 
-    it('does NOT include the legacy "raise focus" TEXT display', async () => {
+    it('emits a non-engraved "raise focus" TEXT reminder for UV (defocus off)', async () => {
         const files = await buildFiles();
         const bucketKey = Object.keys(files).find(k => k.startsWith('canvases/') && k.endsWith('/displays-0.json'));
         const displays = files[bucketKey].displays;
-        const hasText = displays.some(d => d.type === 'TEXT');
-        expect(hasText).toBe(false);
+        const warning = displays.find(d => d.type === 'TEXT');
+        expect(warning).toBeTruthy();
+        expect(warning.text).toContain('raise');
+
+        // The reminder must not be engraved: listed in ignoredDisplayIds, unbound.
+        const deviceKey = Object.keys(files).find(k => k.startsWith('devices/'));
+        const mode = Object.values(files[deviceKey].processing)[0].modes.LASER_PLANE;
+        expect(mode.ignoredDisplayIds).toContain(warning.id);
+        expect(mode.bindings.flatMap(b => b.displayIds)).not.toContain(warning.id);
     });
 
-    it('builds correct chunkLayout for a single chunk', async () => {
+    it('builds correct chunkLayout for a single chunk (2 layers + focus reminder)', async () => {
         const files = await buildFiles();
         const headerKey = Object.keys(files).find(k => k.startsWith('canvases/') && k.endsWith('.json') && !k.includes('displays-'));
         const header = files[headerKey];
-        expect(header.chunkLayout.displayCount).toBe(2);
+        expect(header.chunkLayout.displayCount).toBe(3);
         expect(header.chunkLayout.chunkCount).toBe(1);
         expect(header.chunkLayout.chunkIndexes).toEqual([0]);
     });

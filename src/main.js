@@ -18,7 +18,6 @@ import { EnhancedQuantizer } from './lib/enhanced-quantizer.js';
 import { Vectorizer } from './lib/vectorizer.js';
 import { buildLabelMap, labelMapToImageData, despeckle, mergeSimilarColors } from './lib/image-cleanup.js';
 import { floodFill, paintBrush, nearestPaletteIndex } from './lib/paint-tool.js';
-import { XCSGenerator } from './lib/xcs-generator.js';
 import { XSGenerator } from './lib/xs-generator.js';
 import { showToast } from './lib/toast.js';
 import { Logger } from './lib/logger.js';
@@ -143,6 +142,7 @@ const elements = {
     // Export
     btnDownloadXCS: document.getElementById('btnDownloadXCS'),
     btnDownloadXS: document.getElementById('btnDownloadXS'),
+    toggleColorEngrave: document.getElementById('toggleColorEngrave'),
 
     // Modals
     settingsModal: document.getElementById('settingsModal'),
@@ -1253,6 +1253,14 @@ function updateDeviceUI(deviceId) {
         }
     });
 
+    // Defocus was removed for lasers that show the manual focus warning (UV),
+    // so hide the defocus input for them. Keep the color-engrave export UI in
+    // sync (toggleVirtualModeUI may have re-enabled the .xcs button).
+    if (elements.rowDefocus) {
+        elements.rowDefocus.style.display = (showFocusWarning && !isVirtual) ? 'none' : '';
+    }
+    updateColorEngraveUI();
+
     // Update Test Grid UI based on device
     updateTestGridUI();
 
@@ -1284,23 +1292,19 @@ function toggleVirtualModeUI(isVirtual) {
         }
     });
 
-    // 3. Change export button text and behavior (only the .xcs button — .xs is hidden in SVG mode)
-    const exportBtn = document.getElementById('btnDownloadXCS');
+    // 3. Change export button text/behavior. There is a single export button
+    //    (#btnDownloadXS); in SVG/virtual mode it downloads an SVG instead.
+    const exportBtn = document.getElementById('btnDownloadXS');
     if (exportBtn) {
         if (isVirtual) {
             exportBtn.innerHTML = '<span>📁</span> Download SVG';
             exportBtn.dataset.exportMode = 'svg';
-            exportBtn.disabled = false;
         } else {
-            exportBtn.innerHTML = '<span>💾</span> Download .xcs';
-            exportBtn.dataset.exportMode = 'xcs';
-            exportBtn.disabled = false;
+            exportBtn.innerHTML = '<span>💾</span> Download .xs';
+            exportBtn.dataset.exportMode = 'xs';
         }
-    }
-    // Hide the .xs button entirely in virtual/SVG mode (xs format is irrelevant)
-    const exportBtnXS = document.getElementById('btnDownloadXS');
-    if (exportBtnXS) {
-        exportBtnXS.style.display = isVirtual ? 'none' : '';
+        exportBtn.disabled = false;
+        exportBtn.style.display = '';
     }
 
     // 4. Hide/show the "Auto-Assign Colors" button (not relevant for SVG mode)
@@ -2443,21 +2447,16 @@ function displayLayers() {
  * Update the download button state based on layer assignments
  */
 function updateDownloadButtonState() {
-    if (!elements.btnDownloadXCS) return;
+    if (!elements.btnDownloadXS) return;
 
     const isVirtual = SettingsStorage.isCurrentDeviceVirtual();
-    const btnXCS = elements.btnDownloadXCS;
     const btnXS = elements.btnDownloadXS;
 
     // In virtual mode (SVG Export), we don't need color/settings assignment
     if (isVirtual) {
-        btnXCS.disabled = false;
-        btnXCS.title = 'Download SVG File';
-        btnXCS.style.opacity = '1';
-        if (btnXS) {
-            btnXS.disabled = false;
-            btnXS.style.opacity = '1';
-        }
+        btnXS.disabled = false;
+        btnXS.title = 'Download SVG File';
+        btnXS.style.opacity = '1';
         return;
     }
 
@@ -2477,7 +2476,6 @@ function updateDownloadButtonState() {
         }
     };
 
-    applyState(btnXCS, 'XCS');
     applyState(btnXS, 'XS');
 }
 
@@ -3241,20 +3239,132 @@ function closeEditorModal() {
 // Export
 // ===================================
 function setupExport() {
-    elements.btnDownloadXCS.addEventListener('click', () => downloadXCS('xcs'));
     if (elements.btnDownloadXS) {
         elements.btnDownloadXS.addEventListener('click', () => downloadXCS('xs'));
+    }
+    if (elements.toggleColorEngrave) {
+        elements.toggleColorEngrave.checked = !!state.settings.colorEngrave;
+        elements.toggleColorEngrave.addEventListener('change', (e) => {
+            state.settings.colorEngrave = e.target.checked;
+            SettingsStorage.save(state.settings);
+            updateColorEngraveUI();
+        });
+    }
+    updateColorEngraveUI();
+}
+
+/**
+ * Reflect the "Color Engrave (bitmap)" mode in the export UI. In this mode the
+ * photo is engraved directly as a bitmap (xTool COLOR_ENGRAVE); otherwise the
+ * image is vectorized. Both produce the .xs format (the only supported output).
+ */
+function updateColorEngraveUI() {
+    const on = !!state.settings.colorEngrave;
+    if (elements.toggleColorEngrave) elements.toggleColorEngrave.checked = on;
+    if (elements.btnDownloadXS && elements.btnDownloadXS.dataset.exportMode !== 'svg') {
+        elements.btnDownloadXS.title = on
+            ? 'Download color-engrave .xs (bitmap) — raise focus manually'
+            : 'Download .xs engraving file for xTool Studio';
     }
 }
 
 /**
- * Generate and download XCS in one click
- * Combined for faster workflow since generation is now very fast
+ * Encode the current working image to PNG bytes for bitmap engraving.
+ * Prefers the resized original (pre-quantization); falls back to the processed
+ * image, then to rendering the original upload at the output resolution.
+ * @returns {Promise<{pngBytes:Uint8Array, pxWidth:number, pxHeight:number}|null>}
  */
-async function downloadXCS(formatOverride) {
+async function imageToPngBytes() {
+    const canvas = document.createElement('canvas');
+    const imageData = state.sourceImageData || state.processedImage;
+    if (imageData) {
+        canvas.width = imageData.width;
+        canvas.height = imageData.height;
+        canvas.getContext('2d').putImageData(imageData, 0, 0);
+    } else if (state.originalImage) {
+        const size = getOutputSize();
+        const pxPerMm = 10;
+        canvas.width = Math.max(1, Math.round(size.width * pxPerMm));
+        canvas.height = Math.max(1, Math.round(size.height * pxPerMm));
+        canvas.getContext('2d').drawImage(state.originalImage, 0, 0, canvas.width, canvas.height);
+    } else {
+        return null;
+    }
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const buf = await blob.arrayBuffer();
+    return { pngBytes: new Uint8Array(buf), pxWidth: canvas.width, pxHeight: canvas.height };
+}
+
+/**
+ * Export the loaded photo as a bitmap COLOR_ENGRAVE .xs file (no SVG conversion).
+ */
+async function exportColorEngrave() {
+    const img = await imageToPngBytes();
+    if (!img) {
+        showToast('Please load and process an image first', 'error');
+        return;
+    }
+
+    const btn = elements.btnDownloadXS || elements.btnDownloadXCS;
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Generating...';
+
+    try {
+        const deviceId = resolveDeviceId(state.settings?.activeDevice || 'f2_ultra_uv');
+        const deviceConfig = getDeviceConfig(deviceId);
+        const deviceLabel = deviceConfig ? deviceConfig.name.replace(/[\s()]+/g, '_') : 'F2';
+        const laserConfig = getLaserConfig(deviceId, state.settings?.activeLaserType);
+        const laserLabel = laserConfig ? laserConfig.name.replace(/\s+/g, '') : 'UV';
+        const materialLabel = getMaterialById(state.settings?.material || DEFAULT_MATERIAL_ID).shortName.replace(/\s+/g, '');
+        const imgLabel = state.originalImageName ? `_${state.originalImageName}` : '';
+        const filename = `colorengrave${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.xs`;
+
+        const xsGen = new XSGenerator({ ...state.settings });
+        let blob = await xsGen.generateColorEngrave(img, getOutputSize());
+        if (!(blob instanceof Blob)) {
+            blob = new Blob([blob], { type: 'application/zip' });
+        }
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        const needsFocus = laserConfig && laserConfig.addFocusWarning;
+        showToast(
+            needsFocus
+                ? `Color-engrave .xs downloaded! Remember to raise the focus by ${laserConfig.focusWarningDistanceMm || 4} mm.`
+                : 'Color-engrave .xs downloaded!',
+            'success',
+        );
+        if (window.onboarding) window.onboarding.handleAction('download');
+    } catch (error) {
+        console.error('Color engrave export error:', error);
+        showToast('Error generating file: ' + error.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+/**
+ * Generate and download the .xs engraving file in one click.
+ * (.xcs output was retired — .xs is the only supported format.)
+ */
+async function downloadXCS() {
     // Check if we're in SVG export mode
     if (SettingsStorage.isCurrentDeviceVirtual()) {
         return downloadSVG();
+    }
+
+    // Bitmap color-engrave mode engraves the photo directly
+    if (state.settings.colorEngrave) {
+        return exportColorEngrave();
     }
 
     if (state.layers.length === 0) {
@@ -3269,8 +3379,7 @@ async function downloadXCS(formatOverride) {
         return;
     }
 
-    const fmt = formatOverride === 'xs' ? 'xs' : 'xcs';
-    const btn = fmt === 'xs' ? (elements.btnDownloadXS || elements.btnDownloadXCS) : elements.btnDownloadXCS;
+    const btn = elements.btnDownloadXS;
     const originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span>⏳</span> Generating...';
@@ -3284,8 +3393,7 @@ async function downloadXCS(formatOverride) {
         const materialId = state.settings?.material || DEFAULT_MATERIAL_ID;
         const materialLabel = getMaterialById(materialId).shortName.replace(/\s+/g, '');
         const imgLabel = state.originalImageName ? `_${state.originalImageName}` : '';
-        const ext = fmt === 'xs' ? 'xs' : 'xcs';
-        const filename = `engraving${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.${ext}`;
+        const filename = `engraving${imgLabel}_${deviceLabel}_${laserLabel}_${materialLabel}.xs`;
 
         // Resolve defocus (mm). Falls back to laser default.
         const defocus = typeof state.settings?.defocus === 'number'
@@ -3294,17 +3402,10 @@ async function downloadXCS(formatOverride) {
 
         const genSettings = { ...state.settings, defocus };
 
-        let blob;
-        if (fmt === 'xs') {
-            const xsGen = new XSGenerator(genSettings);
-            blob = await xsGen.generate(state.processedImage, state.layers, getOutputSize());
-            if (!(blob instanceof Blob)) {
-                blob = new Blob([blob], { type: 'application/zip' });
-            }
-        } else {
-            const xcsGen = new XCSGenerator(genSettings);
-            const xcsContent = xcsGen.generate(state.processedImage, state.layers, getOutputSize());
-            blob = new Blob([xcsContent], { type: 'application/json' });
+        const xsGen = new XSGenerator(genSettings);
+        let blob = await xsGen.generate(state.processedImage, state.layers, getOutputSize());
+        if (!(blob instanceof Blob)) {
+            blob = new Blob([blob], { type: 'application/zip' });
         }
 
         const url = URL.createObjectURL(blob);
@@ -3316,7 +3417,7 @@ async function downloadXCS(formatOverride) {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        showToast(`${ext.toUpperCase()} file downloaded!`, 'success');
+        showToast('XS file downloaded!', 'success');
 
         // Complete Onboarding if active
         if (window.onboarding) window.onboarding.handleAction('download');
@@ -3339,7 +3440,7 @@ async function downloadSVG() {
         return;
     }
 
-    const btn = elements.btnDownloadXCS;
+    const btn = elements.btnDownloadXS;
     const originalText = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span>⏳</span> Generating SVG...';
@@ -4149,8 +4250,7 @@ function setupTestGrid() {
     const btnGenerateBooklet = document.getElementById('btnGenerateBooklet');
     if (btnGenerateBooklet) {
         btnGenerateBooklet.addEventListener('click', () => {
-            const fmtEl = document.getElementById('flexBookletFormat');
-            generateCustomGridBooklet(fmtEl ? fmtEl.value : 'xcs');
+            generateCustomGridBooklet('xs');
         });
     }
 
@@ -4168,8 +4268,7 @@ function setupTestGrid() {
         });
     }
 
-    // Buttons
-    document.getElementById('btnGenerateGrid').addEventListener('click', () => generateCustomGridXCS('xcs'));
+    // Buttons (.xs is the only supported format)
     const btnGenGridXS = document.getElementById('btnGenerateGridXS');
     if (btnGenGridXS) btnGenGridXS.addEventListener('click', () => generateCustomGridXCS('xs'));
 
@@ -4177,13 +4276,6 @@ function setupTestGrid() {
     initGridPreviewHover();
 
     // Standard Grid Buttons
-    const btnStd = document.getElementById('btnGenerateStandard');
-    if (btnStd) {
-        btnStd.addEventListener('click', (e) => {
-            e.preventDefault();
-            generateStandardGridXCS('xcs');
-        });
-    }
     const btnStdXS = document.getElementById('btnGenerateStandardXS');
     if (btnStdXS) {
         btnStdXS.addEventListener('click', (e) => {

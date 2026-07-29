@@ -32,7 +32,7 @@ test.describe('SVG Export Virtual Device', () => {
         await expect(page.locator('#btnHelp')).toBeHidden();
         await expect(page.locator('#btnSettings')).toBeHidden();
 
-        const exportBtn = page.locator('#btnDownloadXCS');
+        const exportBtn = page.locator('#btnDownloadXS');
         await expect(exportBtn).toContainText('Download SVG');
         await expect(exportBtn).toBeEnabled();
     });
@@ -69,7 +69,7 @@ test.describe('SVG Export Virtual Device', () => {
         await expect(page.locator('.layers-list .layer-item').first()).toBeVisible({ timeout: 30000 });
 
         // Export button should be enabled immediately after processing in SVG mode
-        const exportBtn = page.locator('#btnDownloadXCS');
+        const exportBtn = page.locator('#btnDownloadXS');
         await expect(exportBtn).toBeEnabled();
 
         // Click on a layer's color box to open edit modal
@@ -94,7 +94,7 @@ test.describe('SVG Export Virtual Device', () => {
         await expect(page.locator('.device-badge')).toContainText('F2 Ultra (UV)');
         await expect(page.locator('#btnTestGrid')).toBeVisible();
         await expect(page.locator('#btnAutoAssign')).toBeAttached();
-        await expect(page.locator('#btnDownloadXCS')).toContainText('Download XCS');
+        await expect(page.locator('#btnDownloadXS')).toContainText('Download .xs');
     });
 
     test('should allow switching from UV to SVG device via badge click', async ({ page }) => {

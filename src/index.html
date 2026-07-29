@@ -198,18 +198,18 @@
         </div>
 
         <div class="export-actions">
+          <div class="export-mode-row" style="margin-bottom:8px;">
+            <label class="color-engrave-toggle" title="Engrave the photo directly as a bitmap using xTool's COLOR_ENGRAVE mode — no SVG/vector conversion. Exports as .xs." style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:0.9em;">
+              <input type="checkbox" class="checkbox" id="toggleColorEngrave">
+              <span>🎨 <strong>Color Engrave (bitmap)</strong> — engrave the photo directly <span class="new-badge" style="background:#ff6b35;color:#fff;font-size:0.62em;font-weight:bold;padding:1px 5px;border-radius:10px;letter-spacing:0.5px;">NEW</span></span>
+            </label>
+          </div>
           <div class="export-info-row">
-            <span class="export-tip xcs-tip" title="In xTool Studio, manually raise focus UP by 4 mm before engraving">⚠️ <strong>.xcs</strong>: +4&nbsp;mm focus</span>
-            <span class="export-sep">·</span>
-            <span class="export-tip xs-tip" title="Defocus is embedded in the file — no manual focus adjustment needed">✨ <strong>.xs</strong>: auto-defocus</span>
+            <span class="export-tip xs-tip" title="Manually raise the focus by 4 mm before engraving (defocus was removed for the UV engrave type)">⚠️ <strong>Remember</strong>: raise focus +4&nbsp;mm before engraving</span>
           </div>
           <div class="export-btns">
-            <button class="btn btn-success" id="btnDownloadXCS" title="Download .xcs engraving file">
-              <span>💾</span> Download .xcs
-            </button>
-            <button class="btn btn-primary" id="btnDownloadXS" title="Download .xs file (no manual focus needed)" style="position:relative;">
+            <button class="btn btn-primary btn-lg" id="btnDownloadXS" title="Download .xs engraving file for xTool Studio" style="position:relative; width:100%;">
               <span>💾</span> Download .xs
-              <span class="new-badge" style="position:absolute;top:-6px;right:-6px;background:#ff6b35;color:#fff;font-size:0.62em;font-weight:bold;padding:2px 6px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.3);letter-spacing:0.5px;">NEW</span>
             </button>
           </div>
         </div>
@@ -263,7 +263,7 @@
             </div>
             <div class="setting-row" id="rowDefocus">
               <label>Defocus (mm; 1–12, below 1 = off)</label>
-              <input type="number" class="input" id="settingDefocus" value="4" min="0" max="12" step="0.1">
+              <input type="number" class="input" id="settingDefocus" value="0" min="0" max="12" step="0.1">
             </div>
           </div>
 
@@ -296,11 +296,11 @@
             <h3>Lines/cm Range (LPC)</h3>
             <div class="setting-row">
               <label>Min</label>
-              <input type="number" class="input" id="settingLpiMin" value="300" min="100" max="1000">
+              <input type="number" class="input" id="settingLpiMin" value="300" min="100" max="5000">
             </div>
             <div class="setting-row">
               <label>Max</label>
-              <input type="number" class="input" id="settingLpiMax" value="800" min="100" max="1000">
+              <input type="number" class="input" id="settingLpiMax" value="800" min="100" max="5000">
             </div>
           </div>
 
@@ -406,12 +406,8 @@
 
                 <div class="action-row" style="text-align: right; margin-top: auto;">
                   <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <a href="#" class="btn btn-primary btn-lg" id="btnGenerateStandard" style="flex:1; min-width:140px;">
-                      <span>💾</span> .xcs
-                    </a>
-                    <a href="#" class="btn btn-success btn-lg" id="btnGenerateStandardXS" style="flex:1; min-width:140px; position:relative;">
-                      <span>💾</span> .xs
-                      <span class="new-badge" style="position:absolute; top:-6px; right:-6px; background:#ff6b35; color:#fff; font-size:0.62em; font-weight:bold; padding:2px 6px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.3); letter-spacing:0.5px;">NEW</span>
+                    <a href="#" class="btn btn-primary btn-lg" id="btnGenerateStandardXS" style="flex:1; min-width:140px;">
+                      <span>💾</span> Download .xs
                     </a>
                   </div>
                 </div>
@@ -626,10 +622,6 @@
                         <div class="setting-row"><label>Pages</label><input class="input" id="flexBookletSteps" type="number" min="2" max="12" value="3" /></div>
                       </div>
                       <div class="flex-actions-row">
-                        <select class="input" id="flexBookletFormat" style="max-width:90px;">
-                          <option value="xcs">.xcs</option>
-                          <option value="xs">.xs</option>
-                        </select>
                         <button class="btn btn-secondary btn-sm" id="btnGenerateBooklet" type="button">Generate booklet (.zip)</button>
                       </div>
                     </div>
@@ -654,12 +646,8 @@
                 <!-- Custom Actions -->
                 <div class="modal-footer-custom"
                   style="display: flex; justify-content: flex-end; gap: 10px; margin-top: auto; align-items: center; flex-wrap: wrap;">
-                  <button class="btn btn-primary" id="btnGenerateGrid">
-                    <span>💾</span> Download .xcs
-                  </button>
-                  <button class="btn btn-success" id="btnGenerateGridXS" style="position:relative;">
+                  <button class="btn btn-primary" id="btnGenerateGridXS" style="position:relative;">
                     <span>💾</span> Download .xs
-                    <span class="new-badge" style="position:absolute; top:-6px; right:-6px; background:#ff6b35; color:#fff; font-size:0.62em; font-weight:bold; padding:2px 6px; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.3); letter-spacing:0.5px;">NEW</span>
                   </button>
                 </div>
               </div>

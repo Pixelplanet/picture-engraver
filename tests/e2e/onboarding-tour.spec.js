@@ -86,7 +86,7 @@ test.describe('Onboarding Tour', () => {
         // Logic in app: waitForAction: 'download'
 
         // Click Download
-        await page.click('#btnDownloadXCS');
+        await page.click('#btnDownloadXS');
 
         // Tour should end and success message/or just tour finish
         // The tooltip might change to "Success" briefly or just disappear

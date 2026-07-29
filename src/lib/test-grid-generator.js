@@ -7,7 +7,7 @@ import jsQR from 'jsqr';
 import QRCode from 'qrcode';
 import JSZip from 'jszip';
 import { getXtoolMaterialId, DEFAULT_MATERIAL_ID } from './material-registry.js';
-import { getLaserConfig, getDeviceConfig, resolveDeviceId, getDefaultDefocus, normalizeDefocus } from './device-registry.js';
+import { getLaserConfig, getDeviceConfig, resolveDeviceId, getDefaultDefocus, normalizeDefocus, LPC_MAX_COLOR_ENGRAVE } from './device-registry.js';
 import { XSGenerator } from './xs-generator.js';
 
 export class TestGridGenerator {
@@ -1164,7 +1164,9 @@ export class TestGridGenerator {
             frequency:  [isMopaLike ? 200 : 40, isMopaLike ? 1200 : 90],
             power:      [10, 80],
             speed:      [200, 1500],
-            lpc:        [500, 2000],
+            // xTool's COLOR_ENGRAVE (bitmap) mode natively supports up to 5000 lpc,
+            // so allow the LPC axis to reach that ceiling for color test grids.
+            lpc:        [500, LPC_MAX_COLOR_ENGRAVE],
             defocus:    [1, 12],
             pulseWidth: [2, 350],
         };

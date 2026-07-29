@@ -28,7 +28,11 @@ export const LASER_TYPES = {
         settingsKey: 'uv',            // Key used in material-registry defaults
         hasDefaultMap: true,
         addFocusWarning: true,         // UV needs focus warning layer
-        defaultDefocus: 4,             // Default defocus distance in mm for .xs profiles
+        // Defocus was removed for the UV engrave type in xTool Studio's color-engrave
+        // update. UV now relies on a manual focus warning (see focusWarningDistanceMm),
+        // so the default defocus is 0 (off) for both vector and bitmap .xs output.
+        defaultDefocus: 0,
+        focusWarningDistanceMm: 4,     // Manual focus offset shown in the warning layer
     },
     mopa: {
         id: 'mopa',
@@ -376,6 +380,24 @@ export function getDefaultDefocus(deviceId, laserTypeId) {
 export const DEFOCUS_MIN = 1;
 export const DEFOCUS_MAX = 12;
 export const DEFOCUS_STEP = 0.1;
+
+/**
+ * Lines-per-cm (density) ceilings.
+ * Standard vector/fill engraving tops out at 2000 lpc. xTool Studio's new
+ * COLOR_ENGRAVE (bitmap) mode natively supports up to 5000 lpc, so callers can
+ * raise the limit when bitmap color-engrave mode is active.
+ */
+export const LPC_MAX_DEFAULT = 2000;
+export const LPC_MAX_COLOR_ENGRAVE = 5000;
+
+/**
+ * Get the maximum lines-per-cm allowed for the given output mode.
+ * @param {boolean} colorEngrave - True when bitmap COLOR_ENGRAVE mode is active.
+ * @returns {number}
+ */
+export function getLpcMax(colorEngrave) {
+    return colorEngrave ? LPC_MAX_COLOR_ENGRAVE : LPC_MAX_DEFAULT;
+}
 
 /**
  * Normalise a raw defocus value to the canonical rules above.
