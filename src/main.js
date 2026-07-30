@@ -3397,6 +3397,99 @@ async function buildColorEngraveLayerImages(size) {
 }
 
 /**
+ * Rasterize a single test-grid PATH display (swatch, QR, or label) into a
+ * positioned PNG for bitmap COLOR_ENGRAVE output. The dPath is in absolute
+ * workspace mm, so we render it into a cell-sized canvas and record its origin.
+ */
+async function rasterizeGridDisplayToPng(display, pxPerMm) {
+    const wMm = Math.max(0.1, display.width || 1);
+    const hMm = Math.max(0.1, display.height || 1);
+    const pxW = Math.max(1, Math.round(wMm * pxPerMm));
+    const pxH = Math.max(1, Math.round(hMm * pxPerMm));
+    const canvas = document.createElement('canvas');
+    canvas.width = pxW;
+    canvas.height = pxH;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, pxW, pxH);
+    ctx.save();
+    ctx.scale(pxPerMm, pxPerMm);
+    ctx.translate(-(display.x || 0), -(display.y || 0)); // absolute path → local origin
+    ctx.fillStyle = '#000';
+    try {
+        ctx.fill(new Path2D(display.dPath), display.fillRule === 'evenodd' ? 'evenodd' : 'nonzero');
+    } catch (e) {
+        console.warn('Grid cell rasterization failed:', e);
+    }
+    ctx.restore();
+    return {
+        pngBytes: await canvasToPngBytes(canvas),
+        pxWidth: pxW,
+        pxHeight: pxH,
+        xMm: display.x || 0,
+        yMm: display.y || 0,
+        widthMm: wMm,
+        heightMm: hMm,
+    };
+}
+
+/**
+ * Convert a test-grid XCS-JSON structure into positioned COLOR_ENGRAVE layers:
+ * every swatch / QR / label becomes its own bitmap cell carrying that cell's
+ * engraving settings, so the grid engraves in the same mode as the image export.
+ */
+async function buildColorEngraveGridLayers(xcsObj) {
+    const canvas = xcsObj.canvas[0];
+    const settingsById = new Map();
+    try {
+        const canvasEntry = xcsObj.device.data.value[0][1];
+        for (const [id, info] of canvasEntry.displays.value) {
+            const pt = info.processingType || 'FILL_VECTOR_ENGRAVING';
+            const block = info.data[pt] || info.data.FILL_VECTOR_ENGRAVING;
+            settingsById.set(id, block ? block.parameter.customize : {});
+        }
+    } catch { /* tolerate missing device map */ }
+
+    const pxPerMm = 20;
+    const layers = [];
+    for (const d of canvas.displays) {
+        if (!d.dPath) continue;
+        const img = await rasterizeGridDisplayToPng(d, pxPerMm);
+        const cust = settingsById.get(d.id) || {};
+        layers.push({
+            ...img,
+            color: hexToRgb(d.layerColor || '#000000'),
+            name: d.name,
+            speed: cust.speed,
+            power: cust.power,
+            passes: cust.repeat,
+            frequency: cust.frequency,
+            lpi: cust.density != null ? cust.density : cust.dpi,
+        });
+    }
+    return layers;
+}
+
+/**
+ * Build a test grid as a bitmap COLOR_ENGRAVE .xs (matching the image export)
+ * instead of the legacy vector .xs. Returns { xs: Blob, gridInfo }.
+ */
+async function generateGridColorEngraveXs(generator) {
+    const built = generator.generateBusinessCardGrid();
+    const xcsObj = JSON.parse(built.xcs);
+    const layers = await buildColorEngraveGridLayers(xcsObj);
+    const ws = generator.getWorkspaceSize();
+    const xsGen = new XSGenerator({
+        ...generator.settings,
+        hasFrequency: currentLaserHasFrequency(),
+    });
+    let blob = await xsGen.generateColorEngrave(layers, { width: ws, height: ws });
+    if (!(blob instanceof Blob)) {
+        blob = new Blob([blob], { type: 'application/zip' });
+    }
+    return { xs: blob, gridInfo: built.gridInfo };
+}
+
+/**
  * Generate and download the .xs engraving file in one click.
  * (.xcs output was retired — .xs is the only supported format.)
  */
@@ -5911,7 +6004,7 @@ async function generateCustomGridBooklet(format) {
             const tag = `${meta.label.replace(/\s+/g, '')}_${v}${meta.unit.replace(/[^a-zA-Z]/g, '')}`;
             const fname = `${baseName}_${tag}.${fmt}`;
             if (fmt === 'xs') {
-                const { xs } = await generator.generateBusinessCardGridXS();
+                const { xs } = await generateGridColorEngraveXs(generator);
                 zip.file(fname, xs);
             } else {
                 const { xcs } = generator.generateBusinessCardGrid();
@@ -6263,7 +6356,7 @@ async function clientSideStandardGrid(deviceId, laserTypeId, laser, filename, fm
 
     const generator = new TestGridGenerator(fixedSettings);
     if (fmt === 'xs') {
-        const { xs } = await generator.generateBusinessCardGridXS();
+        const { xs } = await generateGridColorEngraveXs(generator);
         downloadTestGridFile(xs, filename, 'xs');
     } else {
         const { xcs } = generator.generateBusinessCardGrid();
@@ -6285,7 +6378,7 @@ async function generateCustomGridXCS(formatOverride) {
     const filename = getSmartGridFilename('CustomGrid', customSettings, deviceId) + '.' + ext;
 
     if (fmt === 'xs') {
-        const { xs } = await generator.generateBusinessCardGridXS();
+        const { xs } = await generateGridColorEngraveXs(generator);
         downloadTestGridFile(xs, filename, 'xs');
     } else {
         const { xcs } = generator.generateBusinessCardGrid();

@@ -139,4 +139,23 @@ describe('XSGenerator.generateColorEngrave (per-layer)', () => {
         const gen = new XSGenerator({ activeDevice: 'f2_ultra_uv', activeLaserType: 'uv' });
         await expect(gen.generateColorEngraveFiles([], { width: 100, height: 50 })).rejects.toThrow();
     });
+
+    it('positions cells via xMm/yMm/widthMm/heightMm (test-grid layout)', async () => {
+        const gen = new XSGenerator({ activeDevice: 'f2_ultra_uv', activeLaserType: 'uv', speed: 80, power: 10, lpi: 500 });
+        const layers = [
+            { pngBytes: fakePng(3), pxWidth: 100, pxHeight: 100, xMm: 12, yMm: 34, widthMm: 5, heightMm: 5, color: { r: 0, g: 0, b: 0 } },
+            { pngBytes: fakePng(4), pxWidth: 100, pxHeight: 100, xMm: 20, yMm: 34, widthMm: 5, heightMm: 5, color: { r: 0, g: 0, b: 0 } },
+        ];
+        const files = await gen.generateColorEngraveFiles(layers, { width: 115, height: 115 });
+        const canvasKey = Object.keys(files).find(k => k.endsWith('/displays-0.json'));
+        const bitmaps = files[canvasKey].displays.filter(d => d.type === 'BITMAP');
+        expect(bitmaps).toHaveLength(2);
+        const cell = bitmaps[0];
+        expect(cell.x).toBe(12);
+        expect(cell.y).toBe(34);
+        expect(cell.width).toBe(5);
+        expect(cell.height).toBe(5);
+        expect(cell.scale.x).toBeCloseTo(5 / 100, 6);
+        expect(cell.transform).toEqual([5 / 100, 0, 0, 5 / 100, 12, 34]);
+    });
 });

@@ -488,25 +488,25 @@ export class XSGenerator {
 
     /**
      * Build a v2 BITMAP display referencing a PNG resource, sized to the given
-     * physical dimensions. The image is placed at the canvas origin so multiple
-     * per-colour layers overlay in perfect registration.
+     * physical dimensions and positioned at (xMm, yMm). Image-export layers use
+     * the canvas origin; test-grid cells pass explicit positions.
      */
-    _bitmapDisplayV2({ id, resourcePath, pxWidth, pxHeight, widthMm, heightMm, zOrder, layerColor, groupTag }) {
+    _bitmapDisplayV2({ id, resourcePath, pxWidth, pxHeight, widthMm, heightMm, xMm = 0, yMm = 0, zOrder, layerColor, groupTag }) {
         const scaleX = widthMm / pxWidth;
         const scaleY = heightMm / pxHeight;
         return {
             id,
             name: null,
             type: 'BITMAP',
-            x: 0,
-            y: 0,
+            x: xMm,
+            y: yMm,
             angle: 0,
             scale: { x: scaleX, y: scaleY },
             skew: { x: 0, y: 0 },
             pivot: { x: 0, y: 0 },
             localSkew: { x: 0, y: 0 },
-            offsetX: 0,
-            offsetY: 0,
+            offsetX: xMm,
+            offsetY: yMm,
             lockRatio: true,
             isClosePath: false,
             zOrder,
@@ -530,7 +530,7 @@ export class XSGenerator {
                 width: 1, cap: 'butt', join: 'miter', miterLimit: 4, alignment: 0.5,
             },
             effects: [],
-            transform: [scaleX, 0, 0, scaleY, 0, 0],
+            transform: [scaleX, 0, 0, scaleY, xMm, yMm],
             width: widthMm,
             height: heightMm,
             isFill: true,
@@ -652,8 +652,10 @@ export class XSGenerator {
                 resourcePath,
                 pxWidth,
                 pxHeight,
-                widthMm,
-                heightMm,
+                widthMm: L.widthMm != null ? L.widthMm : widthMm,
+                heightMm: L.heightMm != null ? L.heightMm : heightMm,
+                xMm: L.xMm != null ? L.xMm : 0,
+                yMm: L.yMm != null ? L.yMm : 0,
                 zOrder: i + 1,
                 layerColor: hex,
                 groupTag: this.generateUUID(),
