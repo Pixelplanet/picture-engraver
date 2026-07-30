@@ -108,6 +108,21 @@ describe('XSGenerator.generateColorEngrave (per-layer)', () => {
         expect(files[canvasKey].displays.some(d => d.type === 'TEXT')).toBe(false);
     });
 
+    it('includes frequency for lasers that have it (UV)', async () => {
+        const files = await buildColorEngrave({ activeDevice: 'f2_ultra_uv', activeLaserType: 'uv' });
+        for (const p of Object.values(files['profiles.json'].profiles)) {
+            expect(p.values).toHaveProperty('frequency');
+        }
+    });
+
+    it('omits frequency for the regular F2 (no frequency control)', async () => {
+        const files = await buildColorEngrave({ activeDevice: 'f2', activeLaserType: 'ir' });
+        for (const p of Object.values(files['profiles.json'].profiles)) {
+            expect(p.processingType).toBe('COLOR_ENGRAVE');
+            expect(p.values).not.toHaveProperty('frequency');
+        }
+    });
+
     it('produces a loadable ZIP with the v2 sentinel and round-trips PNGs', async () => {
         const gen = new XSGenerator({ activeDevice: 'f2_ultra_uv', activeLaserType: 'uv', speed: 80, power: 10, passes: 1, frequency: 40, lpi: 100 });
         const buf = await gen.generateColorEngrave(sampleLayers(), { width: 100, height: 50 });

@@ -96,6 +96,8 @@ export const LASER_TYPES = {
         processingType: 'COLOR_FILL_ENGRAVE',
         hasPulseWidth: false,
         hasMopaFrequency: false,
+        // The regular F2 (GS006) has no frequency control in color-engrave mode.
+        hasFrequency: false,
         powerLevels: [5, 15],
         planType: 'red',
         settingsKey: 'ir',
@@ -112,6 +114,8 @@ export const LASER_TYPES = {
         processingType: 'COLOR_FILL_ENGRAVE',
         hasPulseWidth: false,
         hasMopaFrequency: false,
+        // The regular F2 (GS006) has no frequency control in color-engrave mode.
+        hasFrequency: false,
         powerLevels: [5, 15],
         planType: 'blue',
         settingsKey: 'blue_f2',
@@ -369,6 +373,19 @@ export function getDeviceFamiliesWithVisibility(visibilitySettings) {
 export function getDefaultDefocus(deviceId, laserTypeId) {
     const laser = getLaserConfig(deviceId, laserTypeId);
     return laser && typeof laser.defaultDefocus === 'number' ? laser.defaultDefocus : 0;
+}
+
+/**
+ * Whether the given laser exposes a frequency (kHz) control. The regular F2
+ * (GS006) has no frequency adjustment, so it is hidden and omitted from output.
+ * Defaults to true for unknown/other lasers.
+ * @param {string} deviceId
+ * @param {string} [laserTypeId]
+ * @returns {boolean}
+ */
+export function laserHasFrequency(deviceId, laserTypeId) {
+    const laser = getLaserConfig(deviceId, laserTypeId);
+    return laser ? laser.hasFrequency !== false : true;
 }
 
 /**

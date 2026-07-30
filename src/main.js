@@ -28,7 +28,7 @@ import { multiGridPalette, initializeMultiGridPalette } from './lib/multi-grid-p
 import { GridImagePicker } from './lib/grid-image-picker.js';
 import { initFrequencyLimiter } from './lib/ui-enhancements.js';
 import { getMaterialsForLaser, getMaterialById, getMaterialDefaults, DEFAULT_MATERIAL_ID } from './lib/material-registry.js';
-import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey, isDeviceVisible, getDefaultDefocus, normalizeDefocus, hasSystemDefaultMaps, LASER_TYPES } from './lib/device-registry.js';
+import { resolveDeviceId, getDeviceConfig, getLaserConfig, getActiveLaserConfig, isMultiLaserDevice, getLaserTypeOptions, isVirtualDevice as isVirtualDeviceCheck, getSettingsKey, isDeviceVisible, getDefaultDefocus, normalizeDefocus, hasSystemDefaultMaps, laserHasFrequency, LASER_TYPES } from './lib/device-registry.js';
 
 
 
@@ -1179,6 +1179,46 @@ function populateMaterialDropdowns() {
     });
 }
 
+/**
+ * Whether the currently-selected laser exposes a frequency (kHz) control.
+ * The regular F2 (GS006) has none.
+ */
+function currentLaserHasFrequency() {
+    const deviceId = resolveDeviceId(state.settings?.activeDevice || 'f2_ultra_uv');
+    return laserHasFrequency(deviceId, state.settings?.activeLaserType || null);
+}
+
+/**
+ * Visible layers that still need calibration settings. Frequency is only
+ * required for lasers that actually expose it (not the regular F2).
+ */
+function getUnassignedLayers() {
+    const needsFreq = currentLaserHasFrequency();
+    return state.layers.filter(l => l.visible && (l.lpi === null || (needsFreq && l.frequency === null)));
+}
+
+/**
+ * Show/hide the frequency (kHz) controls in the main workflow based on the
+ * active laser. Hidden entirely for lasers without a frequency control (F2).
+ */
+function updateFrequencyUI() {
+    const show = currentLaserHasFrequency() ? '' : 'none';
+
+    // Settings modal: Frequency Range group
+    const freqGroup = document.getElementById('settingFreqGroup');
+    if (freqGroup) freqGroup.style.display = show;
+
+    // Settings modal: Standard colours black/white frequency rows
+    ['settingBlackFreq', 'settingWhiteFreq'].forEach(id => {
+        const row = document.getElementById(id)?.closest('.setting-row');
+        if (row) row.style.display = show;
+    });
+
+    // Layer edit modal frequency row (also enforced when the modal opens)
+    const layerFreqRow = elements.layerEditFreq?.closest('.setting-row');
+    if (layerFreqRow) layerFreqRow.style.display = show;
+}
+
 function updateDeviceUI(deviceId) {
     const profiles = SettingsStorage.getProfiles();
     const profile = profiles[deviceId];
@@ -1257,6 +1297,9 @@ function updateDeviceUI(deviceId) {
     if (elements.rowDefocus) {
         elements.rowDefocus.style.display = (showFocusWarning && !isVirtual) ? 'none' : '';
     }
+
+    // Hide frequency controls for lasers without a frequency (regular F2)
+    updateFrequencyUI();
 
     // Update Test Grid UI based on device
     updateTestGridUI();
@@ -2211,7 +2254,8 @@ function displayLayers() {
             // isVirtual defined above
             // const isVirtual = SettingsStorage.isCurrentDeviceVirtual();
 
-            const hasSettings = layer.frequency !== null && layer.lpi !== null;
+            const hasFreq = currentLaserHasFrequency();
+            const hasSettings = layer.lpi !== null && (!hasFreq || layer.frequency !== null);
             let settingsText = '⚠️ Settings Pending';
             let matchQualityClass = '';
             let sourceTooltip = '';
@@ -2219,8 +2263,10 @@ function displayLayers() {
             if (isVirtual) {
                 settingsText = 'Ready for Export';
             } else if (hasSettings) {
-                // Primary settings: frequency and LPC
-                settingsText = `${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)}LPC`;
+                // Primary settings: (frequency +) LPC
+                settingsText = hasFreq
+                    ? `${Math.round(layer.frequency)}kHz / ${Math.round(layer.lpi)}LPC`
+                    : `${Math.round(layer.lpi)}LPC`;
 
                 // Add source grid info if available
                 if (layer.sourceGridName) {
@@ -2477,7 +2523,7 @@ function updateDownloadButtonState() {
         return;
     }
 
-    const unassignedLayers = state.layers.filter(l => l.visible && (l.frequency === null || l.lpi === null));
+    const unassignedLayers = getUnassignedLayers();
     const hasUnassigned = unassignedLayers.length > 0 && state.layers.length > 0;
 
     const applyState = (btn, fileLabel) => {
@@ -2895,6 +2941,12 @@ function openLayerEditModal(layerId) {
         if (field) field.style.display = isVirtual ? 'none' : '';
     });
 
+    // The regular F2 has no frequency control — hide its row entirely.
+    if (!isVirtual) {
+        const freqRow = elements.layerEditFreq?.closest('.setting-row');
+        if (freqRow) freqRow.style.display = currentLaserHasFrequency() ? '' : 'none';
+    }
+
     // Render Color Grid from Calibration (or simple color picker for SVG mode)
     renderLayerColorGrid();
 
@@ -3162,7 +3214,8 @@ function saveLayerEdit() {
     const layer = state.layers.find(l => l.id === state.editingLayerId);
     if (layer) {
         layer.name = elements.layerEditName.value;
-        layer.frequency = parseFloat(elements.layerEditFreq.value);
+        // The regular F2 has no frequency — keep it null so it is omitted.
+        layer.frequency = currentLaserHasFrequency() ? parseFloat(elements.layerEditFreq.value) : null;
         layer.lpi = parseFloat(elements.layerEditLpi.value);
 
         // Save Speed and Power if valid
@@ -3351,7 +3404,7 @@ async function downloadXCS() {
     }
 
     // Check if any visible layer is missing settings
-    const unassignedLayers = state.layers.filter(l => l.visible && (l.frequency === null || l.lpi === null));
+    const unassignedLayers = getUnassignedLayers();
     if (unassignedLayers.length > 0) {
         showToast(`${unassignedLayers.length} layers have no color/settings assigned! Use "Auto Assign" or click the squares to pick colors manually.`, 'error');
         return;
@@ -3581,6 +3634,9 @@ function applySettingsToUI() {
         }
     }
 
+    // Hide frequency controls for lasers without a frequency (regular F2)
+    updateFrequencyUI();
+
     // Toggle Focus Warning Blocks — shown when the active laser requires manual defocus.
     // (Always shown when applicable; the .xs button caption clarifies it carries defocus in-file.)
     const showFocusWarning = activeLaser ? activeLaser.addFocusWarning : false;
@@ -3622,6 +3678,11 @@ function updateTestGridUI() {
         if (elVar1) elVar1.innerHTML = '<strong>Speed:</strong> 200 - 1200 mm/s (X axis)';
         if (elVar2) elVar2.innerHTML = '<strong>Frequency:</strong> 200 - 1200 kHz (Y axis)';
         if (elPasses) elPasses.innerHTML = '<strong>Fixed:</strong> Power 14%, LPC 5000, Pulse 80ns';
+    } else if (!currentLaserHasFrequency()) {
+        // Regular F2: no frequency control — sweep density instead.
+        if (elVar1) elVar1.innerHTML = '<strong>Lines/cm:</strong> 800 - 300 (High to Low)';
+        if (elVar2) elVar2.innerHTML = '<strong>Power:</strong> optimized range';
+        if (elPasses) elPasses.innerHTML = '<strong>Passes:</strong> 1';
     } else {
         if (elVar1) elVar1.innerHTML = '<strong>Frequency:</strong> 40kHz - 90kHz (Optimized range)';
         if (elVar2) elVar2.innerHTML = '<strong>Lines/cm:</strong> 800 - 300 (High to Low)';
@@ -5635,8 +5696,10 @@ function setFlexRole(paramId, newRole, isMopa) {
 
 function readFlexInputs(isMopa) {
     ensureFlexState(isMopa);
+    const hasFreq = currentLaserHasFrequency();
     FLEX_PARAMS.forEach(p => {
         if (p.mopaOnly && !isMopa) return;
+        if (p.id === 'frequency' && !hasFreq) return;
         const role = flexState.roles[p.id];
         const num = (el) => p.float ? parseFloat(el.value) : parseInt(el.value);
         if (role === 'const') {
@@ -5655,7 +5718,11 @@ function renderFlexMatrix(isMopa) {
     const container = document.getElementById('flexAxisMatrix');
     if (!container) return;
     ensureFlexState(isMopa);
-    const visible = FLEX_PARAMS.filter(p => !(p.mopaOnly && !isMopa));
+    const hasFreq = currentLaserHasFrequency();
+    // The regular F2 has no frequency — never make it selectable and force it
+    // out of any axis role so it isn't written to the grid.
+    if (!hasFreq && flexState.roles.frequency !== 'const') flexState.roles.frequency = 'const';
+    const visible = FLEX_PARAMS.filter(p => !(p.mopaOnly && !isMopa) && !(p.id === 'frequency' && !hasFreq));
 
     container.innerHTML = '';
     visible.forEach(p => {

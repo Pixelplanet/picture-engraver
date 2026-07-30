@@ -612,6 +612,8 @@ export class XSGenerator {
         const extName = laser ? (laser.xsExtName || laser.extName) : 'F2 Ultra UV';
         const lightSource = laser ? laser.lightSource : 'uv';
         const deviceInstanceId = `${extId}-1`;
+        // The regular F2 (GS006) has no frequency control — omit it from output.
+        const hasFreq = laser ? laser.hasFrequency !== false : true;
 
         const widthMm = size && size.width ? size.width : 1;
         const heightMm = size && size.height ? size.height : 1;
@@ -674,7 +676,7 @@ export class XSGenerator {
                     power,
                     repeat,
                     bitmapScanMode: 'zMode',
-                    frequency,
+                    ...(hasFreq ? { frequency } : {}),
                     notResize: true,
                     scanAngle: 0,
                     angleType: 2,
