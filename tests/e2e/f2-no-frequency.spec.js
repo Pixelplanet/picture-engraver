@@ -28,6 +28,11 @@ test.describe('Regular F2 — no frequency option', () => {
         await page.locator('button[data-id="f2"]').click();
         await expect(page.locator('#deviceSelectionOverlay')).toBeHidden({ timeout: 5000 });
 
+        // The F2 has no default colour maps → dismiss the informational modal
+        // that pops up shortly after selection so it doesn't intercept clicks.
+        await page.waitForSelector('#btnDismissNoDefaults', { timeout: 3000 }).catch(() => {});
+        await page.locator('#btnDismissNoDefaults').click().catch(() => {});
+
         await page.click('#btnTestGrid');
         await expect(page.locator('#testGridModal')).toBeVisible();
         await page.locator('button[data-modal-tab="custom"]').click();

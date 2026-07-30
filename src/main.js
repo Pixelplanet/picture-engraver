@@ -1181,11 +1181,19 @@ function populateMaterialDropdowns() {
 
 /**
  * Whether the currently-selected laser exposes a frequency (kHz) control.
- * The regular F2 (GS006) has none.
+ * Admin-configured overrides (from /api/visibility) take precedence over the
+ * hardcoded registry default. The regular F2 (GS006) has none by default.
  */
 function currentLaserHasFrequency() {
     const deviceId = resolveDeviceId(state.settings?.activeDevice || 'f2_ultra_uv');
-    return laserHasFrequency(deviceId, state.settings?.activeLaserType || null);
+    const laserTypeId = state.settings?.activeLaserType || null;
+    const laser = getLaserConfig(deviceId, laserTypeId);
+    const caps = typeof SettingsStorage.getLaserCapabilities === 'function'
+        ? SettingsStorage.getLaserCapabilities() : {};
+    if (laser && caps[laser.id] && typeof caps[laser.id].hasFrequency === 'boolean') {
+        return caps[laser.id].hasFrequency;
+    }
+    return laserHasFrequency(deviceId, laserTypeId);
 }
 
 /**
@@ -3431,7 +3439,7 @@ async function downloadXCS() {
             ? state.settings.defocus
             : getDefaultDefocus(deviceId, state.settings?.activeLaserType);
 
-        const genSettings = { ...state.settings, defocus };
+        const genSettings = { ...state.settings, defocus, hasFrequency: currentLaserHasFrequency() };
         const xsGen = new XSGenerator(genSettings);
 
         // Each colour-separated layer is engraved as its own PNG section.

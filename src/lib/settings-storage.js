@@ -288,6 +288,7 @@ export const SettingsStorage = {
     _serverColorMaps: null,
     _serverMapsLoaded: false,
     _visibilitySettings: { hiddenDevices: [], hiddenLaserTypes: [] },
+    _laserCapabilities: {},
 
     /**
      * Fetch admin-managed color maps from the server for a device type.
@@ -327,16 +328,27 @@ export const SettingsStorage = {
                 hiddenDevices: Array.isArray(data.hiddenDevices) ? data.hiddenDevices : [],
                 hiddenLaserTypes: Array.isArray(data.hiddenLaserTypes) ? data.hiddenLaserTypes : [],
             };
+            this._laserCapabilities = (data.laserCapabilities && typeof data.laserCapabilities === 'object')
+                ? data.laserCapabilities : {};
             return this._visibilitySettings;
         } catch (err) {
             console.warn('[SettingsStorage] Could not fetch visibility settings:', err.message);
             this._visibilitySettings = { hiddenDevices: [], hiddenLaserTypes: [] };
+            this._laserCapabilities = {};
             return this._visibilitySettings;
         }
     },
 
     getVisibilitySettings() {
         return this._visibilitySettings || { hiddenDevices: [], hiddenLaserTypes: [] };
+    },
+
+    /**
+     * Admin-configured per-laser capability overrides (e.g. hasFrequency).
+     * Returns {} when none were fetched (callers fall back to the registry).
+     */
+    getLaserCapabilities() {
+        return this._laserCapabilities || {};
     },
 
     /**

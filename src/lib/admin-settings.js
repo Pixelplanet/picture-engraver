@@ -118,6 +118,36 @@ function normalizeVisibilitySettings(visibility) {
     };
 }
 
+/**
+ * Default per-laser capability flags, derived from the device registry.
+ * Currently just `hasFrequency` (the regular F2 has no frequency control).
+ */
+function defaultLaserCapabilities() {
+    const caps = {};
+    for (const lt of VALID_LASER_TYPE_IDS) {
+        const def = LASER_TYPES[lt] || {};
+        caps[lt] = { hasFrequency: def.hasFrequency !== false };
+    }
+    return caps;
+}
+
+/**
+ * Normalize a per-laser capabilities payload, filling in registry defaults for
+ * any missing/invalid laser types and coercing values to booleans.
+ */
+function normalizeLaserCapabilities(caps) {
+    const base = defaultLaserCapabilities();
+    if (caps && typeof caps === 'object') {
+        for (const lt of VALID_LASER_TYPE_IDS) {
+            const c = caps[lt];
+            if (c && typeof c === 'object' && typeof c.hasFrequency === 'boolean') {
+                base[lt] = { hasFrequency: c.hasFrequency };
+            }
+        }
+    }
+    return base;
+}
+
 // ── Validation ──────────────────────────────────────────────────────────────────
 
 function isPositiveNumber(v) { return typeof v === 'number' && isFinite(v) && v > 0; }
@@ -402,6 +432,25 @@ export class AdminSettings {
     }
 
     /**
+     * Update per-laser capability flags (e.g. whether frequency is adjustable).
+     * @param {Object} capabilities - { [laserType]: { hasFrequency: boolean } }
+     */
+    updateLaserCapabilities(capabilities) {
+        const normalized = normalizeLaserCapabilities(capabilities);
+        const current = this.load();
+        current.laserCapabilities = normalized;
+        return this.save(current);
+    }
+
+    /**
+     * Get per-laser capability flags for clients.
+     */
+    getLaserCapabilities() {
+        const settings = this.load();
+        return normalizeLaserCapabilities(settings.laserCapabilities);
+    }
+
+    /**
      * Get test grid defaults for a specific laser type.
      */
     getTestGridDefaults(laserType) {
@@ -433,6 +482,7 @@ export class AdminSettings {
                 hiddenDevices: [],
                 hiddenLaserTypes: [],
             },
+            laserCapabilities: defaultLaserCapabilities(),
         };
     }
 
@@ -449,6 +499,7 @@ export class AdminSettings {
             };
         }
         merged.visibility = normalizeVisibilitySettings(merged.visibility);
+        merged.laserCapabilities = normalizeLaserCapabilities(merged.laserCapabilities);
         return merged;
     }
 

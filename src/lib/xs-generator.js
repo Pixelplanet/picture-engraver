@@ -613,7 +613,10 @@ export class XSGenerator {
         const lightSource = laser ? laser.lightSource : 'uv';
         const deviceInstanceId = `${extId}-1`;
         // The regular F2 (GS006) has no frequency control — omit it from output.
-        const hasFreq = laser ? laser.hasFrequency !== false : true;
+        // An explicit settings.hasFrequency (admin override) wins over the registry.
+        const hasFreq = typeof this.settings.hasFrequency === 'boolean'
+            ? this.settings.hasFrequency
+            : (laser ? laser.hasFrequency !== false : true);
 
         const widthMm = size && size.width ? size.width : 1;
         const heightMm = size && size.height ? size.height : 1;

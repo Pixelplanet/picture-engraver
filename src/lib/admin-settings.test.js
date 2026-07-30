@@ -219,6 +219,36 @@ describe('AdminSettings', () => {
         });
     });
 
+    // ── laser capabilities (hasFrequency) ───────────────────────────────
+
+    describe('laser capabilities', () => {
+        it('defaults hasFrequency from the registry (F2 lasers off, others on)', () => {
+            const caps = settings.getLaserCapabilities();
+            expect(caps.uv.hasFrequency).toBe(true);
+            expect(caps.mopa.hasFrequency).toBe(true);
+            expect(caps.ir.hasFrequency).toBe(false);
+            expect(caps.blue_f2.hasFrequency).toBe(false);
+        });
+
+        it('persists an override and coerces to booleans', () => {
+            settings.updateLaserCapabilities({ ir: { hasFrequency: true }, uv: { hasFrequency: false } });
+            settings.invalidateCache();
+            const caps = settings.getLaserCapabilities();
+            expect(caps.ir.hasFrequency).toBe(true);
+            expect(caps.uv.hasFrequency).toBe(false);
+            // Untouched lasers keep their registry default
+            expect(caps.mopa.hasFrequency).toBe(true);
+        });
+
+        it('ignores unknown laser types and non-boolean values', () => {
+            settings.updateLaserCapabilities({ nope: { hasFrequency: true }, ir: { hasFrequency: 'yes' } });
+            const caps = settings.getLaserCapabilities();
+            expect(caps.nope).toBeUndefined();
+            // ir kept its registry default because the value was not a boolean
+            expect(caps.ir.hasFrequency).toBe(false);
+        });
+    });
+
     // ── getTestGridDefaults ─────────────────────────────────────────────
 
     describe('getTestGridDefaults', () => {

@@ -225,6 +225,15 @@ export function createAdminRouter(adminSettings) {
         }
     });
 
+    router.patch('/admin/api/settings/capabilities', adminLimiter, requireAdminAuth, (req, res) => {
+        try {
+            const saved = adminSettings.updateLaserCapabilities(req.body || {});
+            res.json(saved.laserCapabilities);
+        } catch (err) {
+            res.status(400).json({ error: err.message });
+        }
+    });
+
     router.get('/admin/api/settings/testgrid/:laserType/preview', adminLimiter, requireAdminAuth, async (req, res) => {
         const laserType = req.params.laserType;
         if (!VALID_LASER_TYPES.includes(laserType)) {
@@ -342,7 +351,10 @@ export function createAdminRouter(adminSettings) {
     });
 
     router.get('/api/visibility', testgridLimiter, (req, res) => {
-        res.json(adminSettings.getVisibilitySettings());
+        res.json({
+            ...adminSettings.getVisibilitySettings(),
+            laserCapabilities: adminSettings.getLaserCapabilities(),
+        });
     });
 
     return router;

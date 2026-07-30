@@ -286,6 +286,27 @@ describe('Admin Settings API', () => {
             expect(res.body.hiddenLaserTypes).toEqual(['blue_f2']);
         });
     });
+
+    describe('PATCH /admin/api/settings/capabilities', () => {
+        it('should update per-laser frequency capability', async () => {
+            const res = await request(app)
+                .patch('/admin/api/settings/capabilities')
+                .set(authHeader())
+                .send({ ir: { hasFrequency: true } });
+
+            expect(res.status).toBe(200);
+            expect(res.body.ir.hasFrequency).toBe(true);
+            // Untouched lasers keep their registry defaults
+            expect(res.body.uv.hasFrequency).toBe(true);
+        });
+
+        it('should require authentication', async () => {
+            const res = await request(app)
+                .patch('/admin/api/settings/capabilities')
+                .send({ ir: { hasFrequency: true } });
+            expect(res.status).toBe(401);
+        });
+    });
 });
 
 // ── Public Test Grid Endpoint ───────────────────────────────────────────────────
@@ -389,7 +410,15 @@ describe('GET /api/visibility', () => {
     it('should expose visibility settings without authentication', async () => {
         const res = await request(app).get('/api/visibility');
         expect(res.status).toBe(200);
-        expect(res.body).toEqual({ hiddenDevices: [], hiddenLaserTypes: [] });
+        expect(res.body.hiddenDevices).toEqual([]);
+        expect(res.body.hiddenLaserTypes).toEqual([]);
+    });
+
+    it('should expose per-laser capabilities (F2 has no frequency)', async () => {
+        const res = await request(app).get('/api/visibility');
+        expect(res.status).toBe(200);
+        expect(res.body.laserCapabilities.uv.hasFrequency).toBe(true);
+        expect(res.body.laserCapabilities.ir.hasFrequency).toBe(false);
     });
 });
 

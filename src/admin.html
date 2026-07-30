@@ -169,6 +169,15 @@
       <p class="visibility-help">Hidden items are removed from the user device picker and laser selector.</p>
     </div>
 
+    <div class="visibility-panel">
+      <h3>Laser Capabilities</h3>
+      <div id="capabilities-controls"></div>
+      <div class="visibility-actions">
+        <button class="btn btn-primary" id="btn-save-capabilities" onclick="saveLaserCapabilities()">Save Capabilities</button>
+      </div>
+      <p class="visibility-help">Uncheck “Frequency control” for a laser that has no frequency adjustment (e.g. the regular F2). Frequency options are then hidden in the app and omitted from exports.</p>
+    </div>
+
     <div id="device-groups"></div>
 
     <div class="actions">
@@ -334,6 +343,55 @@ async function saveVisibilitySettings() {
   }
 }
 
+function laserDeviceName(laserType) {
+  for (const dev of Object.values(DEVICES)) {
+    if (dev.lasers.includes(laserType)) return dev.name;
+  }
+  return '';
+}
+
+function renderCapabilitiesControls() {
+  const el = document.getElementById('capabilities-controls');
+  if (!el) return;
+  const caps = allSettings.laserCapabilities || {};
+  const allLasers = Array.from(new Set(Object.values(DEVICES).flatMap(d => d.lasers)));
+  const itemsHtml = allLasers.map(lt => {
+    const hasFreq = caps[lt] ? caps[lt].hasFrequency !== false : true;
+    return `<label class="visibility-item"><input type="checkbox" data-cap-freq="${lt}" ${hasFreq ? 'checked' : ''}> ${LASER_LABELS[lt]} (${laserDeviceName(lt)})</label>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="visibility-grid">
+      <div class="visibility-box">
+        <h4>Frequency control</h4>
+        ${itemsHtml}
+      </div>
+    </div>
+  `;
+}
+
+function getCurrentCapabilitiesFromUI() {
+  const caps = {};
+  document.querySelectorAll('[data-cap-freq]').forEach(el => {
+    caps[el.dataset.capFreq] = { hasFrequency: el.checked };
+  });
+  return caps;
+}
+
+async function saveLaserCapabilities() {
+  try {
+    const caps = getCurrentCapabilitiesFromUI();
+    const saved = await apiFetch('/admin/api/settings/capabilities', {
+      method: 'PATCH',
+      body: JSON.stringify(caps),
+    });
+    allSettings.laserCapabilities = saved;
+    renderCapabilitiesControls();
+    toast('Laser capabilities saved');
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
 function valuesEqual(a, b) {
   if ((a === false || a === undefined || a === null) && (b === false || b === undefined || b === null)) return true;
   if ((a === undefined || a === null || a === '') && (b === undefined || b === null || b === '')) return true;
@@ -425,6 +483,7 @@ async function authenticate() {
     document.getElementById('main-panel').style.display = 'block';
     sessionStorage.setItem('_adminToken', token);
     renderVisibilityControls();
+    renderCapabilitiesControls();
     renderTabs();
   } catch(e) {
     document.getElementById('auth-error').textContent = e.message;
@@ -804,6 +863,7 @@ async function resetAll() {
     allSettings = await apiFetch('/admin/api/settings/reset', { method: 'POST' });
     snapshotSettings();
     renderVisibilityControls();
+    renderCapabilitiesControls();
     renderTabs();
     toast('All settings reset to defaults');
   } catch(e) { toast(e.message, 'error'); }
