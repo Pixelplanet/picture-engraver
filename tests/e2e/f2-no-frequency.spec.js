@@ -71,8 +71,34 @@ test.describe('Regular F2 — no frequency option', () => {
         }
         const displaysKey = Object.keys(zip.files).find(n => n.endsWith('displays-0.json'));
         const displays = JSON.parse(await zip.file(displaysKey).async('string')).displays;
-        expect(displays.some(d => d.type === 'BITMAP')).toBe(true);
+        const bitmaps = displays.filter(d => d.type === 'BITMAP');
+        expect(bitmaps.length).toBeGreaterThan(1);
         expect(Object.keys(zip.files).some(n => /resources\/.*\.png$/.test(n))).toBe(true);
+
+        // Swatches carry their preview colour; QR/labels are black.
+        const colors = bitmaps.map(d => (d.layerColor || '').toLowerCase());
+        expect(colors.some(c => c && c !== '#000000')).toBe(true);
+        expect(colors.some(c => c === '#000000')).toBe(true);
+
+        // The QR (largest cell) must be a non-empty, black bitmap (was invisible before).
+        const qr = bitmaps.reduce((a, b) => (b.width > a.width ? b : a));
+        const qrB64 = await zip.file(qr.resourcePath).async('base64');
+        const qrStats = await page.evaluate(async (b64) => {
+            const img = new Image();
+            await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = 'data:image/png;base64,' + b64; });
+            const c = document.createElement('canvas');
+            c.width = img.width; c.height = img.height;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const data = ctx.getImageData(0, 0, c.width, c.height).data;
+            let opaque = 0, black = 0;
+            for (let i = 0; i < data.length; i += 4) {
+                if (data[i + 3] > 10) { opaque++; if (data[i] < 40 && data[i + 1] < 40 && data[i + 2] < 40) black++; }
+            }
+            return { opaque, black };
+        }, qrB64);
+        expect(qrStats.opaque).toBeGreaterThan(0);
+        expect(qrStats.black).toBeGreaterThan(0);
     });
 
     test('still shows frequency for the F2 Ultra UV', async ({ page }) => {

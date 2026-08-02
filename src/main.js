@@ -3397,13 +3397,32 @@ async function buildColorEngraveLayerImages(size) {
 }
 
 /**
+ * Bounding box of an M/L-only dPath (grid swatches, QR squares, pixel labels).
+ */
+function dPathBounds(d) {
+    const nums = (d || '').match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi);
+    if (!nums || nums.length < 2) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i + 1 < nums.length; i += 2) {
+        const x = parseFloat(nums[i]), y = parseFloat(nums[i + 1]);
+        if (x < minX) minX = x; if (y < minY) minY = y;
+        if (x > maxX) maxX = x; if (y > maxY) maxY = y;
+    }
+    return { minX, minY, width: maxX - minX, height: maxY - minY };
+}
+
+/**
  * Rasterize a single test-grid PATH display (swatch, QR, or label) into a
- * positioned PNG for bitmap COLOR_ENGRAVE output. The dPath is in absolute
- * workspace mm, so we render it into a cell-sized canvas and record its origin.
+ * positioned PNG for bitmap COLOR_ENGRAVE output. Swatch paths are absolute
+ * while QR/label paths start at their own origin, so we translate by the path's
+ * own bounds and place the bitmap at the display's position. The display colour
+ * is used as the fill so swatches match the generator preview and QR/labels
+ * (which are #000000) stay solid black.
  */
 async function rasterizeGridDisplayToPng(display, pxPerMm) {
-    const wMm = Math.max(0.1, display.width || 1);
-    const hMm = Math.max(0.1, display.height || 1);
+    const b = dPathBounds(display.dPath) || { minX: display.x || 0, minY: display.y || 0, width: display.width || 1, height: display.height || 1 };
+    const wMm = Math.max(0.1, b.width || display.width || 1);
+    const hMm = Math.max(0.1, b.height || display.height || 1);
     const pxW = Math.max(1, Math.round(wMm * pxPerMm));
     const pxH = Math.max(1, Math.round(hMm * pxPerMm));
     const canvas = document.createElement('canvas');
@@ -3413,8 +3432,8 @@ async function rasterizeGridDisplayToPng(display, pxPerMm) {
     ctx.clearRect(0, 0, pxW, pxH);
     ctx.save();
     ctx.scale(pxPerMm, pxPerMm);
-    ctx.translate(-(display.x || 0), -(display.y || 0)); // absolute path → local origin
-    ctx.fillStyle = '#000';
+    ctx.translate(-b.minX, -b.minY);
+    ctx.fillStyle = display.fillColor || display.layerColor || '#000000';
     try {
         ctx.fill(new Path2D(display.dPath), display.fillRule === 'evenodd' ? 'evenodd' : 'nonzero');
     } catch (e) {
