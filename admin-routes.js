@@ -7,8 +7,9 @@
  */
 
 import { Router } from 'express';
+import crypto from 'crypto';
 import rateLimit from 'express-rate-limit';
-import { AdminSettings, VALID_LASER_TYPES, validateTestGridSettings, validateColorMap } from './src/lib/admin-settings.js';
+import { AdminSettings, VALID_LASER_TYPES, validateTestGridSettings, validateColorMap, isValidColorMapId } from './src/lib/admin-settings.js';
 
 // ── Device → laser type mapping (for test grid generation) ──────────────────────
 // Maps settingsKey to the device/laser pair needed by TestGridGenerator
@@ -75,7 +76,7 @@ function requireAdminAuth(req, res, next) {
 
     const provided = authHeader.slice(7);
     // Constant-time comparison to prevent timing attacks
-    if (provided.length !== token.length || !timingSafeEqual(provided, token)) {
+    if (!timingSafeEqual(provided, token)) {
         return res.status(401).json({ error: 'Invalid admin token' });
     }
 
@@ -83,15 +84,12 @@ function requireAdminAuth(req, res, next) {
 }
 
 /**
- * Constant-time string comparison.
+ * Constant-time string comparison (hashes both sides so length does not leak).
  */
 function timingSafeEqual(a, b) {
-    if (a.length !== b.length) return false;
-    let result = 0;
-    for (let i = 0; i < a.length; i++) {
-        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    return result === 0;
+    const ha = crypto.createHash('sha256').update(String(a)).digest();
+    const hb = crypto.createHash('sha256').update(String(b)).digest();
+    return crypto.timingSafeEqual(ha, hb) && String(a).length === String(b).length;
 }
 
 // ── Router Factory ─────────────────────────────────────────────────────────────
@@ -305,6 +303,13 @@ export function createAdminRouter(adminSettings) {
                 mapData = mapData.maps[0];
             } else if (mapData.grids && Array.isArray(mapData.grids)) {
                 mapData = mapData.grids[0];
+            }
+
+            // Imported maps may carry ids from elsewhere; ids become file names,
+            // so drop anything unsafe and let the server generate a fresh one.
+            if (mapData && typeof mapData === 'object' && mapData.id !== undefined && !isValidColorMapId(mapData.id)) {
+                mapData = { ...mapData };
+                delete mapData.id;
             }
 
             const saved = adminSettings.saveColorMap(mapData);

@@ -215,6 +215,14 @@ export function validateTestGridSettings(settings, laserType) {
     return errors.length > 0 ? { valid: false, errors } : { valid: true };
 }
 
+// Color map ids become file names (`<id>.json`), so they must be filename-safe.
+const COLOR_MAP_ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
+export function isValidColorMapId(id) {
+    return typeof id === 'string' && COLOR_MAP_ID_RE.test(id);
+}
+
+const MAX_SETTINGS_BACKUPS = 10;
+
 // ── Settings Manager ────────────────────────────────────────────────────────────
 
 export class AdminSettings {
@@ -385,11 +393,26 @@ export class AdminSettings {
         if (fs.existsSync(this.settingsPath)) {
             const backupPath = this.settingsPath.replace('.json', `-backup-${Date.now()}.json`);
             fs.copyFileSync(this.settingsPath, backupPath);
+            this._pruneBackups();
         }
 
         fs.writeFileSync(this.settingsPath, JSON.stringify(toSave, null, 2), 'utf-8');
         this._cache = null; // Invalidate cache
         return this.load();
+    }
+
+    /**
+     * Keep only the newest MAX_SETTINGS_BACKUPS settings backup files.
+     */
+    _pruneBackups() {
+        try {
+            const base = path.basename(this.settingsPath, '.json') + '-backup-';
+            const old = fs.readdirSync(this.dataDir)
+                .filter(f => f.startsWith(base) && f.endsWith('.json'))
+                .sort()
+                .slice(0, -MAX_SETTINGS_BACKUPS);
+            for (const f of old) fs.unlinkSync(path.join(this.dataDir, f));
+        } catch { /* best effort */ }
     }
 
     /**
@@ -599,6 +622,7 @@ export class AdminSettings {
      * @returns {Object|null}
      */
     getColorMap(id) {
+        if (!isValidColorMapId(id)) return null;
         const filePath = path.join(this._colorMapsDir(), `${id}.json`);
         if (fs.existsSync(filePath)) {
             try {
@@ -686,6 +710,7 @@ export class AdminSettings {
      * @returns {boolean}
      */
     deleteColorMap(id) {
+        if (!isValidColorMapId(id)) return false;
         const filePath = path.join(this._colorMapsDir(), `${id}.json`);
         if (!fs.existsSync(filePath)) return false;
         fs.unlinkSync(filePath);
@@ -699,6 +724,7 @@ export class AdminSettings {
      * @returns {Object} Updated map metadata
      */
     setDefaultColorMap(id) {
+        if (!isValidColorMapId(id)) throw new Error('Invalid color map id');
         const map = this.getColorMap(id);
         if (!map) throw new Error('Color map not found');
 
@@ -777,6 +803,10 @@ export function validateColorMap(map) {
     const errors = [];
     if (!map || typeof map !== 'object') {
         return { valid: false, errors: ['Color map must be an object'] };
+    }
+
+    if (map.id !== undefined && map.id !== null && map.id !== '' && !isValidColorMapId(map.id)) {
+        errors.push('id may only contain letters, digits, "_" and "-" (max 100 chars)');
     }
 
     if (!map.name || typeof map.name !== 'string' || map.name.trim().length === 0) {

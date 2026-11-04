@@ -25,9 +25,13 @@ COPY src/lib/device-registry.js ./src/lib/
 COPY src/lib/material-registry.js ./src/lib/
 
 # Create data and log directories for persistent storage
-# chmod 777 so any UID (Unraid DockerUser, Portainer user mapping, etc.) can write
-RUN mkdir -p /app/data /app/logs && chmod 777 /app/data /app/logs
+# The entrypoint starts as root only to fix volume ownership, then drops to the unprivileged `node` user.
+RUN apk add --no-cache su-exec \
+    && mkdir -p /app/data /app/logs \
+    && chown -R node:node /app/data /app/logs
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENV PORT=80
 EXPOSE 80
-CMD ["node", "server.js"]
+ENTRYPOINT ["docker-entrypoint.sh"]

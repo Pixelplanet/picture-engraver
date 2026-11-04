@@ -625,3 +625,49 @@ describe('AdminSettings Color Maps', () => {
         });
     });
 });
+
+describe('color map id safety (path traversal)', () => {
+    let tmpDir;
+    let settings;
+    const validMap = {
+        name: 'Safe', deviceType: 'f2_ultra_uv',
+        data: { entries: [{ color: { r: 1, g: 2, b: 3 }, frequency: 50 }] },
+    };
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'admin-id-test-'));
+        settings = new AdminSettings(tmpDir);
+    });
+    afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+    it('rejects ids containing path separators or dots', () => {
+        for (const id of ['../../admin-settings', 'a/b', '..', 'a.b', 'x\\y']) {
+            expect(validateColorMap({ ...validMap, id }).valid).toBe(false);
+            expect(() => settings.saveColorMap({ ...validMap, id })).toThrow();
+        }
+    });
+
+    it('does not read or delete files outside the color-maps dir', () => {
+        settings.seedDefaults();
+        expect(settings.getColorMap('../admin-settings')).toBeNull();
+        expect(settings.deleteColorMap('../admin-settings')).toBe(false);
+        expect(fs.existsSync(path.join(tmpDir, 'admin-settings.json'))).toBe(true);
+    });
+
+    it('still accepts generated ids', () => {
+        const saved = settings.saveColorMap({ ...validMap });
+        expect(saved.id).toMatch(/^admin_cm_/);
+        expect(settings.getColorMap(saved.id)).not.toBeNull();
+    });
+
+    it('keeps at most 10 settings backups', () => {
+        settings.seedDefaults();
+        for (let i = 0; i < 15; i++) {
+            settings.save(settings.load());
+            // ensure distinct timestamps
+            const t = Date.now(); while (Date.now() === t) { /* spin 1ms */ }
+        }
+        const backups = fs.readdirSync(tmpDir).filter(f => f.includes('-backup-'));
+        expect(backups.length).toBeLessThanOrEqual(10);
+    });
+});

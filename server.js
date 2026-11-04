@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import morgan from 'morgan';
 import cors from 'cors';
+import helmet from 'helmet';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 
@@ -42,15 +43,22 @@ if (fs.existsSync(LOG_DIR)) {
  * Centralized Logger
  * Handles console output (Docker logs) and file persistence
  */
+const ALLOWED_LOG_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'HTTP'];
+
+// Strip control characters (incl. newlines) so clients cannot forge log lines.
+function cleanStr(v, max = 500) {
+    return String(v).replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, max);
+}
+
 function writeLog(level, message, data = null) {
     const timestamp = new Date().toLocaleTimeString('en-GB', { hour12: false }); // HH:MM:SS
 
     // Construct log entry object (full data for file)
     const logEntry = {
+        ...data,
         timestamp: new Date().toISOString(), // Keep full ISO for file logs
         level,
         message,
-        ...data
     };
 
     // 1. Write to Console (Stdout/Stderr) - Human Readable
@@ -70,13 +78,13 @@ function writeLog(level, message, data = null) {
 
                 // If it's the details object (from client actions), extract fields
                 if (k === 'details' && v && typeof v === 'object') {
-                    Object.entries(v).forEach(([dk, dv]) => parts.push(`${dk}=${dv}`));
+                    Object.entries(v).forEach(([dk, dv]) => parts.push(`${cleanStr(dk, 50)}=${cleanStr(typeof dv === 'object' ? JSON.stringify(dv) : dv, 200)}`));
                     return;
                 }
 
                 // Skip other objects to keep console clean, print primitives (source, ip, etc)
                 if (typeof v !== 'object') {
-                    parts.push(`${k}=${v}`);
+                    parts.push(`${k}=${cleanStr(v)}`);
                 }
             });
 
@@ -86,7 +94,7 @@ function writeLog(level, message, data = null) {
         } catch (e) { dataStr = ''; }
     }
 
-    const consoleLog = `[${timestamp}] [${level}] ${message} ${dataStr}`.trim();
+    const consoleLog = `[${timestamp}] [${level}] ${cleanStr(message)} ${dataStr}`.trim();
 
     if (level === 'ERROR') {
         console.error(consoleLog);
@@ -111,16 +119,21 @@ function writeLog(level, message, data = null) {
 }
 
 // Stats tracking
+const MAX_TRACKED_VISITORS = 50000;
 const stats = {
     processedCount: 0,
     visitors: new Set(),
     startTime: new Date()
 };
 
+// Bounded unique-visitor tracking (prevents unbounded memory growth)
+function trackVisitor(ip) {
+    if (stats.visitors.size < MAX_TRACKED_VISITORS) stats.visitors.add(ip);
+}
+
 // Custom token for real IP
-morgan.token('real-ip', (req) => {
-    return req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-});
+// req.ip honours `trust proxy` (1 hop = Caddy), so a client-supplied X-Forwarded-For cannot spoof it.
+morgan.token('real-ip', (req) => req.ip);
 
 // Use morgan for HTTP logs, but pipe to our logger
 // We use a custom format string to generate the message, then pass it to stream
@@ -136,7 +149,13 @@ app.use(morgan(':real-ip - :method :url :status :res[content-length] - :response
     }
 }));
 
-app.use(cors());
+// Security headers. CSP is left off for now: admin.html and index.html use inline scripts/styles.
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false, crossOriginResourcePolicy: false }));
+app.disable('x-powered-by');
+// The public API is read-only; the admin UI is same-origin.
+app.use(cors({ methods: ['GET', 'HEAD', 'POST'] }));
+// Small body limit by default; only the admin color-map/settings routes need large bodies.
+app.use('/api/log', express.json({ limit: '10kb' }));
 app.use(express.json({ limit: '5mb' })); // Allow large color map uploads (up to 5MB)
 
 // Admin Settings & Routes
@@ -153,29 +172,39 @@ app.use(express.static(path.join(__dirname, 'dist')));
 
 // API Endpoint for Client Logs
 app.post('/api/log', logLimiter, (req, res) => {
-    const { level, message, details } = req.body;
+    const { level, message, details } = req.body || {};
 
     // Basic Input Validation
     if (!message || typeof message !== 'string' || message.length > 500) {
         return res.status(400).send('Invalid log message');
     }
 
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const ip = req.ip;
+    const safeLevel = ALLOWED_LOG_LEVELS.includes(level) ? level : 'INFO';
+    // Only keep a flat object of short primitives from the client
+    const safeDetails = {};
+    if (details && typeof details === 'object' && !Array.isArray(details)) {
+        for (const [k, v] of Object.entries(details).slice(0, 20)) {
+            if (['string', 'number', 'boolean'].includes(typeof v)) {
+                safeDetails[cleanStr(k, 50)] = typeof v === 'string' ? cleanStr(v, 200) : v;
+            }
+        }
+    }
 
     // Update stats
-    stats.visitors.add(ip);
+    trackVisitor(ip);
 
     if (message === 'Starting image processing') {
         stats.processedCount++;
     }
 
     // Log the client event
-    writeLog(level || 'INFO', message, {
+    writeLog(safeLevel, message, {
         source: 'client',
         ip,
         stats: message === 'Starting image processing' ?
             { totalProcessed: stats.processedCount, uniqueVisitors: stats.visitors.size } : undefined,
-        details: details || {}
+        details: safeDetails
     });
 
     res.status(200).send('Log received');
@@ -184,8 +213,8 @@ app.post('/api/log', logLimiter, (req, res) => {
 // Log main page visits explicitly
 app.use((req, res, next) => {
     if (req.path === '/' || req.path === '/index.html') {
-        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-        stats.visitors.add(ip);
+        const ip = req.ip;
+        trackVisitor(ip);
 
         writeLog('INFO', 'New Visitor', {
             source: 'server',

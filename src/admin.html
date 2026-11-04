@@ -954,12 +954,27 @@ function renderColorMaps() {
         </div>
       </div>
       <div class="map-actions">
-        <button class="btn btn-secondary" onclick="downloadMap('${esc(m.id)}', '${esc(m.name)}')" title="Download JSON">⬇</button>
-        ${!m.isBundledDefault ? `<button class="btn btn-danger" onclick="deleteMap('${esc(m.id)}', '${esc(m.name)}')" title="Delete">✕</button>` : ''}
+        <button class="btn btn-secondary" data-action="download" data-id="${escAttr(m.id)}" data-name="${escAttr(m.name)}" title="Download JSON">⬇</button>
+        ${!m.isBundledDefault ? `<button class="btn btn-danger" data-action="delete" data-id="${escAttr(m.id)}" data-name="${escAttr(m.name)}" title="Delete">✕</button>` : ''}
       </div>
     </div>
   `).join('');
 }
+
+// Escape for use inside a double-quoted HTML attribute (esc() does not escape quotes).
+function escAttr(str) {
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Delegated handler for color map action buttons (no inline JS with user data).
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-action]');
+  if (!btn) return;
+  const { action, id, name } = btn.dataset;
+  if (action === 'download') downloadMap(id, name);
+  else if (action === 'delete') deleteMap(id, name);
+});
 
 function esc(str) {
   if (!str) return '';
@@ -1064,7 +1079,7 @@ async function uploadMapWithConflictHandling(map) {
 
 async function downloadMap(id, name) {
   try {
-    const map = await apiFetch(`/admin/api/colormaps/${id}`);
+    const map = await apiFetch(`/admin/api/colormaps/${encodeURIComponent(id)}`);
     const blob = new Blob([JSON.stringify(map, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1078,7 +1093,7 @@ async function downloadMap(id, name) {
 async function deleteMap(id, name) {
   if (!confirm(`Delete color map "${name}"?`)) return;
   try {
-    await apiFetch(`/admin/api/colormaps/${id}`, { method: 'DELETE' });
+    await apiFetch(`/admin/api/colormaps/${encodeURIComponent(id)}`, { method: 'DELETE' });
     toast('Color map deleted');
     loadColorMaps();
   } catch(e) { toast(e.message, 'error'); }
